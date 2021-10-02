@@ -1,0 +1,29 @@
+[package]
+name = "shamdb"
+version = "0.1.0"
+authors = ["aki <aki.akaguma@hotmail.com>"]
+edition = "2018"
+description = "The simple local key-value store."
+keywords = ["store", "database"]
+categories = ["database"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/aki-akaguma/shamdb"
+
+[[bin]]
+name = "test_main"
+path = "src/test_main.rs"
+
+[features]
+default = []
+
+[dependencies]
+byteorder = "1.4"
+
+[dev-dependencies]
+#criterion = "0.3"
+
+[workspace]
+members = [
+    "xtask",
+]
