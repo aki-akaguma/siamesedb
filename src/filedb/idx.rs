@@ -552,9 +552,9 @@ impl IdxNode {
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 8     | offset      | offset of this node       |
-| 8      | 8*7   | keys        | offset of key-value       |
-| 64     | 8*8   | downs       | offset of next node       |
+| 0      | 4     | offset      | offset of this node       |
+| 8      | 4*7   | keys        | offset of key-value       |
+| 64     | 4*8   | downs       | offset of next node       |
 +--------+-------+-------------+---------------------------+
 ```
 */
@@ -566,10 +566,10 @@ fn _idx_write_node_with_buff(file: &mut BufFile, node: IdxNode) -> Result<IdxNod
     assert!(node.offset != 0);
     //
     let mut buff_cursor = Cursor::new(Vec::new());
-    buff_cursor.write_u64::<LittleEndian>(node.offset)?;
+    buff_cursor.write_u32::<LittleEndian>(node.offset as u32)?;
     for i in 0..(NODE_SLOTS_MAX as usize - 1) {
         let val = if i < node.keys.len() { node.keys[i] } else { 0 };
-        buff_cursor.write_u64::<LittleEndian>(val)?;
+        buff_cursor.write_u32::<LittleEndian>(val as u32)?;
     }
     for i in 0..(NODE_SLOTS_MAX as usize) {
         let val = if i < node.downs.len() {
@@ -577,7 +577,7 @@ fn _idx_write_node_with_buff(file: &mut BufFile, node: IdxNode) -> Result<IdxNod
         } else {
             0
         };
-        buff_cursor.write_u64::<LittleEndian>(val)?;
+        buff_cursor.write_u32::<LittleEndian>(val as u32)?;
     }
     //
     let _ = file.seek(SeekFrom::Start(node.offset))?;
@@ -589,10 +589,10 @@ fn _idx_write_node_direct(file: &mut BufFile, node: IdxNode) -> Result<IdxNode> 
     assert!(node.offset != 0);
     //
     let _ = file.seek(SeekFrom::Start(node.offset))?;
-    file.write_u64::<LittleEndian>(node.offset)?;
+    file.write_u32::<LittleEndian>(node.offset as u32)?;
     for i in 0..(NODE_SLOTS_MAX as usize - 1) {
         let val = if i < node.keys.len() { node.keys[i] } else { 0 };
-        file.write_u64::<LittleEndian>(val)?;
+        file.write_u32::<LittleEndian>(val as u32)?;
     }
     for i in 0..(NODE_SLOTS_MAX as usize) {
         let val = if i < node.downs.len() {
@@ -600,7 +600,7 @@ fn _idx_write_node_direct(file: &mut BufFile, node: IdxNode) -> Result<IdxNode> 
         } else {
             0
         };
-        file.write_u64::<LittleEndian>(val)?;
+        file.write_u32::<LittleEndian>(val as u32)?;
     }
     //
     Ok(node)
@@ -611,33 +611,33 @@ fn idx_read_node(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
 }
 fn _idx_read_node_with_buff(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
     assert!(offset != 0);
-    const BUFF_SZ: usize = NODE_SLOTS_MAX as usize * 2 * std::mem::size_of::<u64>();
+    const BUFF_SZ: usize = NODE_SLOTS_MAX as usize * 2 * std::mem::size_of::<u32>();
     let mut buff = vec![0u8; BUFF_SZ];
     let _ = file.seek(SeekFrom::Start(offset))?;
     file.read_exact(&mut buff)?;
     //
     let mut buff_cursor = Cursor::new(buff);
-    let offset = buff_cursor.read_u64::<LittleEndian>()?;
-    let mut node = IdxNode::new(offset);
+    let offset = buff_cursor.read_u32::<LittleEndian>()?;
+    let mut node = IdxNode::new(offset as u64);
     for _i in 0..(NODE_SLOTS_MAX as usize - 1) {
         let key_offset = buff_cursor
-            .read_u64::<LittleEndian>()
+            .read_u32::<LittleEndian>()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
         if key_offset == 0 {
             for _j in (_i + 1)..(NODE_SLOTS_MAX as usize - 1) {
                 let _key_offset = buff_cursor
-                    .read_u64::<LittleEndian>()
+                    .read_u32::<LittleEndian>()
                     .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _j));
             }
             break;
         }
-        node.keys.push(key_offset);
+        node.keys.push(key_offset as u64);
     }
     for _i in 0..=node.keys.len() {
         let node_offset = buff_cursor
-            .read_u64::<LittleEndian>()
+            .read_u32::<LittleEndian>()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-        node.downs.push(node_offset);
+        node.downs.push(node_offset as u64);
     }
     //
     Ok(node)
@@ -645,27 +645,27 @@ fn _idx_read_node_with_buff(file: &mut BufFile, offset: u64) -> Result<IdxNode> 
 fn _idx_read_node_direct(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
     assert!(offset != 0);
     let _ = file.seek(SeekFrom::Start(offset))?;
-    let offset = file.read_u64::<LittleEndian>()?;
-    let mut node = IdxNode::new(offset);
+    let offset = file.read_u32::<LittleEndian>()?;
+    let mut node = IdxNode::new(offset as u64);
     for _i in 0..(NODE_SLOTS_MAX as usize - 1) {
         let key_offset = file
-            .read_u64::<LittleEndian>()
+            .read_u32::<LittleEndian>()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
         if key_offset == 0 {
             for _j in (_i + 1)..(NODE_SLOTS_MAX as usize - 1) {
                 let _key_offset = file
-                    .read_u64::<LittleEndian>()
+                    .read_u32::<LittleEndian>()
                     .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _j));
             }
             break;
         }
-        node.keys.push(key_offset);
+        node.keys.push(key_offset as u64);
     }
     for _i in 0..=node.keys.len() {
         let node_offset = file
-            .read_u64::<LittleEndian>()
+            .read_u32::<LittleEndian>()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-        node.downs.push(node_offset);
+        node.downs.push(node_offset as u64);
     }
     //
     Ok(node)

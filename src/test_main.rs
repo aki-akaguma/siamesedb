@@ -21,25 +21,25 @@ fn _test00() {
     let mut db_map = db.db_map("some_map1").unwrap();
     //
     {
-        db_map.put_string("key1", "value1");
-        db_map.put_string("key2", "value2");
-        db_map.put_string("key3", "value3");
-        db_map.put_string("key4", "value4");
-        db_map.put_string("key5", "value5");
+        db_map.put_string("key1", "value1").unwrap();
+        db_map.put_string("key2", "value2").unwrap();
+        db_map.put_string("key3", "value3").unwrap();
+        db_map.put_string("key4", "value4").unwrap();
+        db_map.put_string("key5", "value5").unwrap();
         //
-        db_map.put_string("key6", "value6");
-        db_map.put_string("key7", "value7");
-        db_map.put_string("key8", "value8");
-        db_map.put_string("key9", "value9");
+        db_map.put_string("key6", "value6").unwrap();
+        db_map.put_string("key7", "value7").unwrap();
+        db_map.put_string("key8", "value8").unwrap();
+        db_map.put_string("key9", "value9").unwrap();
         /*
          */
         /*
-        db_map.put_string("key0", "value0");
-        db_map.put_string("key1", "value2");
-        db_map.put_string("key1", "value99");
+        db_map.put_string("key0", "value0").unwrap();
+        db_map.put_string("key1", "value2").unwrap();
+        db_map.put_string("key1", "value99").unwrap();
         */
         //
-        db_map.sync_data();
+        db_map.sync_data().unwrap();
     }
     //
     //println!("{}", db_map.to_graph_string().unwrap());
@@ -54,17 +54,17 @@ fn _test00() {
     println!();
     //
     {
-        //db_map.delete("key1");
-        //db_map.delete("key2");
-        //db_map.delete("key3");
-        db_map.delete("key4");
-        //db_map.delete("key5");
-        //db_map.delete("key6");
-        //db_map.delete("key7");
-        //db_map.delete("key8");
-        //db_map.delete("key9");
+        //db_map.delete("key1").unwrap();
+        //db_map.delete("key2").unwrap();
+        //db_map.delete("key3").unwrap();
+        db_map.delete("key4").unwrap();
+        //db_map.delete("key5").unwrap();
+        //db_map.delete("key6").unwrap();
+        //db_map.delete("key7").unwrap();
+        //db_map.delete("key8").unwrap();
+        //db_map.delete("key9").unwrap();
         //
-        db_map.sync_data();
+        db_map.sync_data().unwrap();
     }
     //
     //println!("{}", db_map.to_graph_string().unwrap());
@@ -84,32 +84,32 @@ fn _test01() {
     let db = shamdb::open_file(db_name).unwrap();
     let mut db_map = db.db_map("some_map1").unwrap();
     //
-    let r = db_map.get_string("key1");
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, None);
     //
-    db_map.put_string("key1", "value1");
-    let r = db_map.get_string("key1");
+    db_map.put_string("key1", "value1").unwrap();
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));
     //
-    db_map.put_string("key2", "value2");
-    let r = db_map.get_string("key2");
+    db_map.put_string("key2", "value2").unwrap();
+    let r = db_map.get_string("key2").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key0", "value0");
-    let r = db_map.get_string("key0");
+    db_map.put_string("key0", "value0").unwrap();
+    let r = db_map.get_string("key0").unwrap();
     assert_eq!(r, Some("value0".to_string()));
     //
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
-    db_map.put_string("key1", "value2");
+    db_map.put_string("key1", "value2").unwrap();
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
-    let r = db_map.get_string("key1");
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key1", "value99");
-    let r = db_map.get_string("key1");
+    db_map.put_string("key1", "value99").unwrap();
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value99".to_string()));
     //
-    db_map.sync_data();
+    db_map.sync_data().unwrap();
     //
     //println!("{}", db_map.to_graph_string().unwrap());
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
@@ -131,10 +131,10 @@ fn _test02() {
     for i in 1..20 {
         let key = format!("key{:02}", i);
         let val = format!("value{:02}", i);
-        db_map.put_string(&key, &val);
+        db_map.put_string(&key, &val).unwrap();
     }
     //
-    db_map.sync_data();
+    db_map.sync_data().unwrap();
     //
     //println!("{}", db_map.to_graph_string().unwrap());
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
@@ -147,15 +147,15 @@ fn _test02() {
     );
     println!();
     //
-    let r = db_map.get_string("key01");
+    let r = db_map.get_string("key01").unwrap();
     assert_eq!(r, Some("value01".to_string()));
-    let r = db_map.get_string("key11");
+    let r = db_map.get_string("key11").unwrap();
     assert_eq!(r, Some("value11".to_string()));
-    let r = db_map.get_string("key19");
+    let r = db_map.get_string("key19").unwrap();
     assert_eq!(r, Some("value19".to_string()));
     //
-    db_map.delete("key11");
-    db_map.sync_data();
+    db_map.delete("key11").unwrap();
+    db_map.sync_data().unwrap();
     //
     //println!("{}", db_map.to_graph_string().unwrap());
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
@@ -167,7 +167,7 @@ fn _test02() {
         db_map.depth_of_node_tree().unwrap()
     );
     //
-    let r = db_map.get_string("key11");
+    let r = db_map.get_string("key11").unwrap();
     assert_eq!(r, None);
 }
 
@@ -180,10 +180,10 @@ fn _test03_10k() {
     for i in 0..10_000 {
         let key = format!("key{:01}", i);
         let val = format!("value{:04}", i);
-        db_map.put_string(&key, &val);
+        db_map.put_string(&key, &val).unwrap();
     }
     //
-    db_map.sync_data();
+    db_map.sync_data().unwrap();
     //
     println!("fin data");
     //
@@ -197,11 +197,11 @@ fn _test03_10k() {
     );
     //
     //let r = db_map.get_string("key0001");
-    let r = db_map.get_string("key1");
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value0001".to_string()));
-    let r = db_map.get_string("key2221");
+    let r = db_map.get_string("key2221").unwrap();
     assert_eq!(r, Some("value2221".to_string()));
-    let r = db_map.get_string("key9991");
+    let r = db_map.get_string("key9991").unwrap();
     assert_eq!(r, Some("value9991".to_string()));
 }
 
@@ -214,10 +214,10 @@ fn _test04_10k() {
     for i in 0..10_000 {
         let key = format!("key{:04}", i);
         let val = format!("value{:04}", i);
-        db_map.put_string(&key, &val);
+        db_map.put_string(&key, &val).unwrap();
     }
     //
-    db_map.sync_data();
+    db_map.sync_data().unwrap();
     //
     println!("fin data");
     //
@@ -232,11 +232,11 @@ fn _test04_10k() {
         db_map.depth_of_node_tree().unwrap()
     );
     //
-    let r = db_map.get_string("key0001");
+    let r = db_map.get_string("key0001").unwrap();
     assert_eq!(r, Some("value0001".to_string()));
-    let r = db_map.get_string("key2221");
+    let r = db_map.get_string("key2221").unwrap();
     assert_eq!(r, Some("value2221".to_string()));
-    let r = db_map.get_string("key9991");
+    let r = db_map.get_string("key9991").unwrap();
     assert_eq!(r, Some("value9991".to_string()));
     //
     println!();
@@ -244,11 +244,11 @@ fn _test04_10k() {
     //db_map.delete("key2221");
     for i in 0..10000 {
         let key = format!("key{:04}", i);
-        db_map.delete(&key);
+        db_map.delete(&key).unwrap();
     }
-    db_map.sync_data();
+    db_map.sync_data().unwrap();
     //
-    let r = db_map.get_string("key2221");
+    let r = db_map.get_string("key2221").unwrap();
     assert_eq!(r, None);
     //
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
@@ -270,10 +270,10 @@ fn _test10_1m() {
     for i in 0..1_000_000 {
         let key = format!("key{:01}", i);
         let val = format!("value{:01}", i);
-        db_map.put_string(&key, &val);
+        db_map.put_string(&key, &val).unwrap();
     }
     //
-    db_map.sync_data();
+    db_map.sync_data().unwrap();
     //
     println!("fin data");
     //
@@ -288,13 +288,13 @@ fn _test10_1m() {
         db_map.depth_of_node_tree().unwrap()
     );
     //
-    let r = db_map.get_string("key1");
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));
-    let r = db_map.get_string("key2221");
+    let r = db_map.get_string("key2221").unwrap();
     assert_eq!(r, Some("value2221".to_string()));
-    let r = db_map.get_string("key9991");
+    let r = db_map.get_string("key9991").unwrap();
     assert_eq!(r, Some("value9991".to_string()));
-    let r = db_map.get_string("key99999");
+    let r = db_map.get_string("key99999").unwrap();
     assert_eq!(r, Some("value99999".to_string()));
 }
 
@@ -317,12 +317,12 @@ fn _test11_1m() {
     );
     */
     //
-    let r = db_map.get_string("key1");
+    let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));
-    let r = db_map.get_string("key2221");
+    let r = db_map.get_string("key2221").unwrap();
     assert_eq!(r, Some("value2221".to_string()));
-    let r = db_map.get_string("key9991");
+    let r = db_map.get_string("key9991").unwrap();
     assert_eq!(r, Some("value9991".to_string()));
-    let r = db_map.get_string("key99999");
+    let r = db_map.get_string("key99999").unwrap();
     assert_eq!(r, Some("value99999".to_string()));
 }

@@ -21,11 +21,9 @@ impl KeyType {
 }
 
 pub mod buf;
-//pub mod file_buffer;
 
 pub mod dat;
 pub mod idx;
-pub mod rw;
 pub mod unu;
 
 #[derive(Debug, Clone)]
@@ -161,22 +159,22 @@ impl FileDbMap {
 }
 
 impl DbMap for FileDbMap {
-    fn get(&self, key: &str) -> Option<Vec<u8>> {
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
         self.0.borrow().get(key)
     }
-    fn put(&mut self, key: &str, value: &[u8]) {
+    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
     }
-    fn delete(&mut self, key: &str) {
+    fn delete(&mut self, key: &str) -> Result<()> {
         self.0.borrow_mut().delete(key)
     }
-    fn sync_all(&mut self) {
+    fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_data()
     }
-    fn has_key(&self, key: &str) -> bool {
+    fn has_key(&self, key: &str) -> Result<bool> {
         self.0.borrow().has_key(key)
     }
 }
@@ -193,19 +191,19 @@ impl FileDbList {
 }
 
 impl DbList for FileDbList {
-    fn get(&self, key: u64) -> Option<Vec<u8>> {
+    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
         self.0.borrow().get(key)
     }
-    fn put(&mut self, key: u64, value: &[u8]) {
+    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
     }
-    fn delete(&mut self, key: u64) {
+    fn delete(&mut self, key: u64) -> Result<()> {
         self.0.borrow_mut().delete(key)
     }
-    fn sync_all(&mut self) {
+    fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_data()
     }
 }
@@ -689,71 +687,51 @@ impl FileDbMapInner {
 }
 
 impl DbMap for FileDbMapInner {
-    fn get(&self, key: &str) -> Option<Vec<u8>> {
-        let mut top_node = self
-            .idx_file
-            .read_top_node()
-            .expect("can not read top node");
-        self.find_in_node_tree(&mut top_node, key).unwrap()
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        let mut top_node = self.idx_file.read_top_node()?;
+        self.find_in_node_tree(&mut top_node, key)
     }
-    fn put(&mut self, key: &str, value: &[u8]) {
-        let mut top_node = self
-            .idx_file
-            .read_top_node()
-            .expect("can not read top node");
-        let active_node = self
-            .insert_into_node_tree(&mut top_node, key, value)
-            .unwrap();
+    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
+        let mut top_node = self.idx_file.read_top_node()?;
+        let active_node = self.insert_into_node_tree(&mut top_node, key, value)?;
         let new_top_node = active_node.deactivate();
-        self.idx_file.write_top_node(new_top_node).unwrap();
+        self.idx_file.write_top_node(new_top_node)?;
+        Ok(())
     }
-    fn sync_all(&mut self) {
+    fn delete(&mut self, key: &str) -> Result<()> {
+        let mut top_node = self.idx_file.read_top_node()?;
+        self.delete_from_node_tree(&mut top_node, key)?;
+        let new_top_node = self.trim(&mut top_node)?;
+        if top_node.offset != new_top_node.offset {
+            self.idx_file.write_top_node(new_top_node)?;
+        }
+        Ok(())
+    }
+    fn sync_all(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data and meta
-            if let Err(err) = self.dat_file.sync_all() {
-                panic!("can not sync dat file: {}", err);
-            }
-            if let Err(err) = self.idx_file.sync_all() {
-                panic!("can not sync idx file: {}", err);
-            }
-            if let Err(err) = self.unu_file.sync_all() {
-                panic!("can not sync unu file: {}", err);
-            }
+            self.dat_file.sync_all()?;
+            self.idx_file.sync_all()?;
+            self.unu_file.sync_all()?;
             self.dirty = false;
         }
+        Ok(())
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data
-            if let Err(err) = self.dat_file.sync_data() {
-                panic!("can not sync dat file: {}", err);
-            }
-            if let Err(err) = self.idx_file.sync_data() {
-                panic!("can not sync idx file: {}", err);
-            }
-            if let Err(err) = self.unu_file.sync_data() {
-                panic!("can not sync unu file: {}", err);
-            }
+            self.dat_file.sync_data()?;
+            self.idx_file.sync_data()?;
+            self.unu_file.sync_data()?;
             self.dirty = false;
         }
+        Ok(())
     }
-    fn delete(&mut self, key: &str) {
+    fn has_key(&self, key: &str) -> Result<bool> {
         let mut top_node = self
             .idx_file
-            .read_top_node()
-            .expect("can not read top node");
-        self.delete_from_node_tree(&mut top_node, key).unwrap();
-        let new_top_node = self.trim(&mut top_node).unwrap();
-        if top_node.offset != new_top_node.offset {
-            self.idx_file.write_top_node(new_top_node).unwrap();
-        }
-    }
-    fn has_key(&self, key: &str) -> bool {
-        let mut top_node = self
-            .idx_file
-            .read_top_node()
-            .expect("can not read top node");
-        self.has_key_in_node_tree(&mut top_node, key).unwrap()
+            .read_top_node()?;
+        self.has_key_in_node_tree(&mut top_node, key)
     }
 }
 
@@ -794,86 +772,37 @@ impl FileDbListInner {
 }
 
 impl DbList for FileDbListInner {
-    fn get(&self, key: u64) -> Option<Vec<u8>> {
-        self.mem.get(&key).map(|val| val.1.to_vec())
+    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(&key).map(|val| val.1.to_vec());
+        Ok(r)
     }
-    fn put(&mut self, key: u64, value: &[u8]) {
+    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         let _ = self.mem.insert(key, (0, value.to_vec()));
+        Ok(())
     }
-    fn delete(&mut self, key: u64) {
+    fn delete(&mut self, key: u64) -> Result<()> {
         let _ = self.mem.remove(&key);
+        Ok(())
     }
-    fn sync_all(&mut self) {
+    fn sync_all(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data and meta
-            if let Err(err) = self.dat_file.sync_all() {
-                panic!("can not sync dat file: {}", err);
-            }
-            if let Err(err) = self.idx_file.sync_all() {
-                panic!("can not sync idx file: {}", err);
-            }
-            if let Err(err) = self.unu_file.sync_all() {
-                panic!("can not sync unu file: {}", err);
-            }
+            self.dat_file.sync_all()?;
+            self.idx_file.sync_all()?;
+            self.unu_file.sync_all()?;
             self.dirty = false;
         }
+        Ok(())
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data
-            if let Err(err) = self.dat_file.sync_data() {
-                panic!("can not sync dat file: {}", err);
-            }
-            if let Err(err) = self.idx_file.sync_data() {
-                panic!("can not sync idx file: {}", err);
-            }
-            if let Err(err) = self.unu_file.sync_data() {
-                panic!("can not sync unu file: {}", err);
-            }
+            self.dat_file.sync_data()?;
+            self.idx_file.sync_data()?;
+            self.unu_file.sync_data()?;
             self.dirty = false;
         }
-    }
-}
-
-//--
-/// An iterator over the entries of a ``
-pub struct RecordIter {
-    file: rw::RawFile,
-    pos: u64,
-    len: u64,
-}
-
-impl RecordIter {
-    pub fn new(file: rw::RawFile) -> Result<Self> {
-        let len = file.length()?;
-        Ok(Self {
-            file,
-            pos: 512,
-            len,
-        })
-    }
-}
-
-impl<'a> Iterator for RecordIter {
-    type Item = Result<(Vec<u8>, Vec<u8>)>;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.pos >= self.len {
-            return None;
-        }
-        let r = self.file.seek_to_offset(self.pos);
-        if let Err(err) = r {
-            return Some(Err(err));
-        }
-        let rrr = self.file.read_record();
-        if rrr.is_err() {
-            return Some(rrr);
-        }
-        let r = self.file.position();
-        match r {
-            Ok(pos) => self.pos = pos,
-            Err(err) => return Some(Err(err)),
-        }
-        Some(rrr)
+        Ok(())
     }
 }
 

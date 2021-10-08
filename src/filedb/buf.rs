@@ -195,7 +195,9 @@ impl BufFile {
                 }
             }
             // clear all uses counter
-            self.data.iter_mut().for_each(|chunk| { chunk.uses = 0; });
+            self.data.iter_mut().for_each(|chunk| {
+                chunk.uses = 0;
+            });
             // Make a new chunk, write the old chunk to disk, replace old chunk
             match Chunk::new(offset, self.end, self.chunk_size, &mut self.file) {
                 Ok(x) => {

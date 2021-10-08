@@ -129,17 +129,21 @@ fn dat_file_check_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 8     | key_len     | is zero, unused space     |
-| 8      | 8     | value_len   | value length              |
-| 16     | --    | key_data    | key data                  |
+| 0      | 2     | key_len     | is zero, unused space     |
+| 2      | 4     | value_len   | value length              |
+| 6      | --    | key_data    | key data                  |
 | --     | --    | value_data  | value data                |
 +--------+-------+-------------+---------------------------+
 ```
 */
 fn dat_write_record(file: &mut BufFile, offset: u64, key: &[u8], value: &[u8]) -> Result<()> {
+    let key_len = key.len();
+    let value_len = value.len();
+    assert!(key_len <= u16::MAX as usize);
+    assert!(value_len <= u32::MAX as usize);
     let _ = file.seek(SeekFrom::Start(offset))?;
-    file.write_u64::<LittleEndian>(key.len() as u64)?;
-    file.write_u64::<LittleEndian>(value.len() as u64)?;
+    file.write_u16::<LittleEndian>(key_len as u16)?;
+    file.write_u32::<LittleEndian>(value_len as u32)?;
     let _ = file.write_all(key)?;
     let _ = file.write_all(value)?;
     //
@@ -153,11 +157,11 @@ fn dat_add_record(file: &mut BufFile, key: &[u8], value: &[u8]) -> Result<u64> {
 }
 fn dat_read_record(file: &mut BufFile, offset: u64) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
     let _ = file.seek(SeekFrom::Start(offset))?;
-    let key_len = file.read_u64::<LittleEndian>()?;
+    let key_len = file.read_u16::<LittleEndian>()?;
     if key_len == 0 {
         return Ok(None);
     }
-    let val_len = file.read_u64::<LittleEndian>()?;
+    let val_len = file.read_u32::<LittleEndian>()?;
     //
     let mut key = vec![0u8; key_len as usize];
     let _ = file.read_exact(&mut key)?;
@@ -168,11 +172,11 @@ fn dat_read_record(file: &mut BufFile, offset: u64) -> Result<Option<(Vec<u8>, V
 }
 fn dat_read_record_key(file: &mut BufFile, offset: u64) -> Result<Option<Vec<u8>>> {
     let _ = file.seek(SeekFrom::Start(offset))?;
-    let key_len = file.read_u64::<LittleEndian>()?;
+    let key_len = file.read_u16::<LittleEndian>()?;
     if key_len == 0 {
         return Ok(None);
     }
-    let _val_len = file.read_u64::<LittleEndian>()?;
+    let _val_len = file.read_u32::<LittleEndian>()?;
     //
     let mut key = vec![0u8; key_len as usize];
     let _ = file.read_exact(&mut key)?;
@@ -185,28 +189,28 @@ fn dat_read_record_key(file: &mut BufFile, offset: u64) -> Result<Option<Vec<u8>
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 8     | key_len     | is zero, unused space     |
-| 8      | 8     | reserve_len | reserve length            |
-| 16     | --    | reserve     | reserve data              |
+| 0      | 2     | key_len     | is zero, unused space     |
+| 2      | 4     | reserve_len | reserve length            |
+| 6      | --    | reserve     | reserve data              |
 +--------+-------+-------------+---------------------------+
 ```
 */
 fn dat_delete_record(file: &mut BufFile, offset: u64) -> Result<u64> {
     let _ = file.seek(SeekFrom::Start(offset))?;
     //
-    let key_len = file.read_u64::<LittleEndian>()?;
+    let key_len = file.read_u16::<LittleEndian>()?;
     if key_len == 0 {
-        let reserve_len = file.read_u64::<LittleEndian>()?;
-        return Ok(reserve_len);
+        let reserve_len = file.read_u32::<LittleEndian>()?;
+        return Ok(reserve_len as u64);
     }
-    let val_len = file.read_u64::<LittleEndian>()?;
+    let val_len = file.read_u32::<LittleEndian>()?;
     //
-    let reserve_len = key_len + val_len;
+    let reserve_len = key_len as u32 + val_len;
     //
     let _ = file.seek(SeekFrom::Start(offset))?;
-    file.write_u64::<LittleEndian>(0)?;
-    file.write_u64::<LittleEndian>(reserve_len)?;
+    file.write_u16::<LittleEndian>(0)?;
+    file.write_u32::<LittleEndian>(reserve_len)?;
     let _ = file.write_all(&vec![0u8; reserve_len as usize])?;
     //
-    Ok(reserve_len)
+    Ok(reserve_len as u64)
 }

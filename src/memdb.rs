@@ -1,6 +1,7 @@
 use super::{DbList, DbMap};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::io::Result;
 use std::rc::{Rc, Weak};
 
 // https://qiita.com/qnighy/items/4bbbb20e71cf4ae527b9
@@ -97,20 +98,20 @@ impl<'a> MemoryDbMap<'a> {
 }
 
 impl<'a> DbMap for MemoryDbMap<'a> {
-    fn get(&self, key: &str) -> Option<Vec<u8>> {
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
         self.0.borrow().get(key)
     }
-    fn put(&mut self, key: &str, value: &[u8]) {
+    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
     }
-    fn sync_all(&mut self) {
+    fn delete(&mut self, key: &str) -> Result<()> {
+        self.0.borrow_mut().delete(key)
+    }
+    fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_data()
-    }
-    fn delete(&mut self, key: &str) {
-        self.0.borrow_mut().delete(key)
     }
 }
 
@@ -121,19 +122,19 @@ impl<'a> MemoryDbList<'a> {
 }
 
 impl<'a> DbList for MemoryDbList<'a> {
-    fn get(&self, key: u64) -> Option<Vec<u8>> {
+    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
         self.0.borrow().get(key)
     }
-    fn put(&mut self, key: u64, value: &[u8]) {
+    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
     }
-    fn delete(&mut self, key: u64) {
+    fn delete(&mut self, key: u64) -> Result<()> {
         self.0.borrow_mut().delete(key)
     }
-    fn sync_all(&mut self) {
+    fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_data()
     }
 }
@@ -174,24 +175,29 @@ impl<'a> MemoryDbMapInner<'a> {
 }
 
 impl<'a> DbMap for MemoryDbMapInner<'a> {
-    fn get(&self, key: &str) -> Option<Vec<u8>> {
-        self.mem.get(key).map(|val| val.to_vec())
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(key).map(|val| val.to_vec());
+        Ok(r)
     }
-    fn put(&mut self, key: &str, value: &[u8]) {
+    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
         let _ = self.mem.insert(key.to_string(), value.to_vec());
+        Ok(())
     }
-    fn delete(&mut self, key: &str) {
+    fn delete(&mut self, key: &str) -> Result<()> {
         self.mem.remove(key);
+        Ok(())
     }
-    fn sync_all(&mut self) {
+    fn sync_all(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.sync_all()
         }
+        Ok(())
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.sync_data()
         }
+        Ok(())
     }
 }
 
@@ -211,24 +217,29 @@ impl<'a> MemoryDbListInner<'a> {
 }
 
 impl<'a> DbList for MemoryDbListInner<'a> {
-    fn get(&self, key: u64) -> Option<Vec<u8>> {
-        self.mem.get(&key).map(|val| val.to_vec())
+    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(&key).map(|val| val.to_vec());
+        Ok(r)
     }
-    fn put(&mut self, key: u64, value: &[u8]) {
+    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         let _ = self.mem.insert(key, value.to_vec());
+        Ok(())
     }
-    fn delete(&mut self, key: u64) {
+    fn delete(&mut self, key: u64) -> Result<()> {
         let _ = self.mem.remove(&key);
+        Ok(())
     }
-    fn sync_all(&mut self) {
+    fn sync_all(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.sync_all()
         }
+        Ok(())
     }
-    fn sync_data(&mut self) {
+    fn sync_data(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.sync_data()
         }
+        Ok(())
     }
 }
 

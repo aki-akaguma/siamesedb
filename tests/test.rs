@@ -2,20 +2,20 @@ mod test {
     use shamdb::{DbList, DbMap};
     //
     fn basic_test_map(db_map: &mut dyn DbMap) {
-        let r = db_map.get_string("key1");
+        let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, None);
-        db_map.put_string("key1", "value1");
-        let r = db_map.get_string("key1");
+        db_map.put_string("key1", "value1").unwrap();
+        let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, Some("value1".to_string()));
-        db_map.sync_data();
+        db_map.sync_data().unwrap();
     }
     fn basic_test_list(db_list: &mut dyn DbList) {
-        let r = db_list.get_string(1023);
+        let r = db_list.get_string(1023).unwrap();
         assert_eq!(r, None);
-        db_list.put_string(1023, "value1");
-        let r = db_list.get_string(1023);
+        db_list.put_string(1023, "value1").unwrap();
+        let r = db_list.get_string(1023).unwrap();
         assert_eq!(r, Some("value1".to_string()));
-        db_list.sync_data();
+        db_list.sync_data().unwrap();
     }
     ////
     #[test]
