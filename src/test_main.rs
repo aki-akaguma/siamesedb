@@ -6,12 +6,14 @@ fn main() {
     //_test02();
 
     //_test03_10k();
-    //_test04_10k();
+    _test04_10k();
 
     // 80.52user 62.24system 2:23.74elapsed 99%CPU (0avgtext+0avgdata 2156maxresident)k
     // 43.60user 3.91system 0:49.94elapsed 95%CPU (0avgtext+0avgdata 2364maxresident)k
-    _test10_1m();
+    //_test10_1m();
     //_test11_1m();
+    //
+    //_test12_10m();
 }
 
 fn _test00() {
@@ -136,8 +138,8 @@ fn _test02() {
     //
     db_map.sync_data().unwrap();
     //
-    //println!("{}", db_map.to_graph_string().unwrap());
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -154,11 +156,36 @@ fn _test02() {
     let r = db_map.get_string("key19").unwrap();
     assert_eq!(r, Some("value19".to_string()));
     //
+    db_map.delete("key19").unwrap();
+    db_map.delete("key18").unwrap();
+    db_map.delete("key17").unwrap();
+    db_map.delete("key16").unwrap();
+    /*
+     */
+    db_map.delete("key15").unwrap();
+    db_map.delete("key14").unwrap();
+    db_map.delete("key13").unwrap();
+    db_map.delete("key12").unwrap();
     db_map.delete("key11").unwrap();
+    db_map.delete("key10").unwrap();
+    //
+    /*
+     */
+    db_map.delete("key09").unwrap();
+    db_map.delete("key08").unwrap();
+    db_map.delete("key07").unwrap();
+    db_map.delete("key06").unwrap();
+    db_map.delete("key05").unwrap();
+    db_map.delete("key04").unwrap();
+    db_map.delete("key03").unwrap();
+    db_map.delete("key02").unwrap();
+    db_map.delete("key01").unwrap();
+    //
     db_map.sync_data().unwrap();
     //
     //println!("{}", db_map.to_graph_string().unwrap());
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -167,7 +194,7 @@ fn _test02() {
         db_map.depth_of_node_tree().unwrap()
     );
     //
-    let r = db_map.get_string("key11").unwrap();
+    let r = db_map.get_string("key19").unwrap();
     assert_eq!(r, None);
 }
 
@@ -188,6 +215,7 @@ fn _test03_10k() {
     println!("fin data");
     //
     //println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -219,11 +247,10 @@ fn _test04_10k() {
     //
     db_map.sync_data().unwrap();
     //
-    println!("fin data");
+    println!("fin put");
     //
-    /*
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
-    */
+    //println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -242,16 +269,19 @@ fn _test04_10k() {
     println!();
     //
     //db_map.delete("key2221");
-    for i in 0..10000 {
+    for i in 0..10_000 {
         let key = format!("key{:04}", i);
         db_map.delete(&key).unwrap();
     }
     db_map.sync_data().unwrap();
     //
-    let r = db_map.get_string("key2221").unwrap();
-    assert_eq!(r, None);
+    println!("fin delete");
     //
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    //let r = db_map.get_string("key2221").unwrap();
+    //assert_eq!(r, None);
+    //
+    //println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -275,7 +305,7 @@ fn _test10_1m() {
     //
     db_map.sync_data().unwrap();
     //
-    println!("fin data");
+    println!("fin put");
     //
     /*
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
@@ -300,14 +330,77 @@ fn _test10_1m() {
 
 fn _test11_1m() {
     let db_name = "target/tmp/testA.shamdb";
-    //let _ = std::fs::remove_dir_all(db_name);
+    let _ = std::fs::remove_dir_all(db_name);
     let db = shamdb::open_file(db_name).unwrap();
-    let db_map = db.db_map("some_map1").unwrap();
+    let mut db_map = db.db_map("some_map1").unwrap();
+    //
+    const MAX_CNT: u64 = 1_000_000;
+    //
+    println!("start put");
+    //
+    for i in 0..MAX_CNT {
+        let key = format!("key{:01}", i);
+        let val = format!("value{:01}", i);
+        db_map.put_string(&key, &val).unwrap();
+    }
+    //
+    db_map.sync_data().unwrap();
+    //
+    println!("fin put");
+    //
+    //println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
+    println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
+    //println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
+    println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
+    println!(
+        "db_map.depth_of_node_tree(): {}",
+        db_map.depth_of_node_tree().unwrap()
+    );
+    //
+    println!("start delete");
+    //
+    for i in 0..MAX_CNT {
+        let key = format!("key{:01}", i);
+        db_map.delete(&key).unwrap();
+    }
+    db_map.sync_data().unwrap();
+    //
+    println!("fin delete");
+    //
+    //let r = db_map.get_string("key2221").unwrap();
+    //assert_eq!(r, None);
+    //
+    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{:?}", db_map.count_of_free_node_list().unwrap());
+    println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
+    //println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
+    println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
+    println!(
+        "db_map.depth_of_node_tree(): {}",
+        db_map.depth_of_node_tree().unwrap()
+    );
+}
+
+fn _test12_10m() {
+    let db_name = "target/tmp/testA.shamdb";
+    let _ = std::fs::remove_dir_all(db_name);
+    let db = shamdb::open_file(db_name).unwrap();
+    let mut db_map = db.db_map("some_map1").unwrap();
+    //
+    for i in 0..10_000_000 {
+        let key = format!("key{:01}", i);
+        let val = format!("value{:01}", i);
+        db_map.put_string(&key, &val).unwrap();
+    }
+    //
+    db_map.sync_data().unwrap();
+    //
+    println!("fin put");
     //
     /*
     println!("{}", db_map.to_graph_string_with_key_string().unwrap());
     */
-    /*
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -315,7 +408,6 @@ fn _test11_1m() {
         "db_map.depth_of_node_tree(): {}",
         db_map.depth_of_node_tree().unwrap()
     );
-    */
     //
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));

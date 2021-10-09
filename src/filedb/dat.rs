@@ -124,7 +124,200 @@ fn dat_file_check_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
     Ok(())
 }
 
-/**
+#[cfg(feature = "dat_u16u32")]
+use byteorder::ByteOrder;
+
+#[cfg(feature = "dat_u16u32")]
+trait ReadShamExt: std::io::Read {
+    #[inline]
+    fn read_key_len(&mut self) -> Result<u64> {
+        let mut buf = [0; 2];
+        self.read_exact(&mut buf)?;
+        let r = LittleEndian::read_u16(&buf);
+        Ok(r as u64)
+    }
+    #[inline]
+    fn read_value_len(&mut self) -> Result<u64> {
+        let mut buf = [0; 4];
+        self.read_exact(&mut buf)?;
+        let r = LittleEndian::read_u32(&buf);
+        Ok(r as u64)
+    }
+}
+
+#[cfg(feature = "dat_u16u32")]
+trait WriteShamExt: std::io::Write {
+    #[inline]
+    fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+        assert!(key_len <= u16::MAX as usize);
+        let mut buf = [0; 2];
+        LittleEndian::write_u16(&mut buf, key_len as u16);
+        self.write_all(&buf)
+    }
+    #[inline]
+    fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+        assert!(value_len <= u32::MAX as usize);
+        let mut buf = [0; 4];
+        LittleEndian::write_u32(&mut buf, value_len as u32);
+        self.write_all(&buf)
+    }
+}
+
+#[cfg(feature = "dat_u64u64")]
+use byteorder::ByteOrder;
+
+#[cfg(feature = "dat_u64u64")]
+trait ReadShamExt: std::io::Read {
+    #[inline]
+    fn read_key_len(&mut self) -> Result<u64> {
+        let mut buf = [0; 8];
+        self.read_exact(&mut buf)?;
+        let r = LittleEndian::read_u64(&buf);
+        Ok(r)
+    }
+    #[inline]
+    fn read_value_len(&mut self) -> Result<u64> {
+        let mut buf = [0; 8];
+        self.read_exact(&mut buf)?;
+        let r = LittleEndian::read_u64(&buf);
+        Ok(r)
+    }
+}
+
+#[cfg(feature = "dat_u64u64")]
+trait WriteShamExt: std::io::Write {
+    #[inline]
+    fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+        assert!(key_len <= u64::MAX as usize);
+        let mut buf = [0; 8];
+        LittleEndian::write_u64(&mut buf, key_len as u64);
+        self.write_all(&buf)
+    }
+    #[inline]
+    fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+        assert!(value_len <= u64::MAX as usize);
+        let mut buf = [0; 8];
+        LittleEndian::write_u64(&mut buf, value_len as u64);
+        self.write_all(&buf)
+    }
+}
+
+#[cfg(feature = "dat_varvar")]
+trait ReadShamExt: std::io::Read {
+    #[inline]
+    fn read_key_len(&mut self) -> Result<u64> {
+        let mut inp = self.bytes();
+        super::varint::decode_varint(&mut inp)
+    }
+    #[inline]
+    fn read_value_len(&mut self) -> Result<u64> {
+        let mut inp = self.bytes();
+        super::varint::decode_varint(&mut inp)
+    }
+}
+
+#[cfg(feature = "dat_varvar")]
+trait WriteShamExt: std::io::Write {
+    #[inline]
+    fn write_key_len(&mut self, key_len: usize, enc_buf: &mut Vec<u8>) -> Result<()> {
+        super::varint::encode_varint(key_len as u64, enc_buf);
+        self.write_all(enc_buf)
+    }
+    #[inline]
+    fn write_value_len(&mut self, value_len: usize, enc_buf: &mut Vec<u8>) -> Result<()> {
+        super::varint::encode_varint(value_len as u64, enc_buf);
+        self.write_all(enc_buf)
+    }
+}
+
+impl<R: std::io::Read + ?Sized> ReadShamExt for R {}
+impl<W: std::io::Write + ?Sized> WriteShamExt for W {}
+
+fn dat_write_record(file: &mut BufFile, offset: u64, key: &[u8], value: &[u8]) -> Result<()> {
+    #[cfg(feature = "dat_varvar")]
+    let mut enc_buf = Vec::with_capacity(9);
+    //
+    let key_len = key.len();
+    let value_len = value.len();
+    let _ = file.seek(SeekFrom::Start(offset))?;
+    #[cfg(not(feature = "dat_varvar"))]
+    file.write_key_len(key_len)?;
+    #[cfg(feature = "dat_varvar")]
+    file.write_key_len(key_len, &mut enc_buf)?;
+    #[cfg(not(feature = "dat_varvar"))]
+    file.write_value_len(value_len)?;
+    #[cfg(feature = "dat_varvar")]
+    file.write_value_len(value_len, &mut enc_buf)?;
+    let _ = file.write_all(key)?;
+    let _ = file.write_all(value)?;
+    //
+    Ok(())
+}
+fn dat_read_record(file: &mut BufFile, offset: u64) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    let _ = file.seek(SeekFrom::Start(offset))?;
+    let key_len = file.read_key_len()?;
+    if key_len == 0 {
+        return Ok(None);
+    }
+    let val_len = file.read_value_len()?;
+    //
+    let mut key = vec![0u8; key_len as usize];
+    let _ = file.read_exact(&mut key)?;
+    let mut value = vec![0u8; val_len as usize];
+    let _ = file.read_exact(&mut value)?;
+    //
+    Ok(Some((key, value)))
+}
+fn dat_read_record_key(file: &mut BufFile, offset: u64) -> Result<Option<Vec<u8>>> {
+    let _ = file.seek(SeekFrom::Start(offset))?;
+    let key_len = file.read_key_len()?;
+    if key_len == 0 {
+        return Ok(None);
+    }
+    let _val_len = file.read_value_len()?;
+    //
+    let mut key = vec![0u8; key_len as usize];
+    let _ = file.read_exact(&mut key)?;
+    //
+    Ok(Some(key))
+}
+fn dat_delete_record(file: &mut BufFile, offset: u64) -> Result<u64> {
+    #[cfg(feature = "dat_varvar")]
+    let mut enc_buf = Vec::with_capacity(9);
+    //
+    let _ = file.seek(SeekFrom::Start(offset))?;
+    //
+    let key_len = file.read_key_len()?;
+    if key_len == 0 {
+        let reserve_len = file.read_value_len()?;
+        return Ok(reserve_len as u64);
+    }
+    let val_len = file.read_value_len()?;
+    //
+    let reserve_len = key_len + val_len;
+    //
+    let _ = file.seek(SeekFrom::Start(offset))?;
+    #[cfg(not(feature = "dat_varvar"))]
+    file.write_key_len(0)?;
+    #[cfg(feature = "dat_varvar")]
+    file.write_key_len(0, &mut enc_buf)?;
+    #[cfg(not(feature = "dat_varvar"))]
+    file.write_value_len(reserve_len as usize)?;
+    #[cfg(feature = "dat_varvar")]
+    file.write_value_len(reserve_len as usize, &mut enc_buf)?;
+    let _ = file.write_all(&vec![0u8; reserve_len as usize])?;
+    //
+    Ok(reserve_len as u64)
+}
+
+fn dat_add_record(file: &mut BufFile, key: &[u8], value: &[u8]) -> Result<u64> {
+    let _ = file.seek(SeekFrom::End(0))?;
+    let last_offset = file.stream_position()?;
+    dat_write_record(file, last_offset, key, value)?;
+    Ok(last_offset)
+}
+
+/*
 ```text
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
@@ -136,6 +329,7 @@ fn dat_file_check_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
 +--------+-------+-------------+---------------------------+
 ```
 */
+/*
 fn dat_write_record(file: &mut BufFile, offset: u64, key: &[u8], value: &[u8]) -> Result<()> {
     let key_len = key.len();
     let value_len = value.len();
@@ -148,12 +342,6 @@ fn dat_write_record(file: &mut BufFile, offset: u64, key: &[u8], value: &[u8]) -
     let _ = file.write_all(value)?;
     //
     Ok(())
-}
-fn dat_add_record(file: &mut BufFile, key: &[u8], value: &[u8]) -> Result<u64> {
-    let _ = file.seek(SeekFrom::End(0))?;
-    let last_offset = file.stream_position()?;
-    dat_write_record(file, last_offset, key, value)?;
-    Ok(last_offset)
 }
 fn dat_read_record(file: &mut BufFile, offset: u64) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
     let _ = file.seek(SeekFrom::Start(offset))?;
@@ -183,8 +371,9 @@ fn dat_read_record_key(file: &mut BufFile, offset: u64) -> Result<Option<Vec<u8>
     //
     Ok(Some(key))
 }
+*/
 
-/**
+/*
 ```text
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
@@ -195,6 +384,7 @@ fn dat_read_record_key(file: &mut BufFile, offset: u64) -> Result<Option<Vec<u8>
 +--------+-------+-------------+---------------------------+
 ```
 */
+/*
 fn dat_delete_record(file: &mut BufFile, offset: u64) -> Result<u64> {
     let _ = file.seek(SeekFrom::Start(offset))?;
     //
@@ -214,3 +404,4 @@ fn dat_delete_record(file: &mut BufFile, offset: u64) -> Result<u64> {
     //
     Ok(reserve_len as u64)
 }
+*/

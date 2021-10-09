@@ -21,6 +21,7 @@ impl KeyType {
 }
 
 pub mod buf;
+pub mod varint;
 
 pub mod dat;
 pub mod idx;
@@ -155,6 +156,10 @@ impl FileDbMap {
     /// get a depth of the node tree.
     pub fn depth_of_node_tree(&self) -> Result<u64> {
         self.0.borrow().depth_of_node_tree()
+    }
+    /// count of free node list
+    pub fn count_of_free_node_list(&self) -> Result<Vec<(usize, u64)>> {
+        self.0.borrow().count_of_free_nn_list()
     }
 }
 
@@ -321,8 +326,8 @@ impl FileDbMapInner {
             let mid = left + size / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
-            let key_offset = unsafe { *node.keys.get_unchecked(mid) };
-            //let key_offset = node.keys[mid];
+            //let key_offset = unsafe { *node.keys.get_unchecked(mid) };
+            let key_offset = node.keys[mid];
             //
             assert!(key_offset != 0);
             let key_string = self.load_key_string(key_offset)?;
@@ -372,13 +377,17 @@ impl FileDbMapInner {
         let top_node = self.idx_file.read_top_node()?;
         self.idx_file.depth_of_node_tree(&top_node)
     }
+    // count of free node list
+    fn count_of_free_nn_list(&self) -> Result<Vec<(usize, u64)>> {
+        self.idx_file.count_of_free_nn_list()
+    }
 }
 
 // insert: NEW
 impl FileDbMapInner {
     fn insert_into_node_tree(
         &mut self,
-        node: &mut idx::IdxNode,
+        mut node: idx::IdxNode,
         key: &str,
         value: &[u8],
     ) -> Result<idx::IdxNode> {
@@ -386,7 +395,7 @@ impl FileDbMapInner {
             let new_key_offset = self.dat_file.add_record(key.as_bytes(), value)?;
             return Ok(idx::IdxNode::new_active(new_key_offset, 0, 0));
         }
-        let r = self.keys_binary_search(node, key)?;
+        let r = self.keys_binary_search(&mut node, key)?;
         match r {
             Ok(k) => {
                 let key_offset = node.keys[k];
@@ -394,16 +403,16 @@ impl FileDbMapInner {
                 let new_key_offset = self.store_value_on_insert(key_offset, value)?;
                 if key_offset != new_key_offset {
                     node.keys[k] = new_key_offset;
-                    self.idx_file.write_node(node.clone())?;
                     self.dirty = true;
+                    return self.idx_file.write_node(node);
                 }
-                Ok(node.clone())
+                Ok(node)
             }
             Err(k) => {
                 let node_offset1 = node.downs[k];
                 let node2 = if node_offset1 != 0 {
-                    let mut node1 = self.idx_file.read_node(node_offset1)?;
-                    self.insert_into_node_tree(&mut node1, key, value)?
+                    let node1 = self.idx_file.read_node(node_offset1)?;
+                    self.insert_into_node_tree(node1, key, value)?
                 } else {
                     let new_key_offset = self.dat_file.add_record(key.as_bytes(), value)?;
                     idx::IdxNode::new_active(new_key_offset, 0, 0)
@@ -412,11 +421,10 @@ impl FileDbMapInner {
                     self.balance_on_insert(node, k, &node2)
                 } else {
                     assert!(node2.offset != 0);
-                    self.idx_file.write_node(node2.clone())?;
+                    let node2 = self.idx_file.write_node(node2)?;
                     node.downs[k] = node2.offset;
-                    self.idx_file.write_node(node.clone())?;
                     self.dirty = true;
-                    Ok(node.clone())
+                    self.idx_file.write_node(node)
                 }
             }
         }
@@ -441,7 +449,7 @@ impl FileDbMapInner {
     }
     fn balance_on_insert(
         &mut self,
-        node: &mut idx::IdxNode,
+        mut node: idx::IdxNode,
         i: usize,
         active_node: &idx::IdxNode,
     ) -> Result<idx::IdxNode> {
@@ -454,10 +462,11 @@ impl FileDbMapInner {
         if node.is_over_len() {
             self.split_on_insert(node)
         } else {
-            Ok(node.clone())
+            let node = self.idx_file.write_node(node)?;
+            Ok(node)
         }
     }
-    fn split_on_insert(&mut self, node: &mut idx::IdxNode) -> Result<idx::IdxNode> {
+    fn split_on_insert(&mut self, mut node: idx::IdxNode) -> Result<idx::IdxNode> {
         let mut node1 = idx::IdxNode::new(0);
         for i in idx::NODE_SLOTS_MAX_HALF as usize..node.keys.len() {
             node1.keys.push(node.keys[i]);
@@ -468,9 +477,12 @@ impl FileDbMapInner {
             node.downs[i] = 0;
         }
         //
+        node.keys.resize(idx::NODE_SLOTS_MAX_HALF as usize, 0);
+        node.downs.resize(idx::NODE_SLOTS_MAX_HALF as usize, 0);
+        //
         let key_offset1 = node.keys.remove(idx::NODE_SLOTS_MAX_HALF as usize - 1);
         let node1 = self.idx_file.write_new_node(node1)?;
-        let node = self.idx_file.write_node(node.clone())?;
+        let node = self.idx_file.write_node(node)?;
         Ok(idx::IdxNode::new_active(
             key_offset1,
             node.offset,
@@ -481,72 +493,88 @@ impl FileDbMapInner {
 
 // delete: NEW
 impl FileDbMapInner {
-    fn delete_from_node_tree(&mut self, node: &mut idx::IdxNode, key: &str) -> Result<()> {
+    fn delete_from_node_tree(&mut self, mut node: idx::IdxNode, key: &str) -> Result<idx::IdxNode> {
         if node.keys.is_empty() {
-            return Ok(());
+            return Ok(node);
         }
-        let r = self.keys_binary_search(node, key)?;
+        let r = self.keys_binary_search(&mut node, key)?;
         match r {
             Ok(k) => {
-                self.delete_at(node, k)?;
+                let node = self.delete_at(node, k)?;
+                //let new_node = self.idx_file.write_node(node)?;
+                //assert!(_new_node.offset == node.offset);
+                return Ok(node);
             }
             Err(k) => {
                 let node_offset1 = node.downs[k];
                 if node_offset1 != 0 {
-                    let mut node1 = self.idx_file.read_node(node_offset1)?;
-                    self.delete_from_node_tree(&mut node1, key)?;
+                    let node1 = self.idx_file.read_node(node_offset1)?;
+                    let node1 = self.delete_from_node_tree(node1, key)?;
+                    node.downs[k] = node1.offset;
+                    let node = self.idx_file.write_node(node)?;
                     if k == node.downs.len() - 1 {
-                        self.balance_right(node, k)?;
+                        let node = self.balance_right(node, k)?;
+                        return Ok(node);
                     } else {
-                        self.balance_left(node, k)?;
+                        let node = self.balance_left(node, k)?;
+                        return Ok(node);
                     }
                 }
             }
         }
-        Ok(())
+        Ok(node)
     }
-    fn delete_at(&mut self, node: &mut idx::IdxNode, i: usize) -> Result<()> {
+    fn delete_at(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
         let node_offset1 = node.downs[i];
         if node_offset1 == 0 {
-            node.keys.remove(i);
-            node.downs.remove(i);
-            self.idx_file.write_node(node.clone())?;
-            Ok(())
+            let _key_offset = node.keys.remove(i);
+            let _node_offset = node.downs.remove(i);
+            let new_node = self.idx_file.write_node(node)?;
+            Ok(new_node)
         } else {
-            let mut node1 = self.idx_file.read_node(node_offset1)?;
-            let key_offset = self.delete_max(&mut node1)?;
+            let node1 = self.idx_file.read_node(node_offset1)?;
+            let (key_offset, node1) = self.delete_max(node1)?;
             node.keys[i] = key_offset;
+            node.downs[i] = node1.offset;
+            let node = self.idx_file.write_node(node)?;
             self.balance_left(node, i)
         }
     }
-    fn delete_max(&mut self, node: &mut idx::IdxNode) -> Result<u64> {
+    fn delete_max(&mut self, mut node: idx::IdxNode) -> Result<(u64, idx::IdxNode)> {
         let j = node.keys.len();
         let i = j - 1;
         let node_offset1 = node.downs[j];
         if node_offset1 == 0 {
             node.downs.remove(j);
             let key_offset2 = node.keys.remove(i);
-            self.idx_file.write_node(node.clone())?;
-            Ok(key_offset2)
+            let new_node = self.idx_file.write_node(node)?;
+            Ok((key_offset2, new_node))
         } else {
-            let mut node1 = self.idx_file.read_node(node_offset1)?;
-            let key_offset2 = self.delete_max(&mut node1)?;
-            self.balance_right(node, j)?;
-            Ok(key_offset2)
+            let node1 = self.idx_file.read_node(node_offset1)?;
+            let (key_offset2, node1) = self.delete_max(node1)?;
+            node.downs[j] = node1.offset;
+            let node = self.idx_file.write_node(node)?;
+            let new_node = self.balance_right(node, j)?;
+            Ok((key_offset2, new_node))
         }
     }
-    fn balance_left(&mut self, node: &mut idx::IdxNode, i: usize) -> Result<()> {
+    fn balance_left(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
         let node_offset1 = node.downs[i];
-        if node_offset1 != 0 {
-            let mut node1 = self.idx_file.read_node(node_offset1)?;
-            if !node1.is_active_on_delete() {
-                return Ok(());
-            }
-            let j = i + 1;
-            let key_offset2 = node.keys[i];
-            let node_offset2 = node.downs[j];
+        if node_offset1 == 0 {
+            return Ok(node);
+        }
+        let mut node1 = self.idx_file.read_node(node_offset1)?;
+        if !node1.is_active_on_delete() {
+            return Ok(node);
+        }
+        let j = i + 1;
+        let key_offset2 = node.keys[i];
+        let node_offset2 = node.downs[j];
+        assert!(node_offset2 != 0);
+        if node_offset2 != 0 {
             let mut node2 = self.idx_file.read_node(node_offset2)?;
             if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
+                // unification
                 node1.keys.push(key_offset2);
                 //
                 for k in 0..node2.keys.len() {
@@ -558,30 +586,43 @@ impl FileDbMapInner {
                 //
                 node.keys.remove(i);
                 node.downs.remove(j);
-                self.idx_file.write_node(node1.clone())?;
-                self.idx_file.write_node(node.clone())?;
-                return Ok(());
+                //
+                let node1 = self.idx_file.write_node(node1)?;
+                node.downs[i] = node1.offset;
+                let new_node = self.idx_file.write_node(node)?;
+                self.idx_file.delete_node(node2)?;
+                return Ok(new_node);
+            } else {
+                let key_offset3 =
+                    self.move_a_node_from_right_to_left(key_offset2, &mut node1, &mut node2);
+                node.keys[i] = key_offset3;
+                let node2 = self.idx_file.write_node(node2)?;
+                let node1 = self.idx_file.write_node(node1)?;
+                node.downs[j] = node2.offset;
+                node.downs[i] = node1.offset;
+                let new_node = self.idx_file.write_node(node)?;
+                return Ok(new_node);
             }
-            let key_offset3 = self.move_right_left(key_offset2, &mut node1, &mut node2);
-            node.keys[i] = key_offset3;
-            self.idx_file.write_node(node2.clone())?;
-            self.idx_file.write_node(node1.clone())?;
-            self.idx_file.write_node(node.clone())?;
         }
-        Ok(())
+        Ok(node)
     }
-    fn balance_right(&mut self, node: &mut idx::IdxNode, j: usize) -> Result<()> {
+    fn balance_right(&mut self, mut node: idx::IdxNode, j: usize) -> Result<idx::IdxNode> {
         let node_offset1 = node.downs[j];
-        if node_offset1 != 0 {
-            let mut node1 = self.idx_file.read_node(node_offset1)?;
-            if !node1.is_active_on_delete() {
-                return Ok(());
-            }
-            let i = j - 1;
-            let key_offset2 = node.keys[i];
-            let node_offset2 = node.downs[i];
+        if node_offset1 == 0 {
+            return Ok(node);
+        }
+        let mut node1 = self.idx_file.read_node(node_offset1)?;
+        if !node1.is_active_on_delete() {
+            return Ok(node);
+        }
+        let i = j - 1;
+        let key_offset2 = node.keys[i];
+        let node_offset2 = node.downs[i];
+        assert!(node_offset2 != 0);
+        if node_offset2 != 0 {
             let mut node2 = self.idx_file.read_node(node_offset2)?;
             if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
+                // unification
                 node2.keys.push(key_offset2);
                 //
                 for k in 0..node1.keys.len() {
@@ -593,19 +634,26 @@ impl FileDbMapInner {
                 //
                 node.keys.remove(i);
                 node.downs.remove(j);
-                self.idx_file.write_node(node2.clone())?;
-                self.idx_file.write_node(node.clone())?;
-                return Ok(());
+                //
+                let node2 = self.idx_file.write_node(node2)?;
+                node.downs[i] = node2.offset;
+                let new_node = self.idx_file.write_node(node)?;
+                self.idx_file.delete_node(node1)?;
+                return Ok(new_node);
+            } else {
+                let key_offset3 = self.move_left_right(key_offset2, &mut node2, &mut node1);
+                node.keys[i] = key_offset3;
+                let node1 = self.idx_file.write_node(node1)?;
+                let node2 = self.idx_file.write_node(node2)?;
+                node.downs[j] = node1.offset;
+                node.downs[i] = node2.offset;
+                let new_node = self.idx_file.write_node(node)?;
+                return Ok(new_node);
             }
-            let key_offset3 = self.move_left_right(key_offset2, &mut node2, &mut node1);
-            node.keys[i] = key_offset3;
-            self.idx_file.write_node(node2.clone())?;
-            self.idx_file.write_node(node1.clone())?;
-            self.idx_file.write_node(node.clone())?;
         }
-        Ok(())
+        Ok(node)
     }
-    fn move_right_left(
+    fn move_a_node_from_right_to_left(
         &mut self,
         key_offset: u64,
         node_l: &mut idx::IdxNode,
@@ -627,17 +675,18 @@ impl FileDbMapInner {
         node_r.downs.insert(0, node_l.downs.remove(j));
         node_l.keys.remove(i)
     }
-    fn trim(&self, node: &mut idx::IdxNode) -> Result<idx::IdxNode> {
+    fn trim(&self, node: idx::IdxNode) -> Result<idx::IdxNode> {
         if node.downs.len() == 1 {
             let node_offset1 = node.downs[0];
             if node_offset1 != 0 {
                 let node1 = self.idx_file.read_node(node_offset1)?;
+                self.idx_file.delete_node(node)?;
                 Ok(node1)
             } else {
-                Ok(node.clone())
+                Ok(node)
             }
         } else {
-            Ok(node.clone())
+            Ok(node)
         }
     }
 }
@@ -692,17 +741,18 @@ impl DbMap for FileDbMapInner {
         self.find_in_node_tree(&mut top_node, key)
     }
     fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        let mut top_node = self.idx_file.read_top_node()?;
-        let active_node = self.insert_into_node_tree(&mut top_node, key, value)?;
+        let top_node = self.idx_file.read_top_node()?;
+        let active_node = self.insert_into_node_tree(top_node, key, value)?;
         let new_top_node = active_node.deactivate();
         self.idx_file.write_top_node(new_top_node)?;
         Ok(())
     }
     fn delete(&mut self, key: &str) -> Result<()> {
-        let mut top_node = self.idx_file.read_top_node()?;
-        self.delete_from_node_tree(&mut top_node, key)?;
-        let new_top_node = self.trim(&mut top_node)?;
-        if top_node.offset != new_top_node.offset {
+        let top_node = self.idx_file.read_top_node()?;
+        let top_node_offset = top_node.offset;
+        let top_node = self.delete_from_node_tree(top_node, key)?;
+        let new_top_node = self.trim(top_node)?;
+        if top_node_offset != new_top_node.offset {
             self.idx_file.write_top_node(new_top_node)?;
         }
         Ok(())
@@ -728,9 +778,7 @@ impl DbMap for FileDbMapInner {
         Ok(())
     }
     fn has_key(&self, key: &str) -> Result<bool> {
-        let mut top_node = self
-            .idx_file
-            .read_top_node()?;
+        let mut top_node = self.idx_file.read_top_node()?;
         self.has_key_in_node_tree(&mut top_node, key)
     }
 }
@@ -807,6 +855,7 @@ impl DbList for FileDbListInner {
 }
 
 //--
+#[cfg(test)]
 mod debug {
     #[test]
     fn test_size_of() {

@@ -268,7 +268,7 @@ impl Seek for BufFile {
                 if x < 0 {
                     self.pos - (-x) as u64
                 } else {
-                    self.pos - x as u64
+                    self.pos + x as u64
                 }
             }
         };
@@ -279,7 +279,10 @@ impl Seek for BufFile {
         } else {
             Err(Error::new(
                 ErrorKind::UnexpectedEof,
-                "Attempted to seek beyond the end of the file",
+                format!(
+                    "You tried to seek over the end of the file: {} < {}",
+                    self.end, new_pos
+                ),
             ))
         }
     }

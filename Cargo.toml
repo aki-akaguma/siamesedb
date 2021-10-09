@@ -15,7 +15,15 @@ name = "test_main"
 path = "src/test_main.rs"
 
 [features]
-default = []
+default = ["dat_varvar", "idx_varvar"]
+
+dat_u16u32 = []
+dat_u64u64 = []
+dat_varvar = []
+
+idx_u32u32 = []
+idx_u64u64 = []
+idx_varvar = []
 
 [dependencies]
 byteorder = "1.4"
