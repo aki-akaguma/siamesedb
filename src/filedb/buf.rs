@@ -60,31 +60,35 @@ impl Chunk {
 /// the key is the offset from start the file.
 /// the value is the index of BufFile::data.
 #[derive(Debug)]
-struct OffIdx(Vec<(u64, usize)>);
+struct OffIdx {
+    vec: Vec<(u64, usize)>,
+}
 impl OffIdx {
     fn with_capacity(cap: usize) -> Self {
-        Self(Vec::with_capacity(cap))
+        Self {
+            vec: Vec::with_capacity(cap),
+        }
     }
-    fn get(&self, offset: &u64) -> Option<&usize> {
-        if let Ok(x) = self.0.binary_search_by(|a| a.0.cmp(offset)) {
-            Some(&self.0[x].1)
+    fn get(&mut self, offset: u64) -> Option<usize> {
+        if let Ok(x) = self.vec.binary_search_by(|a| a.0.cmp(&offset)) {
+            Some(self.vec[x].1)
         } else {
             None
         }
     }
     fn insert(&mut self, offset: u64, idx: usize) {
-        match self.0.binary_search_by(|a| a.0.cmp(&offset)) {
+        match self.vec.binary_search_by(|a| a.0.cmp(&offset)) {
             Ok(x) => {
-                self.0[x].1 = idx;
+                self.vec[x].1 = idx;
             }
             Err(x) => {
-                self.0.insert(x, (offset, idx));
+                self.vec.insert(x, (offset, idx));
             }
         }
     }
     fn remove(&mut self, offset: &u64) -> Option<usize> {
-        match self.0.binary_search_by(|a| a.0.cmp(offset)) {
-            Ok(x) => Some(self.0.remove(x).1),
+        match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
+            Ok(x) => Some(self.vec.remove(x).1),
             Err(_x) => None,
         }
     }
@@ -100,7 +104,7 @@ pub struct BufFile {
     /// Chunk offset mask.
     chunk_mask: u64,
     /// Contains the actual chunks
-    data: Vec<Chunk>,
+    chunks: Vec<Chunk>,
     /// Used to quickly map a file index to an array index (to index self.dat)
     map: OffIdx,
     /// The file to be written to and read from
@@ -109,6 +113,8 @@ pub struct BufFile {
     pos: u64,
     /// The file offset that is the end of the file.
     end: u64,
+    //
+    fetch_cache: Option<(u64, usize)>,
 }
 
 // ref.) http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
@@ -131,7 +137,7 @@ impl BufFile {
     /// Creates a new BufFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
     pub fn with_capacity(max_num_chunks: u16, chunk_size: u32, mut file: File) -> Result<BufFile> {
-        assert!(chunk_size == roundup_powerof2(chunk_size));
+        debug_assert!(chunk_size == roundup_powerof2(chunk_size));
         let max_num_chunks = max_num_chunks as usize;
         let chunk_mask = !(chunk_size as u64 - 1);
         let chunk_size = chunk_size as usize;
@@ -142,11 +148,12 @@ impl BufFile {
             max_num_chunks,
             chunk_size,
             chunk_mask,
-            data: Vec::with_capacity(max_num_chunks),
+            chunks: Vec::with_capacity(max_num_chunks),
             map: OffIdx::with_capacity(max_num_chunks),
             file,
             pos: 0,
             end,
+            fetch_cache: None,
         })
     }
     ///
@@ -159,24 +166,34 @@ impl BufFile {
         self.flush()?;
         self.file.sync_data()
     }
+}
+
+impl BufFile {
     //
     fn fetch_chunk(&mut self, offset: u64) -> Result<&mut Chunk> {
         let offset = offset & self.chunk_mask;
-        let idx = if let Some(&x) = self.map.get(&offset) {
+        if let Some((off, idx)) = self.fetch_cache {
+            if off == offset {
+                return Ok(&mut self.chunks[idx]);
+            }
+        }
+        let idx = if let Some(x) = self.map.get(offset) {
             x
         } else {
             self.add_chunk(offset)?
         };
-        Ok(&mut self.data[idx])
+        self.fetch_cache = Some((offset, idx));
+        Ok(&mut self.chunks[idx])
     }
     //
     fn add_chunk(&mut self, offset: u64) -> Result<usize> {
-        if self.data.len() < self.max_num_chunks {
-            let new_idx = self.data.len();
+        self.fetch_cache = None;
+        if self.chunks.len() < self.max_num_chunks {
+            let new_idx = self.chunks.len();
             match Chunk::new(offset, self.end, self.chunk_size, &mut self.file) {
                 Ok(x) => {
                     self.map.insert(offset, new_idx);
-                    self.data.push(x);
+                    self.chunks.push(x);
                     Ok(new_idx)
                 }
                 Err(e) => Err(e),
@@ -184,28 +201,28 @@ impl BufFile {
         } else {
             // find the minimum uses counter.
             let mut min_idx = 0;
-            if self.data[min_idx].uses != 0 {
+            if self.chunks[min_idx].uses != 0 {
                 for i in 1..self.max_num_chunks {
-                    if self.data[i].uses < self.data[min_idx].uses {
+                    if self.chunks[i].uses < self.chunks[min_idx].uses {
                         min_idx = i;
-                        if self.data[min_idx].uses == 0 {
+                        if self.chunks[min_idx].uses == 0 {
                             break;
                         }
                     }
                 }
             }
             // clear all uses counter
-            self.data.iter_mut().for_each(|chunk| {
+            self.chunks.iter_mut().for_each(|chunk| {
                 chunk.uses = 0;
             });
             // Make a new chunk, write the old chunk to disk, replace old chunk
             match Chunk::new(offset, self.end, self.chunk_size, &mut self.file) {
                 Ok(x) => {
-                    self.data[min_idx].write(self.end, &mut self.file)?;
+                    self.chunks[min_idx].write(self.end, &mut self.file)?;
                     self.file.seek(SeekFrom::Start(self.pos))?;
-                    self.map.remove(&self.data[min_idx].offset);
+                    self.map.remove(&self.chunks[min_idx].offset);
                     self.map.insert(offset, min_idx);
-                    self.data[min_idx] = x;
+                    self.chunks[min_idx] = x;
                     Ok(min_idx)
                 }
                 Err(err) => Err(err),
@@ -245,7 +262,7 @@ impl Write for BufFile {
         Ok(len)
     }
     fn flush(&mut self) -> Result<()> {
-        for chunk in self.data.iter_mut() {
+        for chunk in self.chunks.iter_mut() {
             chunk.write(self.end, &mut self.file)?;
         }
         Ok(())
@@ -301,7 +318,7 @@ mod debug {
     fn test_size_of() {
         use super::{BufFile, Chunk};
         //
-        assert_eq!(std::mem::size_of::<BufFile>(), 96);
+        assert_eq!(std::mem::size_of::<BufFile>(), 120);
         assert_eq!(std::mem::size_of::<Chunk>(), 48);
         assert_eq!(std::mem::size_of::<(u64, usize)>(), 16);
         assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 24);

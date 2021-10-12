@@ -15,7 +15,7 @@ name = "test_main"
 path = "src/test_main.rs"
 
 [features]
-default = ["dat_varvar", "idx_varvar"]
+default = ["dat_varvar", "idx_v64v64"]
 
 dat_u16u32 = []
 dat_u64u64 = []
@@ -24,9 +24,12 @@ dat_varvar = []
 idx_u32u32 = []
 idx_u64u64 = []
 idx_varvar = []
+idx_v64v64 = ["vint64"]
+idx_vlivli = []
 
 [dependencies]
 byteorder = "1.4"
+vint64 = { version="1.0", optional=true }
 
 [dev-dependencies]
 #criterion = "0.3"

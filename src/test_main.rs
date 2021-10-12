@@ -6,12 +6,13 @@ fn main() {
     //_test02();
 
     //_test03_10k();
-    _test04_10k();
+    //_test04_10k();
 
     // 80.52user 62.24system 2:23.74elapsed 99%CPU (0avgtext+0avgdata 2156maxresident)k
     // 43.60user 3.91system 0:49.94elapsed 95%CPU (0avgtext+0avgdata 2364maxresident)k
+    // 38.14user 3.98system 0:44.10elapsed 95%CPU (0avgtext+0avgdata 2180maxresident)k
     //_test10_1m();
-    //_test11_1m();
+    _test11_1m();
     //
     //_test12_10m();
 }

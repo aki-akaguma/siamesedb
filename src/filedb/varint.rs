@@ -1,3 +1,5 @@
+// ref.) https://en.wikipedia.org/wiki/LEB128
+
 /*
 pub fn encode_varint(val: u64) -> Vec<u8> {
     let mut length = 1;

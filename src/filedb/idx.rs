@@ -33,7 +33,7 @@ impl IdxFile {
             // writing top node
             let top_node = IdxNode::new(IDX_HEADER_SZ);
             let _new_node = idx_write_node(&mut file, top_node, true)?;
-            assert!(_new_node.offset == IDX_HEADER_SZ);
+            debug_assert!(_new_node.offset == IDX_HEADER_SZ);
         } else {
             idx_file_check_header(&mut file, kt)?;
         }
@@ -411,7 +411,7 @@ impl IdxFile {
         let sz_ary = [(NODE_SLOTS_MAX as usize * 2 - 1) * 4];
         #[cfg(feature = "idx_u64u64")]
         let sz_ary = [(NODE_SLOTS_MAX as usize * 2 - 1) * 8];
-        #[cfg(feature = "idx_varvar")]
+        #[cfg(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli"))]
         let sz_ary = NODE_SIZE_ARY;
         for node_size in sz_ary {
             let cnt = idx_file_count_of_free_list(&mut locked.0, node_size)?;
@@ -503,21 +503,21 @@ fn idx_file_write_top_node_offset(file: &mut BufFile, offset: u64) -> Result<()>
 }
 
 // (NODE_SLOTS_MAX as usize * 2 - 1)
-#[cfg(feature = "idx_varvar")]
+#[cfg(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli"))]
 const NODE_SIZE_ARY: [usize; 9] = [15, 23, 31, 39, 47, 51, 63, 71, 256];
 
 //const NODE_SIZE_ARY: [usize; 9] = [17, 26, 35, 44, 53, 62, 71, 80, 256];
 //const NODE_SIZE_ARY: [usize; 9] = [15, 23, 31, 39, 47, 51, 63, 71, 256];
 //const NODE_SIZE_ARY: [usize; 9] = [18, 27, 36, 45, 54, 63, 72, 81, 256];
 
-#[cfg(feature = "idx_varvar")]
+#[cfg(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli"))]
 const NODE_SIZE_FREE_OFFSET: [usize; 9] = [16, 24, 32, 40, 48, 56, 64, 72, 80];
 
 fn free_nn_list_offset_of_header(_node_size: usize) -> u64 {
-    assert!(_node_size > 0);
-    #[cfg(not(feature = "idx_varvar"))]
+    debug_assert!(_node_size > 0);
+    #[cfg(not(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli")))]
     let r = 16;
-    #[cfg(feature = "idx_varvar")]
+    #[cfg(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli"))]
     let r = {
         for i in 0..NODE_SIZE_ARY.len() {
             if NODE_SIZE_ARY[i] == _node_size {
@@ -534,10 +534,10 @@ fn free_nn_list_offset_of_header(_node_size: usize) -> u64 {
 }
 
 fn node_size_roudup(node_size: usize) -> usize {
-    assert!(node_size > 0);
-    #[cfg(not(feature = "idx_varvar"))]
+    debug_assert!(node_size > 0);
+    #[cfg(not(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli")))]
     let r = node_size;
-    #[cfg(feature = "idx_varvar")]
+    #[cfg(any(feature = "idx_varvar", feature = "idx_v64v64", feature = "idx_vlivli"))]
     let r = {
         for &n_sz in NODE_SIZE_ARY.iter().take(NODE_SIZE_ARY.len() - 1) {
             if node_size <= n_sz {
@@ -561,6 +561,20 @@ fn idx_file_write_free_nn_offset(file: &mut BufFile, node_size: usize, offset: u
     Ok(())
 }
 
+/*
+```text
+free node:
++--------+-------+-------------+---------------------------+
+| offset | bytes | name        | comment                   |
++--------+-------+-------------+---------------------------+
+| 0      | 1     | size        | size in bytes of this node|
+|        |       |             | (bit or 0x80)             |
+| 1      | 1..9  | next        | next free node offset     |
+| --     | --    | reserve     | reserved free space       |
++--------+-------+-------------+---------------------------+
+```
+*/
+
 fn idx_file_count_of_free_list(file: &mut BufFile, new_node_size: usize) -> Result<u64> {
     let mut count = 0;
     let free_1st = idx_file_read_free_nn_offset(file, new_node_size)?;
@@ -570,18 +584,18 @@ fn idx_file_count_of_free_list(file: &mut BufFile, new_node_size: usize) -> Resu
             count += 1;
             free_next_offset = {
                 let _a = file.seek(SeekFrom::Start(free_next_offset))?;
-                assert!(_a == free_next_offset);
+                debug_assert!(_a == free_next_offset);
                 #[cfg(not(feature = "idx_varvar"))]
                 let free_next = {
                     let _node_len = file.read_node_size()?;
-                    assert!(_node_len > 0x7F);
+                    debug_assert!(_node_len > 0x7F);
                     file.read_node_offset()?
                 };
                 #[cfg(feature = "idx_varvar")]
                 let free_next = {
                     let mut inp = file.bytes();
                     let _node_len = inp.read_node_size()?;
-                    assert!(_node_len > 0x7F);
+                    debug_assert!(_node_len > 0x7F);
                     inp.read_node_offset()?
                 };
                 free_next
@@ -599,7 +613,7 @@ fn idx_file_pop_free_list(file: &mut BufFile, new_node_size: usize) -> Result<u6
             #[cfg(not(feature = "idx_varvar"))]
             let (free_next, node_len) = {
                 let node_len = file.read_node_size()?;
-                assert!(node_len > 0x7F);
+                debug_assert!(node_len > 0x7F);
                 let node_offset = file.read_node_offset()?;
                 (node_offset, node_len & 0x7F)
             };
@@ -607,15 +621,15 @@ fn idx_file_pop_free_list(file: &mut BufFile, new_node_size: usize) -> Result<u6
             let (free_next, node_len) = {
                 let mut inp = file.bytes();
                 let node_len = inp.read_node_size()?;
-                assert!(node_len > 0x7F);
+                debug_assert!(node_len > 0x7F);
                 let node_offset = inp.read_node_offset()?;
                 (node_offset, node_len & 0x7F)
             };
             //
             let _ = file.seek(SeekFrom::Start(free_1st))?;
             file.write_node_size(node_len)?;
-            let buff = &IDX_ZERO_ARY[0..node_len];
-            file.write_all(buff)?;
+            let buff = vec![0; node_len];
+            file.write_all(&buff)?;
             //
             free_next
         };
@@ -632,12 +646,12 @@ fn idx_file_push_free_list(
     if old_node_offset == 0 {
         return Ok(());
     }
-    assert!(old_node_size <= 0x7F);
+    debug_assert!(old_node_size <= 0x7F);
     //
     let free_1st = idx_file_read_free_nn_offset(file, old_node_size)?;
     {
         let _a = file.seek(SeekFrom::Start(old_node_offset))?;
-        assert!(_a == old_node_offset);
+        debug_assert!(_a == old_node_offset);
         #[cfg(not(feature = "idx_varvar"))]
         {
             file.write_node_size(old_node_size | 0x80)?;
@@ -654,11 +668,8 @@ fn idx_file_push_free_list(
     Ok(())
 }
 
-//
-// ref) http://wwwa.pikara.ne.jp/okojisan/b-tree/bsb-tree.html
-//
-
-pub const NODE_SLOTS_MAX: u16 = 5;
+//pub const NODE_SLOTS_MAX: u16 = 5;
+pub const NODE_SLOTS_MAX: u16 = 7;
 //pub const NODE_SLOTS_MAX: u16 = 9;
 //pub const NODE_SLOTS_MAX: u16 = 64;
 //pub const NODE_SLOTS_MAX: u16 = 256;
@@ -748,7 +759,6 @@ trait ReadShamExt: std::io::Read {
         let mut buf = [0; 1];
         self.read_exact(&mut buf)?;
         let node_size = buf[0] as usize;
-        //assert!(node_size <= 0x7F);
         Ok(node_size)
     }
 }
@@ -757,21 +767,20 @@ trait ReadShamExt: std::io::Read {
 trait WriteShamExt: std::io::Write {
     #[inline]
     fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        assert!(key_offset <= u32::MAX as u64);
+        debug_assert!(key_offset <= u32::MAX as u64);
         let mut buf = [0; 4];
         LittleEndian::write_u32(&mut buf, key_offset as u32);
         self.write_all(&buf)
     }
     #[inline]
     fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        assert!(node_offset <= u32::MAX as u64);
+        debug_assert!(node_offset <= u32::MAX as u64);
         let mut buf = [0; 4];
         LittleEndian::write_u32(&mut buf, node_offset as u32);
         self.write_all(&buf)
     }
     #[inline]
     fn write_node_size(&mut self, node_size: usize) -> Result<()> {
-        //assert!(node_size <= 0x7F as usize);
         self.write_all(&[node_size as u8])
     }
 }
@@ -800,7 +809,6 @@ trait ReadShamExt: std::io::Read {
         let mut buf = [0; 1];
         self.read_exact(&mut buf)?;
         let node_size = buf[0] as usize;
-        //assert!(node_size <= 0x7F);
         Ok(node_size)
     }
 }
@@ -821,7 +829,98 @@ trait WriteShamExt: std::io::Write {
     }
     #[inline]
     fn write_node_size(&mut self, node_size: usize) -> Result<()> {
-        //assert!(node_size <= 0x7F as usize);
+        self.write_all(&[node_size as u8])
+    }
+}
+
+#[cfg(feature = "idx_v64v64")]
+pub fn decode_vint64<R: std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
+    let mut buf = [0u8; 9];
+    inp.read_exact(&mut buf[0..1])?;
+    let byte_1st = buf[0];
+    let len = vint64::decoded_len(byte_1st);
+    if len > 1 {
+        inp.read_exact(&mut buf[1..len])?;
+    }
+    match vint64::decode(&mut &buf[0..len]) {
+        Ok(i) => Ok(i),
+        Err(err) => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("{}", err),
+        )),
+    }
+}
+
+#[cfg(feature = "idx_v64v64")]
+trait ReadShamExt: std::io::Read {
+    #[inline]
+    fn read_key_offset(&mut self) -> Result<u64> {
+        decode_vint64(self)
+    }
+    #[inline]
+    fn read_node_offset(&mut self) -> Result<u64> {
+        decode_vint64(self)
+    }
+    #[inline]
+    fn read_node_size(&mut self) -> Result<usize> {
+        let mut buf = [0; 1];
+        self.read_exact(&mut buf)?;
+        let node_size = buf[0] as usize;
+        Ok(node_size)
+    }
+}
+
+#[cfg(feature = "idx_v64v64")]
+trait WriteShamExt: std::io::Write {
+    #[inline]
+    fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+        let enc = vint64::encode(key_offset);
+        self.write_all(enc.as_ref())
+    }
+    #[inline]
+    fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
+        let enc = vint64::encode(node_offset);
+        self.write_all(enc.as_ref())
+    }
+    #[inline]
+    fn write_node_size(&mut self, node_size: usize) -> Result<()> {
+        self.write_all(&[node_size as u8])
+    }
+}
+
+#[cfg(feature = "idx_vlivli")]
+trait ReadShamExt: std::io::Read {
+    #[inline]
+    fn read_key_offset(&mut self) -> Result<u64> {
+        super::vli::decode_vli(self)
+    }
+    #[inline]
+    fn read_node_offset(&mut self) -> Result<u64> {
+        super::vli::decode_vli(self)
+    }
+    #[inline]
+    fn read_node_size(&mut self) -> Result<usize> {
+        let mut buf = [0; 1];
+        self.read_exact(&mut buf)?;
+        let node_size = buf[0] as usize;
+        Ok(node_size)
+    }
+}
+
+#[cfg(feature = "idx_vlivli")]
+trait WriteShamExt: std::io::Write {
+    #[inline]
+    fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+        let enc = super::vli::encode_vli(key_offset);
+        self.write_all(enc.as_ref())
+    }
+    #[inline]
+    fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
+        let enc = super::vli::encode_vli(node_offset);
+        self.write_all(enc.as_ref())
+    }
+    #[inline]
+    fn write_node_size(&mut self, node_size: usize) -> Result<()> {
         self.write_all(&[node_size as u8])
     }
 }
@@ -853,7 +952,6 @@ impl<R: std::io::Read> ReadShamExt for std::io::Bytes<R> {
                 ));
             }
         };
-        //assert!(node_size <= 0x7F);
         Ok(node_size.into())
     }
 }
@@ -872,7 +970,6 @@ trait WriteShamExt: std::io::Write {
     }
     #[inline]
     fn write_node_size(&mut self, node_size: usize) -> Result<()> {
-        //assert!(node_size <= 0x7F as usize);
         self.write_all(&[node_size as u8])
     }
 }
@@ -887,10 +984,29 @@ fn idx_delete_node(file: &mut BufFile, node: IdxNode) -> Result<()> {
     let old_node_len = file.read_node_size()?;
     #[cfg(feature = "idx_varvar")]
     let old_node_len = file.bytes().read_node_size()?;
-    assert!(old_node_len <= 0x7F);
+    debug_assert!(old_node_len <= 0x7F);
     idx_file_push_free_list(file, node.offset, old_node_len)?;
     Ok(())
 }
+
+/*
+```text
+used node:
++--------+-------+-------------+---------------------------+
+| offset | bytes | name        | comment                   |
++--------+-------+-------------+---------------------------+
+| 0      | 1     | size        | size in bytes of this node|
+|        |       |             | (must be <= 0x7F)         |
+| 1      | 1     | key-count   | count of keys             |
+| 2      | 1..9  | key1        | offset of key-value       |
+|        |       | ...         |                           |
+|        |       | key4        |                           |
+| --     | 1..9  | down1       | offset of next node       |
+|        |       | ...         |                           |
+|        |       | down5       |                           |
++--------+-------+-------------+---------------------------+
+```
+*/
 
 fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
     #[cfg(feature = "idx_varvar")]
@@ -898,21 +1014,18 @@ fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
     //
     let mut buff_cursor = Cursor::new(Vec::with_capacity(9 * (7 + 8)));
     //
-    for i in 0..(NODE_SLOTS_MAX as usize - 1) {
-        let val = if i < node.keys.len() {
-            let v = node.keys[i];
-            assert!(v != 0);
-            v
-        } else {
-            0
-        };
+    let key_count = node.keys.len();
+    buff_cursor.write_node_size(key_count)?;
+    //
+    for i in 0..key_count {
+        debug_assert!(node.keys[i] != 0);
+        let val = node.keys[i];
         #[cfg(not(feature = "idx_varvar"))]
         buff_cursor.write_key_offset(val)?;
         #[cfg(feature = "idx_varvar")]
         buff_cursor.write_key_offset(val, &mut enc_buf)?;
     }
-    //
-    for i in 0..(NODE_SLOTS_MAX as usize) {
+    for i in 0..(key_count+1) {
         let val = if i < node.downs.len() {
             node.downs[i]
         } else {
@@ -928,14 +1041,14 @@ fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
 }
 
 fn idx_write_node(file: &mut BufFile, mut node: IdxNode, is_new: bool) -> Result<IdxNode> {
-    assert!(node.offset != 0);
+    debug_assert!(node.offset != 0);
     //
     let mut buf_vec = idx_serialize_to_buf(&node)?;
     let buf_ref = &mut buf_vec;
     let new_node_len = buf_ref.len();
     //
     let new_node_len = node_size_roudup(new_node_len);
-    #[cfg(feature = "idx_varvar")]
+    #[cfg(any(feature = "idx_varvar", feature = "idx_vlivli", feature = "idx_v64v64"))]
     if buf_ref.len() < new_node_len {
         buf_ref.resize(new_node_len, 0u8);
     }
@@ -946,13 +1059,10 @@ fn idx_write_node(file: &mut BufFile, mut node: IdxNode, is_new: bool) -> Result
         let old_node_len = file.read_node_size()?;
         #[cfg(feature = "idx_varvar")]
         let old_node_len = file.bytes().read_node_size()?;
-        assert!(old_node_len <= 0x7F);
+        debug_assert!(old_node_len <= 0x7F);
         if new_node_len <= old_node_len {
             // over writes.
             let _ = file.seek(SeekFrom::Start(node.offset))?;
-            #[cfg(not(feature = "idx_varvar"))]
-            file.write_node_size(old_node_len)?;
-            #[cfg(feature = "idx_varvar")]
             file.write_node_size(old_node_len)?;
             file.write_all(buf_ref)?;
             return Ok(node);
@@ -972,9 +1082,6 @@ fn idx_write_node(file: &mut BufFile, mut node: IdxNode, is_new: bool) -> Result
             let _ = file.seek(SeekFrom::End(0))?;
             file.stream_position()?
         };
-        #[cfg(not(feature = "idx_varvar"))]
-        file.write_node_size(new_node_len)?;
-        #[cfg(feature = "idx_varvar")]
         file.write_node_size(new_node_len)?;
         file.write_all(buf_ref)?;
         node.offset = new_node_offset;
@@ -982,10 +1089,9 @@ fn idx_write_node(file: &mut BufFile, mut node: IdxNode, is_new: bool) -> Result
     //
     Ok(node)
 }
-const IDX_ZERO_ARY: &[u8] = &[0u8; 128];
 
 fn idx_read_node(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
-    assert!(offset != 0);
+    debug_assert!(offset != 0);
     //
     let _ = file.seek(SeekFrom::Start(offset))?;
     #[cfg(feature = "idx_varvar")]
@@ -994,13 +1100,15 @@ fn idx_read_node(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
     let _node_len = file.read_node_size()?;
     #[cfg(feature = "idx_varvar")]
     let _node_len = inp.read_node_size()?;
-    if _node_len <= 0x7F {
-    } else {
-        assert!(_node_len <= 0x7F);
-    }
+    debug_assert!(_node_len <= 0x7F);
+    #[cfg(not(feature = "idx_varvar"))]
+    let key_count = file.read_node_size()?;
+    #[cfg(feature = "idx_varvar")]
+    let key_count = inp.read_node_size()?;
+    //debug_assert!(key_count >= 0);
     //
     let mut node = IdxNode::new(offset);
-    for _i in 0..(NODE_SLOTS_MAX as usize - 1) {
+    for _i in 0..key_count {
         #[cfg(not(feature = "idx_varvar"))]
         let key_offset = file
             .read_key_offset()
@@ -1009,23 +1117,10 @@ fn idx_read_node(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
         let key_offset = inp
             .read_key_offset()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-        if key_offset == 0 {
-            for _j in (_i + 1)..(NODE_SLOTS_MAX as usize - 1) {
-                #[cfg(not(feature = "idx_varvar"))]
-                let _key_offset = file
-                    .read_key_offset()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _j));
-                #[cfg(feature = "idx_varvar")]
-                let _key_offset = inp
-                    .read_key_offset()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                //let _ = inp.next();
-            }
-            break;
-        }
+        debug_assert!(key_offset != 0);
         node.keys.push(key_offset as u64);
     }
-    for _i in 0..=node.keys.len() {
+    for _i in 0..(key_count+1) {
         #[cfg(not(feature = "idx_varvar"))]
         let node_offset = file
             .read_node_offset()
@@ -1039,18 +1134,6 @@ fn idx_read_node(file: &mut BufFile, offset: u64) -> Result<IdxNode> {
     //
     Ok(node)
 }
-
-/*
-```text
-+--------+-------+-------------+---------------------------+
-| offset | bytes | name        | comment                   |
-+--------+-------+-------------+---------------------------+
-| 0      | 4     | size        | size in bytes of this node|
-| 8      | 4*4   | keys        | offset of key-value       |
-| 64     | 4*5   | downs       | offset of next node       |
-+--------+-------+-------------+---------------------------+
-```
-*/
 
 // for debug
 fn idx_to_graph_string(file: &mut BufFile, head: &str, node: &IdxNode) -> Result<String> {
@@ -1130,3 +1213,7 @@ fn idx_to_graph_string_with_key_string(
     //
     Ok(gs)
 }
+
+//
+// ref) http://wwwa.pikara.ne.jp/okojisan/b-tree/bsb-tree.html
+//

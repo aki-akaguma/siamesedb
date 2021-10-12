@@ -22,6 +22,7 @@ impl KeyType {
 
 pub mod buf;
 pub mod varint;
+pub mod vli;
 
 pub mod dat;
 pub mod idx;
@@ -326,8 +327,8 @@ impl FileDbMapInner {
             let mid = left + size / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
-            //let key_offset = unsafe { *node.keys.get_unchecked(mid) };
-            let key_offset = node.keys[mid];
+            let key_offset = unsafe { *node.keys.get_unchecked(mid) };
+            //let key_offset = node.keys[mid];
             //
             assert!(key_offset != 0);
             let key_string = self.load_key_string(key_offset)?;
@@ -501,8 +502,6 @@ impl FileDbMapInner {
         match r {
             Ok(k) => {
                 let node = self.delete_at(node, k)?;
-                //let new_node = self.idx_file.write_node(node)?;
-                //assert!(_new_node.offset == node.offset);
                 return Ok(node);
             }
             Err(k) => {
@@ -681,13 +680,10 @@ impl FileDbMapInner {
             if node_offset1 != 0 {
                 let node1 = self.idx_file.read_node(node_offset1)?;
                 self.idx_file.delete_node(node)?;
-                Ok(node1)
-            } else {
-                Ok(node)
+                return Ok(node1);
             }
-        } else {
-            Ok(node)
         }
+        Ok(node)
     }
 }
 
