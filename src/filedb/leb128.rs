@@ -34,7 +34,7 @@ pub fn encode_varint(val: u64, enc_buf: &mut Vec<u8>) {
         if i + 1 != length {
             v |= 0x80;
         }
-        assert!(v <= 0xFF);
+        debug_assert!(v <= 0xFF);
         enc_buf.push(v as u8);
     }
 }

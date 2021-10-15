@@ -26,9 +26,16 @@ pub mod kc;
 use kc::KeyCacheTrait;
 
 pub mod buf;
-pub mod v64;
-pub mod varint;
-pub mod vli;
+pub mod vfile;
+
+#[cfg(feature = "vf_vint64")]
+pub mod vint64;
+
+#[cfg(feature = "vf_leb128")]
+pub mod leb128;
+
+#[cfg(feature = "vf_sqlvli")]
+pub mod sqlvli;
 
 pub mod dat;
 pub mod idx;
@@ -325,7 +332,7 @@ impl FileDbMapInner {
     }
     #[cfg(not(feature = "key_cache"))]
     fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
-        assert!(key_offset != 0);
+        debug_assert!(key_offset != 0);
         let string = self
             .dat_file
             .read_record_key(key_offset)?
@@ -335,9 +342,9 @@ impl FileDbMapInner {
     }
     #[cfg(feature = "key_cache")]
     fn load_key_string(&mut self, key_offset: u64) -> Result<Rc<String>> {
-        assert!(key_offset != 0);
+        debug_assert!(key_offset != 0);
         let string = match self.key_cache.get(&key_offset) {
-            Some(s) => s.clone(),
+            Some(s) => s,
             None => {
                 let string = self
                     .dat_file
@@ -349,30 +356,8 @@ impl FileDbMapInner {
         };
         Ok(string)
     }
-    /*
-    #[cfg(feature = "key_cache")]
-    fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
-        assert!(key_offset != 0);
-        let string = match self.key_cache.get(&key_offset) {
-            Some(s) => s.clone(),
-            None => {
-                let string = self
-                    .dat_file
-                    .read_record_key(key_offset)?
-                    .map(|key| String::from_utf8_lossy(&key).to_string())
-                    .unwrap();
-                if self.key_cache.len() > 128 {
-                    self.clear_key_cache_all();
-                }
-                self.key_cache.insert(key_offset, string.clone());
-                string
-            }
-        };
-        Ok(string)
-    }
-    */
     fn load_value(&self, key_offset: u64) -> Result<Option<Vec<u8>>> {
-        assert!(key_offset != 0);
+        debug_assert!(key_offset != 0);
         Ok(self
             .dat_file
             .read_record(key_offset)?
@@ -637,7 +622,7 @@ impl FileDbMapInner {
         let j = i + 1;
         let key_offset2 = node.keys[i];
         let node_offset2 = node.downs[j];
-        assert!(node_offset2 != 0);
+        debug_assert!(node_offset2 != 0);
         if node_offset2 != 0 {
             let mut node2 = self.idx_file.read_node(node_offset2)?;
             if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
@@ -653,8 +638,6 @@ impl FileDbMapInner {
                 //
                 let node1 = self.idx_file.write_node(node1)?;
                 node.downs[i] = node1.offset;
-                let new_node = self.idx_file.write_node(node)?;
-                return Ok(new_node);
             } else {
                 let key_offset3 =
                     self.move_a_node_from_right_to_left(key_offset2, &mut node1, &mut node2);
@@ -663,9 +646,9 @@ impl FileDbMapInner {
                 let node1 = self.idx_file.write_node(node1)?;
                 node.downs[j] = node2.offset;
                 node.downs[i] = node1.offset;
-                let new_node = self.idx_file.write_node(node)?;
-                return Ok(new_node);
             }
+            let new_node = self.idx_file.write_node(node)?;
+            return Ok(new_node);
         }
         Ok(node)
     }
@@ -681,7 +664,7 @@ impl FileDbMapInner {
         let i = j - 1;
         let key_offset2 = node.keys[i];
         let node_offset2 = node.downs[i];
-        assert!(node_offset2 != 0);
+        debug_assert!(node_offset2 != 0);
         if node_offset2 != 0 {
             let mut node2 = self.idx_file.read_node(node_offset2)?;
             if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
@@ -697,8 +680,6 @@ impl FileDbMapInner {
                 //
                 let node2 = self.idx_file.write_node(node2)?;
                 node.downs[i] = node2.offset;
-                let new_node = self.idx_file.write_node(node)?;
-                return Ok(new_node);
             } else {
                 let key_offset3 = self.move_left_right(key_offset2, &mut node2, &mut node1);
                 node.keys[i] = key_offset3;
@@ -706,9 +687,9 @@ impl FileDbMapInner {
                 let node2 = self.idx_file.write_node(node2)?;
                 node.downs[j] = node1.offset;
                 node.downs[i] = node2.offset;
-                let new_node = self.idx_file.write_node(node)?;
-                return Ok(new_node);
             }
+            let new_node = self.idx_file.write_node(node)?;
+            return Ok(new_node);
         }
         Ok(node)
     }
@@ -757,7 +738,7 @@ impl FileDbMapInner {
         match r {
             Ok(k) => {
                 let key_offset = node.keys[k];
-                assert!(key_offset != 0);
+                debug_assert!(key_offset != 0);
                 self.load_value(key_offset)
             }
             Err(k) => {

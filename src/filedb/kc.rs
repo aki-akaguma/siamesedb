@@ -32,7 +32,16 @@ impl KeyCache {
     }
 }
 
+impl Default for KeyCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub trait KeyCacheTrait {
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     fn len(&self) -> usize;
     fn get(&mut self, offset: &u64) -> Option<Rc<String>>;
     fn put(&mut self, offset: &u64, key: String) -> Option<Rc<String>>;
@@ -50,10 +59,8 @@ impl KeyCacheTrait for KeyCache {
                 let a = self.cache.get_mut(k).unwrap();
                 a.uses += 1;
                 Some(a.key_string.clone())
-            },
-            Err(_k) => {
-                None
-            },
+            }
+            Err(_k) => None,
         }
     }
     fn put(&mut self, offset: &u64, key: String) -> Option<Rc<String>> {
@@ -63,7 +70,7 @@ impl KeyCacheTrait for KeyCache {
                 a.uses += 1;
                 a.key_string = Rc::new(key);
                 Some(a.key_string.clone())
-            },
+            }
             Err(k) => {
                 let k = if self.cache.len() > CACHE_SIZE {
                     /*
@@ -110,14 +117,14 @@ impl KeyCacheTrait for KeyCache {
                 let r = Rc::new(key);
                 self.cache.insert(k, KeyCacheBean::new(*offset, r.clone()));
                 Some(r)
-            },
+            }
         }
     }
     fn delete(&mut self, offset: &u64) {
         match self.cache.binary_search_by_key(offset, |a| a.key_offset) {
             Ok(k) => {
                 self.cache.remove(k);
-            },
+            }
             Err(_k) => (),
         }
     }

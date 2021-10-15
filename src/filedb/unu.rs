@@ -1,17 +1,16 @@
 #![allow(dead_code)]
 
 use super::KeyType;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-use super::buf::BufFile;
+use super::vfile::VarFile;
 
 #[derive(Debug, Clone)]
-pub struct UnuFile(Rc<RefCell<(BufFile, KeyType)>>);
+pub struct UnuFile(Rc<RefCell<(VarFile, KeyType)>>);
 
 impl UnuFile {
     pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, kt: KeyType) -> Result<Self> {
@@ -22,7 +21,7 @@ impl UnuFile {
             .write(true)
             .create(true)
             .open(pb)?;
-        let mut file = BufFile::new(std_file)?;
+        let mut file = VarFile::new(std_file)?;
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
         if len == 0 {
@@ -81,7 +80,7 @@ The db unused header size is 64 bytes.
 - signature2: fixed 4 bytes, variable in future.
 
 */
-fn unu_file_write_init_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
+fn unu_file_write_init_header(file: &mut VarFile, kt: KeyType) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(0))?;
     //
     let kt_byte = kt.signature();
@@ -89,14 +88,14 @@ fn unu_file_write_init_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
     let _ = file.write(&[b's', b'h', b'a', b'm'])?;
     let _ = file.write(&[b'd', b'b', kt_byte, b'2'])?;
     // count of data
-    file.write_u64::<LittleEndian>(0u64)?;
+    file.write_u64_le(0u64)?;
     // reserve1
     let _ = file.write(&[0u8; 48]);
     //
     Ok(())
 }
 
-fn unu_file_check_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
+fn unu_file_check_header(file: &mut VarFile, kt: KeyType) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(0))?;
     //
     let kt_byte = kt.signature();
@@ -112,7 +111,7 @@ fn unu_file_check_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
         panic!("invalid header signature2");
     }
     // count of unused
-    let _count = file.read_u64::<LittleEndian>()?;
+    let _count = file.read_u64_le()?;
     if _count != 0 {
         //panic!("invalid count");
     }
@@ -129,21 +128,21 @@ fn unu_file_check_header(file: &mut BufFile, kt: KeyType) -> Result<()> {
 +--------+-------+-------------+---------------------------+
 ```
 */
-fn unu_write_unu(file: &mut BufFile, offset: u64, dat_offset: u64) -> Result<()> {
+fn unu_write_unu(file: &mut VarFile, offset: u64, dat_offset: u64) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(offset))?;
-    file.write_u64::<LittleEndian>(dat_offset)?;
+    file.write_u64_le(dat_offset)?;
     //
     Ok(())
 }
-fn unu_add_unu(file: &mut BufFile, dat_offset: u64) -> Result<u64> {
+fn unu_add_unu(file: &mut VarFile, dat_offset: u64) -> Result<u64> {
     let _ = file.seek(SeekFrom::End(0))?;
     let last_offset = file.stream_position()?;
     unu_write_unu(file, last_offset, dat_offset)?;
     Ok(last_offset)
 }
-fn unu_read_unu(file: &mut BufFile, offset: u64) -> Result<Option<u64>> {
+fn unu_read_unu(file: &mut VarFile, offset: u64) -> Result<Option<u64>> {
     let _ = file.seek(SeekFrom::Start(offset))?;
-    let dat_offset = file.read_u64::<LittleEndian>()?;
+    let dat_offset = file.read_u64_le()?;
     if dat_offset == 0 {
         Ok(None)
     } else {
@@ -160,11 +159,11 @@ fn unu_read_unu(file: &mut BufFile, offset: u64) -> Result<Option<u64>> {
 +--------+-------+-------------+---------------------------+
 ```
 */
-fn unu_delete_unu(file: &mut BufFile, offset: u64) -> Result<u64> {
+fn unu_delete_unu(file: &mut VarFile, offset: u64) -> Result<u64> {
     let _ = file.seek(SeekFrom::Start(offset))?;
-    let dat_offset = file.read_u64::<LittleEndian>()?;
+    let dat_offset = file.read_u64_le()?;
     let _ = file.seek(SeekFrom::Start(offset))?;
-    file.write_u64::<LittleEndian>(0)?;
+    file.write_u64_le(0)?;
     //
     Ok(dat_offset)
 }
