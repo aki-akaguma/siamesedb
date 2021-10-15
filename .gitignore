@@ -11,3 +11,4 @@ Cargo.lock
 
 # My special files
 z.*
+callgrind.out.*

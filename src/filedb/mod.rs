@@ -20,7 +20,13 @@ impl KeyType {
     }
 }
 
+#[cfg(feature = "key_cache")]
+pub mod kc;
+#[cfg(feature = "key_cache")]
+use kc::KeyCacheTrait;
+
 pub mod buf;
+pub mod v64;
 pub mod varint;
 pub mod vli;
 
@@ -158,15 +164,19 @@ impl FileDbMap {
     pub fn depth_of_node_tree(&self) -> Result<u64> {
         self.0.borrow().depth_of_node_tree()
     }
-    /// count of free node list
-    pub fn count_of_free_node_list(&self) -> Result<Vec<(usize, u64)>> {
-        self.0.borrow().count_of_free_nn_list()
+    /// count of free node
+    pub fn count_of_free_node(&self) -> Result<Vec<(usize, u64)>> {
+        self.0.borrow().count_of_free_node()
+    }
+    /// count of used node
+    pub fn count_of_used_node(&self) -> Result<Vec<(usize, u64)>> {
+        self.0.borrow().count_of_used_node()
     }
 }
 
 impl DbMap for FileDbMap {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.0.borrow().get(key)
+    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
+        self.0.borrow_mut().get(key)
     }
     fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
@@ -180,8 +190,8 @@ impl DbMap for FileDbMap {
     fn sync_data(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_data()
     }
-    fn has_key(&self, key: &str) -> Result<bool> {
-        self.0.borrow().has_key(key)
+    fn has_key(&mut self, key: &str) -> Result<bool> {
+        self.0.borrow_mut().has_key(key)
     }
 }
 
@@ -197,8 +207,8 @@ impl FileDbList {
 }
 
 impl DbList for FileDbList {
-    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
-        self.0.borrow().get(key)
+    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
+        self.0.borrow_mut().get(key)
     }
     fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
@@ -271,6 +281,9 @@ pub struct FileDbMapInner {
     dat_file: dat::DatFile,
     idx_file: idx::IdxFile,
     unu_file: unu::UnuFile,
+    //
+    #[cfg(feature = "key_cache")]
+    key_cache: kc::KeyCache,
 }
 
 impl FileDbMapInner {
@@ -290,6 +303,8 @@ impl FileDbMapInner {
             idx_file,
             unu_file,
             mem: BTreeMap::new(),
+            #[cfg(feature = "key_cache")]
+            key_cache: kc::KeyCache::new(),
             dirty: false,
         })
     }
@@ -300,14 +315,62 @@ impl FileDbMapInner {
 
 // for utils
 impl FileDbMapInner {
-    fn load_key_string(&self, key_offset: u64) -> Result<String> {
+    #[cfg(feature = "key_cache")]
+    fn clear_key_cache(&mut self, key_offset: u64) {
+        self.key_cache.delete(&key_offset);
+    }
+    #[cfg(feature = "key_cache")]
+    fn _clear_key_cache_all(&mut self) {
+        self.key_cache.clear();
+    }
+    #[cfg(not(feature = "key_cache"))]
+    fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
         assert!(key_offset != 0);
-        Ok(self
+        let string = self
             .dat_file
             .read_record_key(key_offset)?
             .map(|key| String::from_utf8_lossy(&key).to_string())
-            .unwrap())
+            .unwrap();
+        Ok(string)
     }
+    #[cfg(feature = "key_cache")]
+    fn load_key_string(&mut self, key_offset: u64) -> Result<Rc<String>> {
+        assert!(key_offset != 0);
+        let string = match self.key_cache.get(&key_offset) {
+            Some(s) => s.clone(),
+            None => {
+                let string = self
+                    .dat_file
+                    .read_record_key(key_offset)?
+                    .map(|key| String::from_utf8_lossy(&key).to_string())
+                    .unwrap();
+                self.key_cache.put(&key_offset, string).unwrap()
+            }
+        };
+        Ok(string)
+    }
+    /*
+    #[cfg(feature = "key_cache")]
+    fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
+        assert!(key_offset != 0);
+        let string = match self.key_cache.get(&key_offset) {
+            Some(s) => s.clone(),
+            None => {
+                let string = self
+                    .dat_file
+                    .read_record_key(key_offset)?
+                    .map(|key| String::from_utf8_lossy(&key).to_string())
+                    .unwrap();
+                if self.key_cache.len() > 128 {
+                    self.clear_key_cache_all();
+                }
+                self.key_cache.insert(key_offset, string.clone());
+                string
+            }
+        };
+        Ok(string)
+    }
+    */
     fn load_value(&self, key_offset: u64) -> Result<Option<Vec<u8>>> {
         assert!(key_offset != 0);
         Ok(self
@@ -316,7 +379,7 @@ impl FileDbMapInner {
             .map(|(_key, val)| val))
     }
     fn keys_binary_search(
-        &self,
+        &mut self,
         node: &mut idx::IdxNode,
         key: &str,
     ) -> Result<std::result::Result<usize, usize>> {
@@ -330,7 +393,7 @@ impl FileDbMapInner {
             let key_offset = unsafe { *node.keys.get_unchecked(mid) };
             //let key_offset = node.keys[mid];
             //
-            assert!(key_offset != 0);
+            debug_assert!(key_offset != 0);
             let key_string = self.load_key_string(key_offset)?;
             //
             let cmp = key.cmp(&key_string);
@@ -378,9 +441,13 @@ impl FileDbMapInner {
         let top_node = self.idx_file.read_top_node()?;
         self.idx_file.depth_of_node_tree(&top_node)
     }
-    // count of free node list
-    fn count_of_free_nn_list(&self) -> Result<Vec<(usize, u64)>> {
-        self.idx_file.count_of_free_nn_list()
+    // count of free node
+    fn count_of_free_node(&self) -> Result<Vec<(usize, u64)>> {
+        self.idx_file.count_of_free_node()
+    }
+    // count of used node
+    fn count_of_used_node(&self) -> Result<Vec<(usize, u64)>> {
+        self.idx_file.count_of_used_node()
     }
 }
 
@@ -400,7 +467,7 @@ impl FileDbMapInner {
         match r {
             Ok(k) => {
                 let key_offset = node.keys[k];
-                assert!(key_offset != 0);
+                debug_assert!(key_offset != 0);
                 let new_key_offset = self.store_value_on_insert(key_offset, value)?;
                 if key_offset != new_key_offset {
                     node.keys[k] = new_key_offset;
@@ -421,7 +488,7 @@ impl FileDbMapInner {
                 if node2.is_active_on_insert() {
                     self.balance_on_insert(node, k, &node2)
                 } else {
-                    assert!(node2.offset != 0);
+                    debug_assert!(node2.offset != 0);
                     let node2 = self.idx_file.write_node(node2)?;
                     node.downs[k] = node2.offset;
                     self.dirty = true;
@@ -430,6 +497,7 @@ impl FileDbMapInner {
             }
         }
     }
+    #[inline]
     fn store_value_on_insert(&mut self, key_offset: u64, value: &[u8]) -> Result<u64> {
         if let Some((r_key, r_val)) = self.dat_file.read_record(key_offset)? {
             if r_val.len() == value.len() {
@@ -448,13 +516,14 @@ impl FileDbMapInner {
         }
         Ok(key_offset)
     }
+    #[inline]
     fn balance_on_insert(
         &mut self,
         mut node: idx::IdxNode,
         i: usize,
         active_node: &idx::IdxNode,
     ) -> Result<idx::IdxNode> {
-        assert!(active_node.is_active_on_insert());
+        debug_assert!(active_node.is_active_on_insert());
         //
         node.keys.insert(i, active_node.keys[0]);
         node.downs[i] = active_node.downs[1];
@@ -467,16 +536,13 @@ impl FileDbMapInner {
             Ok(node)
         }
     }
+    #[inline]
     fn split_on_insert(&mut self, mut node: idx::IdxNode) -> Result<idx::IdxNode> {
         let mut node1 = idx::IdxNode::new(0);
-        for i in idx::NODE_SLOTS_MAX_HALF as usize..node.keys.len() {
-            node1.keys.push(node.keys[i]);
-            node.keys[i] = 0;
-        }
-        for i in idx::NODE_SLOTS_MAX_HALF as usize..node.downs.len() {
-            node1.downs.push(node.downs[i]);
-            node.downs[i] = 0;
-        }
+        let slice = &node.keys[idx::NODE_SLOTS_MAX_HALF as usize..node.keys.len()];
+        node1.keys.extend_from_slice(slice);
+        let slice = &node.downs[idx::NODE_SLOTS_MAX_HALF as usize..node.downs.len()];
+        node1.downs.extend_from_slice(slice);
         //
         node.keys.resize(idx::NODE_SLOTS_MAX_HALF as usize, 0);
         node.downs.resize(idx::NODE_SLOTS_MAX_HALF as usize, 0);
@@ -528,6 +594,8 @@ impl FileDbMapInner {
         if node_offset1 == 0 {
             let _key_offset = node.keys.remove(i);
             let _node_offset = node.downs.remove(i);
+            #[cfg(feature = "key_cache")]
+            self.clear_key_cache(_key_offset);
             let new_node = self.idx_file.write_node(node)?;
             Ok(new_node)
         } else {
@@ -576,12 +644,9 @@ impl FileDbMapInner {
                 // unification
                 node1.keys.push(key_offset2);
                 //
-                for k in 0..node2.keys.len() {
-                    node1.keys.push(node2.keys[k]);
-                }
-                for k in 0..node2.downs.len() {
-                    node1.downs.push(node2.downs[k]);
-                }
+                node1.keys.extend_from_slice(&node2.keys[0..]);
+                node1.downs.extend_from_slice(&node2.downs[0..]);
+                self.idx_file.delete_node(node2)?;
                 //
                 node.keys.remove(i);
                 node.downs.remove(j);
@@ -589,7 +654,6 @@ impl FileDbMapInner {
                 let node1 = self.idx_file.write_node(node1)?;
                 node.downs[i] = node1.offset;
                 let new_node = self.idx_file.write_node(node)?;
-                self.idx_file.delete_node(node2)?;
                 return Ok(new_node);
             } else {
                 let key_offset3 =
@@ -624,12 +688,9 @@ impl FileDbMapInner {
                 // unification
                 node2.keys.push(key_offset2);
                 //
-                for k in 0..node1.keys.len() {
-                    node2.keys.push(node1.keys[k]);
-                }
-                for k in 0..node1.downs.len() {
-                    node2.downs.push(node1.downs[k]);
-                }
+                node2.keys.extend_from_slice(&node1.keys[0..]);
+                node2.downs.extend_from_slice(&node1.downs[0..]);
+                self.idx_file.delete_node(node1)?;
                 //
                 node.keys.remove(i);
                 node.downs.remove(j);
@@ -637,7 +698,6 @@ impl FileDbMapInner {
                 let node2 = self.idx_file.write_node(node2)?;
                 node.downs[i] = node2.offset;
                 let new_node = self.idx_file.write_node(node)?;
-                self.idx_file.delete_node(node1)?;
                 return Ok(new_node);
             } else {
                 let key_offset3 = self.move_left_right(key_offset2, &mut node2, &mut node1);
@@ -689,7 +749,7 @@ impl FileDbMapInner {
 
 // find: NEW
 impl FileDbMapInner {
-    fn find_in_node_tree(&self, node: &mut idx::IdxNode, key: &str) -> Result<Option<Vec<u8>>> {
+    fn find_in_node_tree(&mut self, node: &mut idx::IdxNode, key: &str) -> Result<Option<Vec<u8>>> {
         if node.keys.is_empty() {
             return Ok(None);
         }
@@ -711,7 +771,7 @@ impl FileDbMapInner {
             }
         }
     }
-    fn has_key_in_node_tree(&self, node: &mut idx::IdxNode, key: &str) -> Result<bool> {
+    fn has_key_in_node_tree(&mut self, node: &mut idx::IdxNode, key: &str) -> Result<bool> {
         if node.keys.is_empty() {
             return Ok(false);
         }
@@ -732,7 +792,7 @@ impl FileDbMapInner {
 }
 
 impl DbMap for FileDbMapInner {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
         let mut top_node = self.idx_file.read_top_node()?;
         self.find_in_node_tree(&mut top_node, key)
     }
@@ -773,7 +833,7 @@ impl DbMap for FileDbMapInner {
         }
         Ok(())
     }
-    fn has_key(&self, key: &str) -> Result<bool> {
+    fn has_key(&mut self, key: &str) -> Result<bool> {
         let mut top_node = self.idx_file.read_top_node()?;
         self.has_key_in_node_tree(&mut top_node, key)
     }
@@ -816,7 +876,7 @@ impl FileDbListInner {
 }
 
 impl DbList for FileDbListInner {
-    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
+    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(&key).map(|val| val.1.to_vec());
         Ok(r)
     }
@@ -863,7 +923,10 @@ mod debug {
         assert_eq!(std::mem::size_of::<FileDbList>(), 8);
         //
         assert_eq!(std::mem::size_of::<FileDbInner>(), 88);
+        #[cfg(not(feature = "key_cache"))]
         assert_eq!(std::mem::size_of::<FileDbMapInner>(), 64);
+        #[cfg(feature = "key_cache")]
+        assert_eq!(std::mem::size_of::<FileDbMapInner>(), 88);
         assert_eq!(std::mem::size_of::<FileDbListInner>(), 64);
     }
 }

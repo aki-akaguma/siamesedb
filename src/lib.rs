@@ -82,7 +82,7 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<filedb::FileDb> {
 /// key-value map store interface. the key type is `&str`.
 pub trait DbMap {
     /// returns the value corresponding to the key.
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
+    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>>;
 
     /// inserts a key-value pair into the db-map.
     fn put(&mut self, key: &str, value: &[u8]) -> Result<()>;
@@ -97,11 +97,11 @@ pub trait DbMap {
     fn sync_data(&mut self) -> Result<()>;
 
     /// returns true if the map contains a value for the specified key.
-    fn has_key(&self, key: &str) -> Result<bool> {
+    fn has_key(&mut self, key: &str) -> Result<bool> {
         self.get(key).map(|opt| opt.is_some())
     }
     /// returns the value corresponding to the key. the value is converted to `String`.
-    fn get_string(&self, key: &str) -> Result<Option<String>> {
+    fn get_string(&mut self, key: &str) -> Result<Option<String>> {
         self.get(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
     }
@@ -114,7 +114,7 @@ pub trait DbMap {
 /// key-value list store interface. the key type is `u64`.
 pub trait DbList {
     /// returns the value corresponding to the key.
-    fn get(&self, key: u64) -> Result<Option<Vec<u8>>>;
+    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>>;
 
     /// inserts a key-value pair into the db-list.
     fn put(&mut self, key: u64, value: &[u8]) -> Result<()>;
@@ -129,11 +129,11 @@ pub trait DbList {
     fn sync_data(&mut self) -> Result<()>;
 
     /// returns true if the list contains a value for the specified key.
-    fn has_key(&self, key: u64) -> Result<bool> {
+    fn has_key(&mut self, key: u64) -> Result<bool> {
         self.get(key).map(|opt| opt.is_some())
     }
     /// returns the value corresponding to the key. the value is converted to `String`.
-    fn get_string(&self, key: u64) -> Result<Option<String>> {
+    fn get_string(&mut self, key: u64) -> Result<Option<String>> {
         self.get(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
     }

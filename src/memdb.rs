@@ -98,8 +98,8 @@ impl<'a> MemoryDbMap<'a> {
 }
 
 impl<'a> DbMap for MemoryDbMap<'a> {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.0.borrow().get(key)
+    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
+        self.0.borrow_mut().get(key)
     }
     fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
@@ -122,8 +122,8 @@ impl<'a> MemoryDbList<'a> {
 }
 
 impl<'a> DbList for MemoryDbList<'a> {
-    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
-        self.0.borrow().get(key)
+    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
+        self.0.borrow_mut().get(key)
     }
     fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
@@ -175,7 +175,7 @@ impl<'a> MemoryDbMapInner<'a> {
 }
 
 impl<'a> DbMap for MemoryDbMapInner<'a> {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(key).map(|val| val.to_vec());
         Ok(r)
     }
@@ -217,7 +217,7 @@ impl<'a> MemoryDbListInner<'a> {
 }
 
 impl<'a> DbList for MemoryDbListInner<'a> {
-    fn get(&self, key: u64) -> Result<Option<Vec<u8>>> {
+    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(&key).map(|val| val.to_vec());
         Ok(r)
     }

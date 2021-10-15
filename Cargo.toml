@@ -15,10 +15,15 @@ name = "test_main"
 path = "src/test_main.rs"
 
 [features]
-default = ["dat_varvar", "idx_v64v64"]
+default = ["key_cache", "dat_v64v64", "idx_v64v64"]
+#default = ["dat_v64v64", "idx_v64v64"]
+
+# for developping
+key_cache = []
 
 dat_u16u32 = []
 dat_u64u64 = []
+dat_v64v64 = []
 dat_varvar = []
 
 idx_u32u32 = []
