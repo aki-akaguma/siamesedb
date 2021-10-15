@@ -28,6 +28,8 @@ use kc::KeyCacheTrait;
 pub mod buf;
 pub mod vfile;
 
+pub mod v64;
+
 #[cfg(feature = "vf_vint64")]
 pub mod vint64;
 

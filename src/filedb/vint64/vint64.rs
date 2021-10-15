@@ -339,7 +339,7 @@ mod tests {
         let mut slice = [0xf0, 0x3b, 0xfc, 0xc3, 0x03].as_ref();
         assert_eq!(signed::decode(&mut slice).unwrap(), -0x0f0f_f0f0);
     }
-
+/*
     proptest! {
         /// Ensure `vint64` values successfully round-trip
         #[test]
@@ -349,4 +349,5 @@ mod tests {
             assert_eq!(n, decoded);
         }
     }
+*/
 }

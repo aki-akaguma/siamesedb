@@ -3,6 +3,9 @@ use std::io::{Cursor, Read, Result, Seek, SeekFrom, Write};
 
 use super::buf::BufFile;
 
+#[cfg(feature = "vf_v64")]
+use super::v64;
+
 #[cfg(feature = "vf_vint64")]
 use super::vint64::vint64;
 
@@ -122,7 +125,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: usize) -> Result<()> {
-        debug_assert!(node_size <= 0x7F);
+        //debug_assert!(node_size <= 0x7F, "node_size: 0x{:02x} <= 0x7F", node_size);
         self.write_u8(node_size as u8)
     }
 }
@@ -298,6 +301,60 @@ impl VarCursor {
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
         self.write_u64_le(node_offset)
+    }
+}
+
+#[cfg(feature = "vf_v64")]
+impl VarFile {
+    #[inline]
+    pub fn read_key_len(&mut self) -> Result<u64> {
+        super::v64::decode_v64(&mut self.buf_file)
+    }
+    #[inline]
+    pub fn read_value_len(&mut self) -> Result<u64> {
+        super::v64::decode_v64(&mut self.buf_file)
+    }
+    #[inline]
+    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+        debug_assert!(key_len <= u64::MAX as usize);
+        self.write_all(v64::encode(key_len as u64).as_ref())
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+        debug_assert!(value_len <= u64::MAX as usize);
+        self.write_all(v64::encode(value_len as u64).as_ref())
+    }
+}
+
+#[cfg(feature = "vf_v64")]
+impl VarFile {
+    #[inline]
+    pub fn read_key_offset(&mut self) -> Result<u64> {
+        super::v64::decode_v64(&mut self.buf_file)
+    }
+    #[inline]
+    pub fn read_node_offset(&mut self) -> Result<u64> {
+        super::v64::decode_v64(&mut self.buf_file)
+    }
+    #[inline]
+    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+        self.write_all(v64::encode(key_offset).as_ref())
+    }
+    #[inline]
+    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
+        self.write_all(v64::encode(node_offset).as_ref())
+    }
+}
+
+#[cfg(feature = "vf_v64")]
+impl VarCursor {
+    #[inline]
+    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+        self.write_all(v64::encode(key_offset).as_ref())
+    }
+    #[inline]
+    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
+        self.write_all(v64::encode(node_offset).as_ref())
     }
 }
 
