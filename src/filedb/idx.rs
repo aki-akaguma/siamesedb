@@ -46,6 +46,10 @@ impl IdxFile {
         let mut locked = self.0.borrow_mut();
         locked.0.sync_data()
     }
+    pub fn clear_buf(&self) -> Result<()> {
+        let mut locked = self.0.borrow_mut();
+        locked.0.clear_buf()
+    }
     //
     pub fn read_top_node(&self) -> Result<IdxNode> {
         let offset = {
@@ -660,7 +664,12 @@ fn idx_file_push_free_list(
 pub const NODE_SLOTS_MAX: u16 = 15;
 #[cfg(feature = "vf_u64u64")]
 pub const NODE_SLOTS_MAX: u16 = 7;
-#[cfg(any(feature = "vf_v64", feature = "vf_vint64", feature = "vf_leb128", feature = "vf_sqlvli"))]
+#[cfg(any(
+    feature = "vf_v64",
+    feature = "vf_vint64",
+    feature = "vf_leb128",
+    feature = "vf_sqlvli"
+))]
 pub const NODE_SLOTS_MAX: u16 = 13;
 pub const NODE_SLOTS_MAX_HALF: u16 = (NODE_SLOTS_MAX + 1) / 2;
 

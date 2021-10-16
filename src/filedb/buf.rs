@@ -92,6 +92,9 @@ impl OffIdx {
             Err(_x) => None,
         }
     }
+    fn clear(&mut self) {
+        self.vec.clear();
+    }
 }
 
 /// Buffer for a random access file.
@@ -166,6 +169,14 @@ impl BufFile {
         self.flush()?;
         self.file.sync_data()
     }
+    ///
+    pub fn clear_buf(&mut self) -> Result<()> {
+        self.flush()?;
+        self.fetch_cache = None;
+        self.chunks.clear();
+        self.map.clear();
+        Ok(())
+    }
 }
 
 impl BufFile {
@@ -199,6 +210,7 @@ impl BufFile {
                 Err(e) => Err(e),
             }
         } else {
+            // LFU: Least Frequently Used
             // find the minimum uses counter.
             let mut min_idx = 0;
             if self.chunks[min_idx].uses != 0 {

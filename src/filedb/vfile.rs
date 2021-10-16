@@ -62,6 +62,10 @@ impl VarFile {
     pub fn sync_data(&mut self) -> Result<()> {
         self.buf_file.sync_data()
     }
+    ///
+    pub fn clear_buf(&mut self) -> Result<()> {
+        self.buf_file.clear_buf()
+    }
 }
 
 impl Read for VarFile {
@@ -159,7 +163,7 @@ impl VarCursor {
 
 impl VarCursor {
     #[inline]
-    pub fn write_u64_le(&mut self, value: u64) -> Result<()> {
+    pub fn _write_u64_le(&mut self, value: u64) -> Result<()> {
         let mut buf = [0; 8];
         buf[0..].copy_from_slice(&value.to_le_bytes());
         self.write_all(&buf)
@@ -337,7 +341,7 @@ impl VarFile {
         super::v64::decode_v64(&mut self.buf_file)
     }
     #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+    pub fn _write_key_offset(&mut self, key_offset: u64) -> Result<()> {
         self.write_all(v64::encode(key_offset).as_ref())
     }
     #[inline]
@@ -558,5 +562,7 @@ mod debug {
         assert_eq!(std::mem::size_of::<VarFile>(), 120);
         #[cfg(feature = "vf_vint64")]
         assert_eq!(std::mem::size_of::<VarFile>(), 136);
+        #[cfg(feature = "vf_v64")]
+        assert_eq!(std::mem::size_of::<VarFile>(), 120);
     }
 }

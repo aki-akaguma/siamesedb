@@ -73,42 +73,7 @@ impl KeyCacheTrait for KeyCache {
             }
             Err(k) => {
                 let k = if self.cache.len() > CACHE_SIZE {
-                    /*
-                    // find the minimum uses counter.
-                    let mut min_idx = 0;
-                    unsafe {
-                        if self.cache.get_unchecked(min_idx).uses != 0 {
-                            for i in 1..self.cache.len() {
-                                let i_uses = self.cache.get_unchecked(i).uses;
-                                let min_idx_uses = self.cache.get_unchecked(min_idx).uses;
-                                if i_uses < min_idx_uses {
-                                    min_idx = i;
-                                    if self.cache.get_unchecked(min_idx).uses == 0 {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // clear all uses counter
-                    self.cache.iter_mut().for_each(|bean| {
-                        bean.uses = 0;
-                    });
-                    self.cache.remove(min_idx);
-                    if k <= min_idx {
-                        k
-                    } else {
-                        k - 1
-                    }
-                    */
-                    /*
-                    self.cache.pop();
-                    if k < self.cache.len() {
-                        k
-                    } else {
-                        k - 1
-                    }
-                    */
+                    // all clear cache algorithm
                     self.cache.clear();
                     0
                 } else {

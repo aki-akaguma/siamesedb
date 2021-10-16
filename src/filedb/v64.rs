@@ -152,7 +152,7 @@ pub fn encode(value: u64) -> V64 {
 /// after the encoded `v64`.
 #[inline]
 fn decode(bytes: &[u8]) -> Result<u64, Error> {
-    if bytes.len() < 1 {
+    if bytes.is_empty() {
         return Err(Error::Truncated);
     }
     let length = decoded_len(bytes[0]);
@@ -217,7 +217,6 @@ impl Display for Error {
 
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
-
 
 #[cfg(test)]
 mod tests {
@@ -320,9 +319,7 @@ mod tests {
     */
 }
 
-pub fn decode_v64<R: std::io::Read + ?Sized>(
-    inp: &mut R,
-) -> std::io::Result<u64> {
+pub fn decode_v64<R: std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
     let mut buf = [0u8; MAX_BYTES];
     inp.read_exact(&mut buf[0..1])?;
     let byte_1st = buf[0];

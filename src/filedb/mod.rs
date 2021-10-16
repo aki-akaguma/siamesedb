@@ -21,27 +21,27 @@ impl KeyType {
 }
 
 #[cfg(feature = "key_cache")]
-pub mod kc;
+mod kc;
 #[cfg(feature = "key_cache")]
 use kc::KeyCacheTrait;
 
-pub mod buf;
-pub mod vfile;
+mod buf;
+mod vfile;
 
-pub mod v64;
+mod v64;
 
 #[cfg(feature = "vf_vint64")]
-pub mod vint64;
+mod vint64;
 
 #[cfg(feature = "vf_leb128")]
-pub mod leb128;
+mod leb128;
 
 #[cfg(feature = "vf_sqlvli")]
-pub mod sqlvli;
+mod sqlvli;
 
-pub mod dat;
-pub mod idx;
-pub mod unu;
+mod dat;
+mod idx;
+mod unu;
 
 #[derive(Debug, Clone)]
 pub struct FileDb(Rc<RefCell<FileDbInner>>);

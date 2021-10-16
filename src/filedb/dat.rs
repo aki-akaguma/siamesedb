@@ -40,6 +40,11 @@ impl DatFile {
         let mut locked = self.0.borrow_mut();
         locked.0.sync_data()
     }
+    pub fn clear_buf(&self) -> Result<()> {
+        let mut locked = self.0.borrow_mut();
+        locked.0.clear_buf()
+    }
+    //
     pub fn read_record_key(&self, offset: u64) -> Result<Option<Vec<u8>>> {
         let mut locked = self.0.borrow_mut();
         dat_read_record_key(&mut locked.0, offset)
