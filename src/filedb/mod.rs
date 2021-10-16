@@ -901,15 +901,32 @@ mod debug {
         use super::{FileDb, FileDbList, FileDbMap};
         use super::{FileDbInner, FileDbListInner, FileDbMapInner};
         //
-        assert_eq!(std::mem::size_of::<FileDb>(), 8);
-        assert_eq!(std::mem::size_of::<FileDbMap>(), 8);
-        assert_eq!(std::mem::size_of::<FileDbList>(), 8);
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(std::mem::size_of::<FileDb>(), 8);
+            assert_eq!(std::mem::size_of::<FileDbMap>(), 8);
+            assert_eq!(std::mem::size_of::<FileDbList>(), 8);
+            //
+            assert_eq!(std::mem::size_of::<FileDbInner>(), 88);
+            #[cfg(not(feature = "key_cache"))]
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 64);
+            #[cfg(feature = "key_cache")]
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 88);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 64);
+        }
         //
-        assert_eq!(std::mem::size_of::<FileDbInner>(), 88);
-        #[cfg(not(feature = "key_cache"))]
-        assert_eq!(std::mem::size_of::<FileDbMapInner>(), 64);
-        #[cfg(feature = "key_cache")]
-        assert_eq!(std::mem::size_of::<FileDbMapInner>(), 88);
-        assert_eq!(std::mem::size_of::<FileDbListInner>(), 64);
+        #[cfg(target_pointer_width = "32")]
+        {
+            assert_eq!(std::mem::size_of::<FileDb>(), 4);
+            assert_eq!(std::mem::size_of::<FileDbMap>(), 4);
+            assert_eq!(std::mem::size_of::<FileDbList>(), 4);
+            //
+            assert_eq!(std::mem::size_of::<FileDbInner>(), 44);
+            #[cfg(not(feature = "key_cache"))]
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 32);
+            #[cfg(feature = "key_cache")]
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 44);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 32);
+        }
     }
 }

@@ -330,10 +330,21 @@ mod debug {
     fn test_size_of() {
         use super::{BufFile, Chunk};
         //
-        assert_eq!(std::mem::size_of::<BufFile>(), 120);
-        assert_eq!(std::mem::size_of::<Chunk>(), 48);
-        assert_eq!(std::mem::size_of::<(u64, usize)>(), 16);
-        assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 24);
-        assert_eq!(std::mem::size_of::<Vec<u8>>(), 24);
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(std::mem::size_of::<BufFile>(), 120);
+            assert_eq!(std::mem::size_of::<Chunk>(), 48);
+            assert_eq!(std::mem::size_of::<(u64, usize)>(), 16);
+            assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 24);
+            assert_eq!(std::mem::size_of::<Vec<u8>>(), 24);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            assert_eq!(std::mem::size_of::<BufFile>(), 76);
+            assert_eq!(std::mem::size_of::<Chunk>(), 32);
+            assert_eq!(std::mem::size_of::<(u64, usize)>(), 12);
+            assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 12);
+            assert_eq!(std::mem::size_of::<Vec<u8>>(), 12);
+        }
     }
 }

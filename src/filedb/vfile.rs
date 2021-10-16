@@ -558,11 +558,23 @@ mod debug {
     fn test_size_of() {
         use super::VarFile;
         //
-        #[cfg(feature = "vf_u32u32")]
-        assert_eq!(std::mem::size_of::<VarFile>(), 120);
-        #[cfg(feature = "vf_vint64")]
-        assert_eq!(std::mem::size_of::<VarFile>(), 136);
-        #[cfg(feature = "vf_v64")]
-        assert_eq!(std::mem::size_of::<VarFile>(), 120);
+        #[cfg(target_pointer_width = "64")]
+        {
+            #[cfg(feature = "vf_u32u32")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 120);
+            #[cfg(feature = "vf_vint64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 136);
+            #[cfg(feature = "vf_v64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 120);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            #[cfg(feature = "vf_u32u32")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 120);
+            #[cfg(feature = "vf_vint64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 136);
+            #[cfg(feature = "vf_v64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+        }
     }
 }

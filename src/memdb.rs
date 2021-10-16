@@ -250,12 +250,25 @@ mod debug {
         use super::{MemoryDb, MemoryDbList, MemoryDbMap};
         use super::{MemoryDbInner, MemoryDbListInner, MemoryDbMapInner};
         //
-        assert_eq!(std::mem::size_of::<MemoryDb>(), 8);
-        assert_eq!(std::mem::size_of::<MemoryDbMap>(), 8);
-        assert_eq!(std::mem::size_of::<MemoryDbList>(), 8);
-        //
-        assert_eq!(std::mem::size_of::<MemoryDbInner>(), 56);
-        assert_eq!(std::mem::size_of::<MemoryDbMapInner>(), 32);
-        assert_eq!(std::mem::size_of::<MemoryDbListInner>(), 32);
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(std::mem::size_of::<MemoryDb>(), 8);
+            assert_eq!(std::mem::size_of::<MemoryDbMap>(), 8);
+            assert_eq!(std::mem::size_of::<MemoryDbList>(), 8);
+            //
+            assert_eq!(std::mem::size_of::<MemoryDbInner>(), 56);
+            assert_eq!(std::mem::size_of::<MemoryDbMapInner>(), 32);
+            assert_eq!(std::mem::size_of::<MemoryDbListInner>(), 32);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            assert_eq!(std::mem::size_of::<MemoryDb>(), 4);
+            assert_eq!(std::mem::size_of::<MemoryDbMap>(), 4);
+            assert_eq!(std::mem::size_of::<MemoryDbList>(), 4);
+            //
+            assert_eq!(std::mem::size_of::<MemoryDbInner>(), 28);
+            assert_eq!(std::mem::size_of::<MemoryDbMapInner>(), 16);
+            assert_eq!(std::mem::size_of::<MemoryDbListInner>(), 16);
+        }
     }
 }
