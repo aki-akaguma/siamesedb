@@ -17,20 +17,14 @@ path = "src/test_main.rs"
 [features]
 #default = ["key_cache", "vf_u32u32"]
 #default = ["key_cache", "vf_u64u64"]
-default = ["key_cache", "vf_v64"]
-#default = ["key_cache", "vf_vint64"]
-#default = ["key_cache", "vf_leb128"]
-#default = ["key_cache", "vf_sqlvli"]
+default = ["key_cache", "vf_vu64"]
 
 # for developping
 key_cache = []
 
 vf_u32u32 = []
 vf_u64u64 = []
-vf_v64 = []
-vf_vint64 = []
-vf_leb128 = []
-vf_sqlvli = []
+vf_vu64 = []
 
 [dependencies]
 #vint64 = { version="1.0", optional=true }

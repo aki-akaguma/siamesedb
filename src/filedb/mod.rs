@@ -28,16 +28,8 @@ use kc::KeyCacheTrait;
 mod buf;
 mod vfile;
 
-mod v64;
-
-#[cfg(feature = "vf_vint64")]
-mod vint64;
-
-#[cfg(feature = "vf_leb128")]
-mod leb128;
-
-#[cfg(feature = "vf_sqlvli")]
-mod sqlvli;
+#[cfg(feature = "vf_vu64")]
+mod vu64;
 
 mod dat;
 mod idx;

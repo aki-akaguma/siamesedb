@@ -3,11 +3,8 @@ use std::io::{Cursor, Read, Result, Seek, SeekFrom, Write};
 
 use super::buf::BufFile;
 
-#[cfg(feature = "vf_v64")]
-use super::v64;
-
-#[cfg(feature = "vf_vint64")]
-use super::vint64::vint64;
+#[cfg(feature = "vf_vu64")]
+use super::vu64;
 
 /// Variable length integer access for a random access file.
 #[derive(Debug)]
@@ -19,8 +16,6 @@ pub struct VarFile {
     #[cfg(feature = "vf_leb128")]
     #[cfg(feature = "vf_sqlvli")]
     */
-    #[cfg(feature = "vf_vint64")]
-    enc_buf: [u8; 9],
 }
 
 #[derive(Debug)]
@@ -32,8 +27,6 @@ pub struct VarCursor {
     #[cfg(feature = "vf_leb128")]
     #[cfg(feature = "vf_sqlvli")]
     */
-    #[cfg(feature = "vf_vint64")]
-    enc_buf: [u8; 9],
 }
 
 impl VarFile {
@@ -41,8 +34,6 @@ impl VarFile {
     pub fn new(file: File) -> Result<VarFile> {
         Ok(Self {
             buf_file: BufFile::new(file)?,
-            #[cfg(feature = "vf_vint64")]
-            enc_buf: [0u8; 9],
         })
     }
     /// Creates a new VarFile with the specified number of chunks.
@@ -50,8 +41,6 @@ impl VarFile {
     pub fn with_capacity(max_num_chunks: u16, chunk_size: u32, file: File) -> Result<VarFile> {
         Ok(Self {
             buf_file: BufFile::with_capacity(max_num_chunks, chunk_size, file)?,
-            #[cfg(feature = "vf_vint64")]
-            enc_buf: [0u8; 9],
         })
     }
     ///
@@ -94,8 +83,6 @@ impl VarCursor {
     pub fn with_capacity(capacity_size: usize) -> VarCursor {
         Self {
             buf_cursor: Cursor::new(Vec::with_capacity(capacity_size)),
-            #[cfg(feature = "vf_vint64")]
-            enc_buf: [0u8; 9],
         }
     }
     pub fn into_inner(self) -> Vec<u8> {
@@ -162,8 +149,9 @@ impl VarCursor {
 }
 
 impl VarCursor {
+    #[cfg(feature = "vf_u64u64")]
     #[inline]
-    pub fn _write_u64_le(&mut self, value: u64) -> Result<()> {
+    pub fn write_u64_le(&mut self, value: u64) -> Result<()> {
         let mut buf = [0; 8];
         buf[0..].copy_from_slice(&value.to_le_bytes());
         self.write_all(&buf)
@@ -229,7 +217,7 @@ impl VarFile {
         Ok(self.read_u32_le()? as u64)
     }
     #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+    pub fn _write_key_offset(&mut self, key_offset: u64) -> Result<()> {
         debug_assert!(key_offset <= u32::MAX as u64);
         self.write_u32_le(key_offset as u32)
     }
@@ -287,7 +275,7 @@ impl VarFile {
         self.read_u64_le()
     }
     #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
+    pub fn _write_key_offset(&mut self, key_offset: u64) -> Result<()> {
         self.write_u64_le(key_offset)
     }
     #[inline]
@@ -308,247 +296,57 @@ impl VarCursor {
     }
 }
 
-#[cfg(feature = "vf_v64")]
+#[cfg(feature = "vf_vu64")]
 impl VarFile {
     #[inline]
     pub fn read_key_len(&mut self) -> Result<u64> {
-        super::v64::decode_v64(&mut self.buf_file)
+        vu64::decode_vu64(&mut self.buf_file)
     }
     #[inline]
     pub fn read_value_len(&mut self) -> Result<u64> {
-        super::v64::decode_v64(&mut self.buf_file)
+        vu64::decode_vu64(&mut self.buf_file)
     }
     #[inline]
     pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
         debug_assert!(key_len <= u64::MAX as usize);
-        self.write_all(v64::encode(key_len as u64).as_ref())
+        self.write_all(vu64::encode(key_len as u64).as_ref())
     }
     #[inline]
     pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
         debug_assert!(value_len <= u64::MAX as usize);
-        self.write_all(v64::encode(value_len as u64).as_ref())
+        self.write_all(vu64::encode(value_len as u64).as_ref())
     }
 }
 
-#[cfg(feature = "vf_v64")]
+#[cfg(feature = "vf_vu64")]
 impl VarFile {
     #[inline]
     pub fn read_key_offset(&mut self) -> Result<u64> {
-        super::v64::decode_v64(&mut self.buf_file)
+        vu64::decode_vu64(&mut self.buf_file)
     }
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<u64> {
-        super::v64::decode_v64(&mut self.buf_file)
+        vu64::decode_vu64(&mut self.buf_file)
     }
     #[inline]
     pub fn _write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        self.write_all(v64::encode(key_offset).as_ref())
+        self.write_all(vu64::encode(key_offset).as_ref())
     }
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        self.write_all(v64::encode(node_offset).as_ref())
+        self.write_all(vu64::encode(node_offset).as_ref())
     }
 }
 
-#[cfg(feature = "vf_v64")]
+#[cfg(feature = "vf_vu64")]
 impl VarCursor {
     #[inline]
     pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        self.write_all(v64::encode(key_offset).as_ref())
+        self.write_all(vu64::encode(key_offset).as_ref())
     }
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        self.write_all(v64::encode(node_offset).as_ref())
-    }
-}
-
-#[cfg(feature = "vf_vint64")]
-impl VarFile {
-    #[inline]
-    pub fn read_key_len(&mut self) -> Result<u64> {
-        super::vint64::decode_vint64(&mut self.buf_file, &mut self.enc_buf)
-    }
-    #[inline]
-    pub fn read_value_len(&mut self) -> Result<u64> {
-        super::vint64::decode_vint64(&mut self.buf_file, &mut self.enc_buf)
-    }
-    #[inline]
-    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
-        debug_assert!(key_len <= u64::MAX as usize);
-        let enc = vint64::encode(key_len as u64);
-        self.write_all(enc.as_ref())
-    }
-    #[inline]
-    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
-        debug_assert!(value_len <= u64::MAX as usize);
-        let enc = vint64::encode(value_len as u64);
-        self.write_all(enc.as_ref())
-    }
-}
-
-#[cfg(feature = "vf_vint64")]
-impl VarFile {
-    #[inline]
-    pub fn read_key_offset(&mut self) -> Result<u64> {
-        super::vint64::decode_vint64(&mut self.buf_file, &mut self.enc_buf)
-    }
-    #[inline]
-    pub fn read_node_offset(&mut self) -> Result<u64> {
-        super::vint64::decode_vint64(&mut self.buf_file, &mut self.enc_buf)
-    }
-    #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        let enc = vint64::encode(key_offset);
-        self.write_all(enc.as_ref())
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        let enc = vint64::encode(node_offset);
-        self.write_all(enc.as_ref())
-    }
-}
-
-#[cfg(feature = "vf_vint64")]
-impl VarCursor {
-    #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        let enc = vint64::encode(key_offset);
-        self.write_all(enc.as_ref())
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        let enc = vint64::encode(node_offset);
-        self.write_all(enc.as_ref())
-    }
-}
-
-#[cfg(feature = "vf_leb128")]
-impl VarFile {
-    #[inline]
-    pub fn read_key_len(&mut self) -> Result<u64> {
-        let mut inp = self.bytes();
-        super::leb128::decode_varint(&mut inp)
-    }
-    #[inline]
-    pub fn read_value_len(&mut self) -> Result<u64> {
-        let mut inp = self.bytes();
-        super::leb128::decode_varint(&mut inp)
-    }
-    #[inline]
-    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
-        debug_assert!(key_len <= u64::MAX as usize);
-        let mut enc_buf = Vec::with_capacity(9);
-        super::leb128::encode_varint(key_len as u64, &mut enc_buf);
-        self.write_all(&enc_buf)
-    }
-    #[inline]
-    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
-        debug_assert!(value_len <= u64::MAX as usize);
-        let mut enc_buf = Vec::with_capacity(9);
-        super::leb128::encode_varint(value_len as u64, &mut enc_buf);
-        self.write_all(&enc_buf)
-    }
-}
-
-#[cfg(feature = "vf_leb128")]
-impl VarFile {
-    #[inline]
-    pub fn read_key_offset(&mut self) -> Result<u64> {
-        let mut inp = self.bytes();
-        super::leb128::decode_varint(&mut inp)
-    }
-    #[inline]
-    pub fn read_node_offset(&mut self) -> Result<u64> {
-        let mut inp = self.bytes();
-        super::leb128::decode_varint(&mut inp)
-    }
-    #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        let mut enc_buf = Vec::with_capacity(9);
-        super::leb128::encode_varint(key_offset, &mut enc_buf);
-        self.write_all(&enc_buf)
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        let mut enc_buf = Vec::with_capacity(9);
-        super::leb128::encode_varint(node_offset, &mut enc_buf);
-        self.write_all(&enc_buf)
-    }
-}
-
-#[cfg(feature = "vf_leb128")]
-impl VarCursor {
-    #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        let mut enc_buf = Vec::with_capacity(9);
-        super::leb128::encode_varint(key_offset, &mut enc_buf);
-        self.write_all(&enc_buf)
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        let mut enc_buf = Vec::with_capacity(9);
-        super::leb128::encode_varint(node_offset, &mut enc_buf);
-        self.write_all(&enc_buf)
-    }
-}
-
-#[cfg(feature = "vf_sqlvli")]
-impl VarFile {
-    #[inline]
-    pub fn read_key_len(&mut self) -> Result<u64> {
-        super::sqlvli::decode_vli(self)
-    }
-    #[inline]
-    pub fn read_value_len(&mut self) -> Result<u64> {
-        super::sqlvli::decode_vli(self)
-    }
-    #[inline]
-    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
-        debug_assert!(key_len <= u64::MAX as usize);
-        let enc = super::sqlvli::encode_vli(key_len as u64);
-        self.write_all(enc.as_ref())
-    }
-    #[inline]
-    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
-        debug_assert!(value_len <= u64::MAX as usize);
-        let enc = super::sqlvli::encode_vli(value_len as u64);
-        self.write_all(enc.as_ref())
-    }
-}
-
-#[cfg(feature = "vf_sqlvli")]
-impl VarFile {
-    #[inline]
-    pub fn read_key_offset(&mut self) -> Result<u64> {
-        super::sqlvli::decode_vli(self)
-    }
-    #[inline]
-    pub fn read_node_offset(&mut self) -> Result<u64> {
-        super::sqlvli::decode_vli(self)
-    }
-    #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        let enc = super::sqlvli::encode_vli(key_offset);
-        self.write_all(enc.as_ref())
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        let enc = super::sqlvli::encode_vli(node_offset);
-        self.write_all(enc.as_ref())
-    }
-}
-
-#[cfg(feature = "vf_sqlvli")]
-impl VarCursor {
-    #[inline]
-    pub fn write_key_offset(&mut self, key_offset: u64) -> Result<()> {
-        let enc = super::sqlvli::encode_vli(key_offset);
-        self.write_all(enc.as_ref())
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
-        let enc = super::sqlvli::encode_vli(node_offset);
-        self.write_all(enc.as_ref())
+        self.write_all(vu64::encode(node_offset).as_ref())
     }
 }
 
@@ -562,18 +360,18 @@ mod debug {
         {
             #[cfg(feature = "vf_u32u32")]
             assert_eq!(std::mem::size_of::<VarFile>(), 120);
-            #[cfg(feature = "vf_vint64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 136);
-            #[cfg(feature = "vf_v64")]
+            #[cfg(feature = "vf_u64u64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 120);
+            #[cfg(feature = "vf_vu64")]
             assert_eq!(std::mem::size_of::<VarFile>(), 120);
         }
         #[cfg(target_pointer_width = "32")]
         {
             #[cfg(feature = "vf_u32u32")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 120);
-            #[cfg(feature = "vf_vint64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 136);
-            #[cfg(feature = "vf_v64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+            #[cfg(feature = "vf_u64u64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+            #[cfg(feature = "vf_vu64")]
             assert_eq!(std::mem::size_of::<VarFile>(), 76);
         }
     }

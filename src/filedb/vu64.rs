@@ -27,49 +27,49 @@ pub const MAX_BYTES: usize = 9;
 
 /// `v64`: serialized variable-length 64-bit integers.
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct V64 {
+pub struct Vu64 {
     /// Encoded length in bytes
     length: u8,
     /// Serialized variable-length integer
     bytes: [u8; MAX_BYTES],
 }
 
-impl AsRef<[u8]> for V64 {
+impl AsRef<[u8]> for Vu64 {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         &self.bytes[..self.length as usize]
     }
 }
 
-impl Debug for V64 {
+impl Debug for Vu64 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let bytes_ref = self.as_ref();
         write!(f, "V64({})", decode(bytes_ref).unwrap())
     }
 }
 
-impl From<u64> for V64 {
+impl From<u64> for Vu64 {
     #[inline]
-    fn from(value: u64) -> V64 {
+    fn from(value: u64) -> Vu64 {
         encode(value)
     }
 }
 
 /*
-impl From<i64> for V64 {
+impl From<i64> for Vu64 {
     #[inline]
-    fn from(value: i64) -> V64 {
+    fn from(value: i64) -> Vu64 {
         signed::zigzag::encode(value).into()
     }
 }
 */
 
-impl TryFrom<&[u8]> for V64 {
+impl TryFrom<&[u8]> for Vu64 {
     type Error = Error;
 
     #[inline]
     fn try_from(slice: &[u8]) -> Result<Self, Error> {
-        decode(slice).map(V64::from)
+        decode(slice).map(Vu64::from)
     }
 }
 
@@ -112,7 +112,7 @@ pub fn decoded_len(byte: u8) -> usize {
 
 /// Encode an unsigned 64-bit integer as `v64`.
 #[inline]
-pub fn encode(value: u64) -> V64 {
+pub fn encode(value: u64) -> Vu64 {
     let mut bytes = [0u8; MAX_BYTES];
     let length = encoded_len(value);
     //
@@ -139,7 +139,7 @@ pub fn encode(value: u64) -> V64 {
         }
     }
     //
-    V64 {
+    Vu64 {
         bytes,
         length: length as u8,
     }
@@ -319,7 +319,7 @@ mod tests {
     */
 }
 
-pub fn decode_v64<R: std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
+pub fn decode_vu64<R: std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
     let mut buf = [0u8; MAX_BYTES];
     inp.read_exact(&mut buf[0..1])?;
     let byte_1st = buf[0];
