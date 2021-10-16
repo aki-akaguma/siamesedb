@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
+use super::super::KeyType;
 use super::dat;
 use super::vfile::{VarCursor, VarFile};
-use super::KeyType;
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{Read, Result, Seek, SeekFrom, Write};

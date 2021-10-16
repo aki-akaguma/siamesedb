@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use super::KeyType;
+use super::super::KeyType;
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{Read, Result, Seek, SeekFrom, Write};

@@ -6,30 +6,31 @@ fn main() {
     //_test02();
 
     //_test03_10k();
-    _test04_10k();
+    //_test04_10k();
 
     // 80.52user 62.24system 2:23.74elapsed 99%CPU (0avgtext+0avgdata 2156maxresident)k
     // 43.60user 3.91system 0:49.94elapsed 95%CPU (0avgtext+0avgdata 2364maxresident)k
     // 32.91user 0.79system 0:33.95elapsed 99%CPU (0avgtext+0avgdata 2444maxresident)k
-    //_test10_1m();
+    // 31.35user 0.91system 0:32.63elapsed 98%CPU (0avgtext+0avgdata 2352maxresident)k
+    _test10_1m();
     //
     /*
-        start put
-        fin put
-        free: [(31, 597), (71, 0), (103, 0), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-        used: [(31, 38), (71, 138103), (103, 20978), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-        db_map.is_balanced(): true
-        db_map.is_dense(): true
-        db_map.depth_of_node_tree(): 7
-        start delete
-        fin delete
-        free: [(31, 635), (71, 138102), (103, 20978), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-        used: [(31, 0), (71, 1), (103, 0), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-        db_map.is_balanced(): true
-        db_map.is_dense(): true
-        db_map.depth_of_node_tree(): 1
-        56.85user 1.19system 0:58.93elapsed 98%CPU (0avgtext+0avgdata 2196maxresident)k
-        8inputs+115480outputs (0major+122minor)pagefaults 0swaps
+    start put
+    fin put
+    free: [(31, 597), (71, 0), (103, 0), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
+    used: [(31, 38), (71, 138103), (103, 20978), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
+    db_map.is_balanced(): true
+    db_map.is_dense(): true
+    db_map.depth_of_node_tree(): 7
+    start delete
+    fin delete
+    free: [(31, 635), (71, 138102), (103, 20978), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
+    used: [(31, 0), (71, 1), (103, 0), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
+    db_map.is_balanced(): true
+    db_map.is_dense(): true
+    db_map.depth_of_node_tree(): 1
+    54.83user 1.11system 0:56.44elapsed 99%CPU (0avgtext+0avgdata 2356maxresident)k
+    0inputs+114064outputs (0major+122minor)pagefaults 0swaps
     */
     //
     //_test11_1m();
