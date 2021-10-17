@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::io::Result;
 use std::rc::Rc;
 
-use super::super::super::DbMap;
+use super::super::super::DbXxx;
 use super::super::{FileDbNode, KeyType};
 use super::{dat, idx, unu};
 
@@ -12,8 +12,40 @@ use super::kc;
 #[cfg(feature = "key_cache")]
 use super::kc::KeyCacheTrait;
 
+pub trait FileDbXxxInnerKT {
+    fn as_bytes(&self) -> Vec<u8>;
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering;
+    fn from(bytes: &[u8]) -> Self;
+}
+
+impl FileDbXxxInnerKT for String {
+    fn as_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        std::cmp::Ord::cmp(self, other)
+    }
+    fn from(bytes: &[u8]) -> Self {
+        String::from_utf8_lossy(&bytes).to_string()
+    }
+}
+
+impl FileDbXxxInnerKT for u64 {
+    fn as_bytes(&self) -> Vec<u8> {
+        //self.to_le_bytes().to_vec()
+        super::vu64::encode(*self).as_ref().to_vec()
+    }
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        std::cmp::Ord::cmp(self, other)
+    }
+    fn from(bytes: &[u8]) -> Self {
+        //u64::from_le_bytes(bytes.try_into().unwrap())
+        super::vu64::decode(bytes).unwrap()
+    }
+}
+
 #[derive(Debug)]
-pub struct FileDbMapInner {
+pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
     parent: FileDbNode,
     mem: BTreeMap<String, (u64, Vec<u8>)>,
     dirty: bool,
@@ -23,11 +55,13 @@ pub struct FileDbMapInner {
     unu_file: unu::UnuFile,
     //
     #[cfg(feature = "key_cache")]
-    key_cache: kc::KeyCache<String>,
+    key_cache: kc::KeyCache<KT>,
+    //
+    _phantom: std::marker::PhantomData<KT>,
 }
 
-impl FileDbMapInner {
-    pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbMapInner> {
+impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
+    pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbXxxInner<KT>> {
         let path = {
             let rc = parent.0.upgrade().expect("FileDbNode is already disposed");
             let locked = rc.borrow();
@@ -46,6 +80,7 @@ impl FileDbMapInner {
             dirty: false,
             #[cfg(feature = "key_cache")]
             key_cache: kc::KeyCache::new(),
+            _phantom: std::marker::PhantomData,
         })
     }
     pub fn is_dirty(&self) -> bool {
@@ -54,7 +89,7 @@ impl FileDbMapInner {
 }
 
 // for utils
-impl FileDbMapInner {
+impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     #[cfg(feature = "key_cache")]
     fn clear_key_cache(&mut self, key_offset: u64) {
         self.key_cache.delete(&key_offset);
@@ -64,7 +99,7 @@ impl FileDbMapInner {
         self.key_cache.clear();
     }
     #[cfg(not(feature = "key_cache"))]
-    fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
+    pub fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
         debug_assert!(key_offset != 0);
         let string = self
             .dat_file
@@ -74,20 +109,27 @@ impl FileDbMapInner {
         Ok(string)
     }
     #[cfg(feature = "key_cache")]
-    fn load_key_string(&mut self, key_offset: u64) -> Result<Rc<String>> {
+    pub fn load_key_string(&mut self, key_offset: u64) -> Result<Rc<KT>> {
         debug_assert!(key_offset != 0);
         let string = match self.key_cache.get(&key_offset) {
             Some(s) => s,
             None => {
-                let string = self
+                let vec = self
                     .dat_file
                     .read_record_key(key_offset)?
-                    .map(|key| String::from_utf8_lossy(&key).to_string())
                     .unwrap();
-                self.key_cache.put(&key_offset, string).unwrap()
+                self.key_cache.put(&key_offset, KT::from(&vec)).unwrap()
             }
         };
         Ok(string)
+    }
+    pub fn load_key_string_no_cache(&self, key_offset: u64) -> Result<KT> {
+        debug_assert!(key_offset != 0);
+        let vec = self
+            .dat_file
+            .read_record_key(key_offset)?
+            .unwrap();
+        Ok(KT::from(&vec))
     }
     fn load_value(&self, key_offset: u64) -> Result<Option<Vec<u8>>> {
         debug_assert!(key_offset != 0);
@@ -99,7 +141,7 @@ impl FileDbMapInner {
     fn keys_binary_search(
         &mut self,
         node: &mut idx::IdxNode,
-        key: &str,
+        key: &KT,
     ) -> Result<std::result::Result<usize, usize>> {
         let mut size = node.keys.len();
         let mut left = 0;
@@ -130,14 +172,15 @@ impl FileDbMapInner {
 }
 
 // for debug
-impl FileDbMapInner {
+impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
     // convert index to graph string for debug.
     pub fn to_graph_string(&self) -> Result<String> {
         self.idx_file.to_graph_string()
     }
     pub fn to_graph_string_with_key_string(&self) -> Result<String> {
         self.idx_file
-            .to_graph_string_with_key_string(self.dat_file.clone())
+            .to_graph_string_with_key_string(self)
+            //.to_graph_string_with_key_string(self.dat_file.clone())
     }
     // check the index tree is balanced
     pub fn is_balanced(&self) -> Result<bool> {
@@ -170,15 +213,15 @@ impl FileDbMapInner {
 }
 
 // insert: NEW
-impl FileDbMapInner {
+impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     fn insert_into_node_tree(
         &mut self,
         mut node: idx::IdxNode,
-        key: &str,
+        key: &KT,
         value: &[u8],
     ) -> Result<idx::IdxNode> {
         if node.keys.is_empty() {
-            let new_key_offset = self.dat_file.add_record(key.as_bytes(), value)?;
+            let new_key_offset = self.dat_file.add_record(&key.as_bytes(), value)?;
             return Ok(idx::IdxNode::new_active(new_key_offset, 0, 0));
         }
         let r = self.keys_binary_search(&mut node, key)?;
@@ -200,7 +243,7 @@ impl FileDbMapInner {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     self.insert_into_node_tree(node1, key, value)?
                 } else {
-                    let new_key_offset = self.dat_file.add_record(key.as_bytes(), value)?;
+                    let new_key_offset = self.dat_file.add_record(&key.as_bytes(), value)?;
                     idx::IdxNode::new_active(new_key_offset, 0, 0)
                 };
                 if node2.is_active_on_insert() {
@@ -277,8 +320,8 @@ impl FileDbMapInner {
 }
 
 // delete: NEW
-impl FileDbMapInner {
-    fn delete_from_node_tree(&mut self, mut node: idx::IdxNode, key: &str) -> Result<idx::IdxNode> {
+impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
+    fn delete_from_node_tree(&mut self, mut node: idx::IdxNode, key: &KT) -> Result<idx::IdxNode> {
         if node.keys.is_empty() {
             return Ok(node);
         }
@@ -462,8 +505,8 @@ impl FileDbMapInner {
 }
 
 // find: NEW
-impl FileDbMapInner {
-    fn find_in_node_tree(&mut self, node: &mut idx::IdxNode, key: &str) -> Result<Option<Vec<u8>>> {
+impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
+    fn find_in_node_tree(&mut self, node: &mut idx::IdxNode, key: &KT) -> Result<Option<Vec<u8>>> {
         if node.keys.is_empty() {
             return Ok(None);
         }
@@ -485,7 +528,7 @@ impl FileDbMapInner {
             }
         }
     }
-    fn has_key_in_node_tree(&mut self, node: &mut idx::IdxNode, key: &str) -> Result<bool> {
+    fn has_key_in_node_tree(&mut self, node: &mut idx::IdxNode, key: &KT) -> Result<bool> {
         if node.keys.is_empty() {
             return Ok(false);
         }
@@ -505,19 +548,19 @@ impl FileDbMapInner {
     }
 }
 
-impl DbMap for FileDbMapInner {
-    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
+impl<KT: FileDbXxxInnerKT> DbXxx<KT> for FileDbXxxInner<KT> {
+    fn get(&mut self, key: &KT) -> Result<Option<Vec<u8>>> {
         let mut top_node = self.idx_file.read_top_node()?;
         self.find_in_node_tree(&mut top_node, key)
     }
-    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
+    fn put(&mut self, key: &KT, value: &[u8]) -> Result<()> {
         let top_node = self.idx_file.read_top_node()?;
         let active_node = self.insert_into_node_tree(top_node, key, value)?;
         let new_top_node = active_node.deactivate();
         self.idx_file.write_top_node(new_top_node)?;
         Ok(())
     }
-    fn delete(&mut self, key: &str) -> Result<()> {
+    fn delete(&mut self, key: &KT) -> Result<()> {
         let top_node = self.idx_file.read_top_node()?;
         let top_node_offset = top_node.offset;
         let top_node = self.delete_from_node_tree(top_node, key)?;
@@ -547,7 +590,7 @@ impl DbMap for FileDbMapInner {
         }
         Ok(())
     }
-    fn has_key(&mut self, key: &str) -> Result<bool> {
+    fn has_key(&mut self, key: &KT) -> Result<bool> {
         let mut top_node = self.idx_file.read_top_node()?;
         self.has_key_in_node_tree(&mut top_node, key)
     }

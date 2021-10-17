@@ -110,10 +110,12 @@ impl IdxFile {
         let mut locked = self.0.borrow_mut();
         idx_to_graph_string(&mut locked.0, "", &top_node)
     }
-    pub fn to_graph_string_with_key_string(&self, dat_file: dat::DatFile) -> Result<String> {
+    pub fn to_graph_string_with_key_string<KT>(&self, dbxxx: &FileDbXxxInner<KT>) -> Result<String>
+        where KT : FileDbXxxInnerKT + std::fmt::Display,
+    {
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
-        idx_to_graph_string_with_key_string(&mut locked.0, "", &top_node, &dat_file)
+        idx_to_graph_string_with_key_string(&mut locked.0, "", &top_node, dbxxx)
     }
     // check the index tree is balanced
     pub fn is_balanced(&self, node: &IdxNode) -> Result<bool> {
@@ -896,12 +898,18 @@ const GRAPH_NODE_ED: &str = "v";
 //const GRAPH_NODE_ST: &str = "{";
 //const GRAPH_NODE_ED: &str = "}";
 
-fn idx_to_graph_string_with_key_string(
+use super::dbxxx::FileDbXxxInner;
+use super::dbxxx::FileDbXxxInnerKT;
+
+fn idx_to_graph_string_with_key_string<KT>(
     file: &mut VarFile,
     head: &str,
     node: &IdxNode,
-    dat_file: &dat::DatFile,
-) -> Result<String> {
+    dbxxx: &FileDbXxxInner<KT>,
+) -> Result<String>
+where
+    KT : FileDbXxxInnerKT + std::fmt::Display,
+{
     let mut gs = format!(
         "{}{}:0x{:04x},{03}\n",
         head, GRAPH_NODE_ST, node.offset, node.size
@@ -912,17 +920,20 @@ fn idx_to_graph_string_with_key_string(
         let node = idx_read_node(file, node_offset)
             .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
         let gs0 =
-            idx_to_graph_string_with_key_string(file, &format!("{}    ", head), &node, dat_file)?;
+            idx_to_graph_string_with_key_string(file, &format!("{}    ", head), &node, dbxxx)?;
         gs += &gs0;
     }
     while i > 0 {
         i -= 1;
         let key_offset = node.keys[i];
         if key_offset != 0 {
+            /*
             let key_string = dat_file
                 .read_record_key(key_offset)?
                 .map(|val| String::from_utf8_lossy(&val).to_string())
                 .unwrap();
+            */
+            let key_string = dbxxx.load_key_string_no_cache(key_offset)?;
             gs += &format!("{}{:04x}:'{}'\n", head, key_offset, key_string);
         }
         let node_offset = node.downs[i];
@@ -933,7 +944,7 @@ fn idx_to_graph_string_with_key_string(
                 file,
                 &format!("{}    ", head),
                 &node,
-                dat_file,
+                dbxxx,
             )?;
             gs += &gs0;
         }

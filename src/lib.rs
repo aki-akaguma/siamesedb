@@ -142,3 +142,35 @@ pub trait DbList {
         self.put(key, value.as_bytes())
     }
 }
+
+/// key-value map store interface. the key type is `KT`.
+pub trait DbXxx<KT> {
+    /// returns the value corresponding to the key.
+    fn get(&mut self, key: &KT) -> Result<Option<Vec<u8>>>;
+
+    /// inserts a key-value pair into the db-map.
+    fn put(&mut self, key: &KT, value: &[u8]) -> Result<()>;
+
+    /// removes a key from the db-map.
+    fn delete(&mut self, key: &KT) -> Result<()>;
+
+    /// synchronize all OS-internal metadata to storage.
+    fn sync_all(&mut self) -> Result<()>;
+
+    /// synchronize data to storage, except file metadabe.
+    fn sync_data(&mut self) -> Result<()>;
+
+    /// returns true if the map contains a value for the specified key.
+    fn has_key(&mut self, key: &KT) -> Result<bool> {
+        self.get(key).map(|opt| opt.is_some())
+    }
+    /// returns the value corresponding to the key. the value is converted to `String`.
+    fn get_string(&mut self, key: &KT) -> Result<Option<String>> {
+        self.get(key)
+            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
+    }
+    /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
+    fn put_string(&mut self, key: &KT, value: &str) -> Result<()> {
+        self.put(key, value.as_bytes())
+    }
+}

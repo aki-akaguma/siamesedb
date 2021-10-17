@@ -151,7 +151,7 @@ pub fn encode(value: u64) -> Vu64 {
 /// Upon success, the reference is updated to begin at the byte immediately
 /// after the encoded `v64`.
 #[inline]
-fn decode(bytes: &[u8]) -> Result<u64, Error> {
+pub fn decode(bytes: &[u8]) -> Result<u64, Error> {
     if bytes.is_empty() {
         return Err(Error::Truncated);
     }
@@ -160,7 +160,7 @@ fn decode(bytes: &[u8]) -> Result<u64, Error> {
 }
 
 #[inline]
-fn decode_with_length(length: usize, bytes: &[u8]) -> Result<u64, Error> {
+pub fn decode_with_length(length: usize, bytes: &[u8]) -> Result<u64, Error> {
     //let length = decoded_len(*bytes.first().ok_or(Error::Truncated)?);
     //
     if bytes.len() < length {
