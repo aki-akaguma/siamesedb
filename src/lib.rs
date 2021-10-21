@@ -8,7 +8,10 @@ The simple local key-value store.
 - DbMap has keys as utf-8 string.
 - DbList has keys as u64.
 - The value is any bytes included utf-8 string.
+- The file store is implemented the basic B-Tree. (no hash and no leaf)
 - Small db file size.
+- Separated files. (data record file and index file)
+- One database has some db-maps and some db-lists.
 
 # Compatibility
 
@@ -43,8 +46,6 @@ fn main() -> std::io::Result<()> {
 ## Example DbList:
 
 ```
-use shamdb::open_file;
-
 use shamdb::DbList;
 
 fn main() -> std::io::Result<()> {
@@ -143,15 +144,15 @@ pub trait DbList {
     }
 }
 
-/// key-value map store interface. the key type is `KT`.
+/// generic key-value map store interface. the key type is `KT`.
 pub trait DbXxx<KT> {
     /// returns the value corresponding to the key.
     fn get(&mut self, key: &KT) -> Result<Option<Vec<u8>>>;
 
-    /// inserts a key-value pair into the db-map.
+    /// inserts a key-value pair into the db.
     fn put(&mut self, key: &KT, value: &[u8]) -> Result<()>;
 
-    /// removes a key from the db-map.
+    /// removes a key from the db.
     fn delete(&mut self, key: &KT) -> Result<()>;
 
     /// synchronize all OS-internal metadata to storage.

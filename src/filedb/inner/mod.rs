@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::io::Result;
 use std::path::{Path, PathBuf};
 
+use super::super::{DbList, DbMap};
 use super::{FileDbList, FileDbMap, FileDbNode};
 
 pub(crate) mod dbxxx;
@@ -25,7 +26,6 @@ pub struct FileDbInner {
     db_lists: BTreeMap<String, FileDbList>,
     //
     path: PathBuf,
-    dirty: bool,
 }
 
 impl FileDbInner {
@@ -38,21 +38,31 @@ impl FileDbInner {
             db_maps: BTreeMap::new(),
             db_lists: BTreeMap::new(),
             path: path.as_ref().to_path_buf(),
-            dirty: false,
         })
     }
-    pub fn is_dirty(&self) -> bool {
-        self.dirty
-    }
     pub fn sync_all(&self) -> Result<()> {
-        if self.is_dirty() {
-            // save all data
+        let keys: Vec<_> = self.db_maps.keys().cloned().collect();
+        for a in keys {
+            let mut b = self.db_map(&a).unwrap();
+            b.sync_all()?;
+        }
+        let keys: Vec<_> = self.db_lists.keys().cloned().collect();
+        for a in keys {
+            let mut b = self.db_list(&a).unwrap();
+            b.sync_all()?;
         }
         Ok(())
     }
     pub fn sync_data(&self) -> Result<()> {
-        if self.is_dirty() {
-            // save all data
+        let keys: Vec<_> = self.db_maps.keys().cloned().collect();
+        for a in keys {
+            let mut b = self.db_map(&a).unwrap();
+            b.sync_data()?;
+        }
+        let keys: Vec<_> = self.db_lists.keys().cloned().collect();
+        for a in keys {
+            let mut b = self.db_list(&a).unwrap();
+            b.sync_data()?;
         }
         Ok(())
     }
@@ -64,7 +74,7 @@ impl FileDbInner {
 }
 
 impl FileDbInner {
-    pub fn parent(&self) -> Option<FileDbNode> {
+    pub(crate) fn _parent(&self) -> Option<FileDbNode> {
         self.parent.clone()
     }
     pub fn db_map(&self, name: &str) -> Option<FileDbMap> {

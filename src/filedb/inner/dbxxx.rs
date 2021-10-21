@@ -28,7 +28,7 @@ pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
 }
 
 impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
-    pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbXxxInner<KT>> {
+    pub(crate) fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbXxxInner<KT>> {
         let path = {
             let rc = parent.0.upgrade().expect("FileDbNode is already disposed");
             let locked = rc.borrow();

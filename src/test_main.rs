@@ -50,11 +50,11 @@ fn _test_a1() {
     */
     #[rustfmt::skip]
     _test_db_map(
-        TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
+        TestC { max_cnt: 1_000_000, f_get: true, f_delete: true },
         CheckC { check: true, ..Default::default() },
     );
     /*
-    */
+     */
     /*
     start put
     finish put: 28.611µs/op

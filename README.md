@@ -9,7 +9,10 @@ The simple local key-value store.
 - DbMap has keys as utf-8 string.
 - DbList has keys as u64.
 - The value is any bytes included utf-8 string.
+- The file store is implemented the basic B-Tree. (no hash and no leaf)
 - Small db file size.
+- Separated files. (data record file and index file)
+- One database has some db-maps and some db-lists.
 
 ## Compatibility
 
@@ -19,32 +22,48 @@ The simple local key-value store.
 
 ### Example DbMap:
 
-```
-use shamdb::{ShamDb, DbMap};
+```rust
+use shamdb::DbMap;
 
-let db = ShamDb::open_file("test1.shamdb").unwrap();
-let db_map = db.db_map("some_map1");
-let r = db_map.get("key1");
-assert_eq!(r, None);
-db_map.put("key1", "value1");
-let r = db_map.get("key1");
-assert_eq!(r, Some("value1"));
-db_map.sync();
+fn main() -> std::io::Result<()> {
+    let db_name = "target/tmp/doc-test1.shamdb";
+    // remove database
+    let _ = std::fs::remove_dir_all(db_name);
+    // create or open database
+    let db = shamdb::open_file(db_name)?;
+    // create or get db map
+    let mut db_map = db.db_map("some_map1")?;
+    //
+    let r = db_map.get_string("key1")?;
+    assert_eq!(r, None);
+    db_map.put_string("key1", "value1")?;
+    let r = db_map.get_string("key1")?;
+    assert_eq!(r, Some("value1".to_string()));
+    db_map.sync_data()?;
+    Ok(())
+}
 ```
 
 ### Example DbList:
 
-```
-use shamdb::{ShamDb, DbList};
+```rust
+use shamdb::DbList;
 
-let db = ShamDb::open_file("test1.shamdb").unwrap();
-let db_list = db.db_list("some_list1");
-let r = db_list.get(120);
-assert_eq!(r, None);
-db_list.put(120, "value120");
-let r = db_list.get(120);
-assert_eq!(r, Some("value120"));
-db_list.sync();
+fn main() -> std::io::Result<()> {
+    let db_name = "target/tmp/doc-test2.shamdb";
+    // remove database
+    let _ = std::fs::remove_dir_all(db_name);
+    // create or open database
+    let db = shamdb::open_file(db_name)?;
+    let mut db_list = db.db_list("some_list1")?;
+    let r = db_list.get_string(120)?;
+    assert_eq!(r, None);
+    db_list.put_string(120, "value120")?;
+    let r = db_list.get_string(120)?;
+    assert_eq!(r, Some("value120".to_string()));
+    db_list.sync_data()?;
+    Ok(())
+}
 ```
 
 

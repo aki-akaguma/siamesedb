@@ -219,7 +219,6 @@ fn free_rec_list_offset_of_header(_rec_size: usize) -> u64 {
 
 fn record_size_roudup(record_size: usize) -> usize {
     debug_assert!(record_size > 0, "record_size: {} > 0", record_size);
-    debug_assert!(record_size <= 0x7F, "record_size: {} <= 0x7F", record_size);
     for &n_sz in REC_SIZE_ARY.iter().take(REC_SIZE_ARY.len() - 1) {
         if record_size <= n_sz {
             return n_sz;
@@ -308,7 +307,6 @@ fn dat_file_push_free_list(
         return Ok(());
     }
     debug_assert!(old_record_size > 0);
-    debug_assert!(old_record_size <= 0x7F);
     //
     let free_1st = dat_file_read_free_record_offset(file, old_record_size)?;
     {
@@ -355,11 +353,6 @@ fn dat_write_record(
     if !is_new {
         let _ = file.seek(SeekFrom::Start(offset))?;
         let old_record_len = file.read_record_size()?;
-        debug_assert!(
-            old_record_len <= 0x7F,
-            "old_record_len: {} <= 0x7F",
-            old_record_len
-        );
         if new_record_len <= old_record_len {
             // over writes.
             let _ = file.seek(SeekFrom::Start(offset))?;
@@ -435,7 +428,6 @@ fn dat_read_record_size(file: &mut VarFile, offset: u64) -> Result<usize> {
 fn dat_delete_record(file: &mut VarFile, offset: u64) -> Result<u64> {
     let _ = file.seek(SeekFrom::Start(offset))?;
     let old_record_len = file.read_record_size()?;
-    debug_assert!(old_record_len <= 0x7F);
     dat_file_push_free_list(file, offset, old_record_len)?;
     //
     Ok(old_record_len as u64)

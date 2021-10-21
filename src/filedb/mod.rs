@@ -20,9 +20,9 @@ impl KeyType {
 
 mod inner;
 use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
-use inner::FileDbInner;
 #[cfg(feature = "vf_vu64")]
 use inner::vu64;
+use inner::FileDbInner;
 
 use super::DbXxx;
 
@@ -84,7 +84,7 @@ impl FileDbXxxInnerKT for u64 {
 pub struct FileDb(Rc<RefCell<FileDbInner>>);
 
 #[derive(Debug, Clone)]
-pub struct FileDbNode(Weak<RefCell<FileDbInner>>);
+pub(crate) struct FileDbNode(Weak<RefCell<FileDbInner>>);
 
 #[derive(Debug, Clone)]
 pub struct FileDbMap(Rc<RefCell<FileDbMapInner>>);
@@ -125,9 +125,6 @@ impl FileDb {
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
-    pub fn is_dirty(&self) -> bool {
-        self.0.borrow().is_dirty()
-    }
     pub fn sync_all(&self) -> Result<()> {
         self.0.borrow_mut().sync_all()
     }
@@ -137,10 +134,10 @@ impl FileDb {
 }
 
 impl FileDbNode {
-    pub fn parent(&self) -> Option<Self> {
+    pub fn _parent(&self) -> Option<Self> {
         let rc = self.0.upgrade().expect("FileDbNode is already dispose");
         let locked = rc.borrow();
-        locked.parent()
+        locked._parent()
     }
     fn create_db_map(&self, name: &str) -> Result<()> {
         let rc = self.0.upgrade().expect("FileDbNode is already disposed");
@@ -156,11 +153,6 @@ impl FileDbNode {
         let _ = locked.db_list_insert(name, child);
         Ok(())
     }
-    pub fn is_dirty(&self) -> bool {
-        let rc = self.0.upgrade().expect("FileDbNode is already disposed");
-        let r = rc.borrow().is_dirty();
-        r
-    }
     fn _sync_all(&self) -> Result<()> {
         let rc = self.0.upgrade().expect("FileDbNode is already disposed");
         let r = rc.borrow_mut().sync_all();
@@ -174,7 +166,7 @@ impl FileDbNode {
 }
 
 impl FileDbMap {
-    pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbMap> {
+    pub(crate) fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbMap> {
         Ok(Self(Rc::new(RefCell::new(FileDbMapInner::open(
             parent, ks_name,
         )?))))
@@ -251,7 +243,7 @@ impl DbMap for FileDbMap {
 }
 
 impl FileDbList {
-    pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbList> {
+    pub(crate) fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbList> {
         Ok(Self(Rc::new(RefCell::new(FileDbListInner::open(
             parent, ks_name,
         )?))))
@@ -338,7 +330,7 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbMap>(), 8);
             assert_eq!(std::mem::size_of::<FileDbList>(), 8);
             //
-            assert_eq!(std::mem::size_of::<FileDbInner>(), 88);
+            assert_eq!(std::mem::size_of::<FileDbInner>(), 80);
             assert_eq!(std::mem::size_of::<FileDbMapInner>(), 80);
             assert_eq!(std::mem::size_of::<FileDbListInner>(), 80);
         }

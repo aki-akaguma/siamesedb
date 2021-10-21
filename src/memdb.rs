@@ -10,7 +10,7 @@ use std::rc::{Rc, Weak};
 pub struct MemoryDb<'a>(Rc<RefCell<MemoryDbInner<'a>>>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryDbNode<'a>(Weak<RefCell<MemoryDbInner<'a>>>);
+pub(crate) struct MemoryDbNode<'a>(Weak<RefCell<MemoryDbInner<'a>>>);
 
 #[derive(Debug, Clone)]
 pub struct MemoryDbMap<'a>(Rc<RefCell<MemoryDbMapInner<'a>>>);
@@ -54,7 +54,7 @@ impl<'a> MemoryDb<'a> {
 }
 
 impl<'a> MemoryDbNode<'a> {
-    pub fn parent(&self) -> Option<Self> {
+    pub(crate) fn _parent(&self) -> Option<Self> {
         let rc = self.0.upgrade().expect("MemoryDbNode is already dispose");
         let locked = rc.borrow();
         locked.parent.clone()
@@ -142,7 +142,7 @@ impl<'a> DbList for MemoryDbList<'a> {
 //--
 
 #[derive(Debug)]
-pub struct MemoryDbInner<'a> {
+pub(crate) struct MemoryDbInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
     db_maps: BTreeMap<String, MemoryDbMap<'a>>,
     db_lists: BTreeMap<String, MemoryDbList<'a>>,
@@ -156,11 +156,10 @@ impl<'a> MemoryDbInner<'a> {
             db_lists: BTreeMap::new(),
         }
     }
-    pub fn sync(&self) {}
 }
 
 #[derive(Debug)]
-pub struct MemoryDbMapInner<'a> {
+pub(crate) struct MemoryDbMapInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
     mem: BTreeMap<String, Vec<u8>>,
 }
@@ -202,7 +201,7 @@ impl<'a> DbMap for MemoryDbMapInner<'a> {
 }
 
 #[derive(Debug)]
-pub struct MemoryDbListInner<'a> {
+pub(crate) struct MemoryDbListInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
     mem: BTreeMap<u64, Vec<u8>>,
 }

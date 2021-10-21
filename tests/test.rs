@@ -57,6 +57,51 @@ mod test {
         //
         db_list.sync_data().unwrap();
     }
+    fn medium_test_map(db_map: &mut dyn DbMap) {
+        let key = "The Adventure of the Missing Three-Quarter";
+        let val = "We were fairly accustomed to receive weird telegrams at Baker Street,
+     but I have a particular recollection of one which reached us on a
+     gloomy February morning some seven or eight years";
+        let val2 = "We were fairly accustomed to receive weird telegrams at Baker Street,
+     but I have a particular recollection of one which reached us on a
+     gloomy February morning some seven or eight years ago and gave Mr.
+     Sherlock Holmes a puzzled quarter of an hour.";
+        // put
+        db_map.put_string(key, val).unwrap();
+        // get hits
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, Some(val.to_string()));
+        // modify
+        db_map.put_string(key, val2).unwrap();
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, Some(val2.to_string()));
+        // delete
+        db_map.delete(key).unwrap();
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, None);
+    }
+    fn medium_test_list(db_list: &mut dyn DbList) {
+        let key = 123456789;
+        let val = "We were fairly accustomed to receive weird telegrams at Baker Street,
+     but I have a particular recollection of one which reached us on a
+     gloomy February morning some seven or eight years";
+        let val2 = "We were fairly accustomed to receive weird telegrams at Baker Street,
+     but I have a particular recollection of one which reached us on a
+     gloomy February morning some seven or eight years ago and gave Mr.
+     Sherlock Holmes a puzzled quarter of an hour.";
+        db_list.put_string(key, val).unwrap();
+        // get hits
+        let r = db_list.get_string(key).unwrap();
+        assert_eq!(r, Some(val.to_string()));
+        // modify
+        db_list.put_string(key, val2).unwrap();
+        let r = db_list.get_string(key).unwrap();
+        assert_eq!(r, Some(val2.to_string()));
+        // delete
+        db_list.delete(key).unwrap();
+        let r = db_list.get_string(key).unwrap();
+        assert_eq!(r, None);
+    }
     ////
     #[test]
     fn test_memory_map() {
@@ -78,6 +123,7 @@ mod test {
         let db = shamdb::open_file(db_name).unwrap();
         let mut db_map = db.db_map("some_map1").unwrap();
         basic_test_map(&mut db_map);
+        medium_test_map(&mut db_map);
     }
     #[test]
     fn test_file_list() {
@@ -86,6 +132,7 @@ mod test {
         let db = shamdb::open_file(db_name).unwrap();
         let mut db_list = db.db_list("some_list1").unwrap();
         basic_test_list(&mut db_list);
+        medium_test_list(&mut db_list);
     }
     //
     /*
