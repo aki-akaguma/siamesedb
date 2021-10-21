@@ -87,4 +87,16 @@ mod test {
         let mut db_list = db.db_list("some_list1").unwrap();
         basic_test_list(&mut db_list);
     }
+    //
+    /*
+    proptest! {
+        #[test]
+        fn proptest_file_map(s in ) {
+            let db_name = "target/tmp/test1.shamdb";
+            let _ = std::fs::remove_dir_all(db_name);
+            let db = shamdb::open_file(db_name).unwrap();
+            let mut db_map = db.db_map("some_map1").unwrap();
+        }
+    }
+    */
 }

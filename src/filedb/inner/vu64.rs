@@ -188,19 +188,19 @@ pub fn decode_with_length(length: usize, bytes: &[u8]) -> Result<u64, Error> {
         }
     };
     //
-    // Ensure there are no superfluous leading (little-endian) zeros
+    // Ensure there are no superfluous leading (little-endian) ones
     if length == 1 || result >= (1 << (7 * (length - 1))) {
         Ok(result)
     } else {
-        Err(Error::LeadingZeroes)
+        Err(Error::LeadingOnes)
     }
 }
 
 /// Error type
 #[derive(Copy, Clone, Debug)]
 pub enum Error {
-    /// Value contains unnecessary leading zeroes
-    LeadingZeroes,
+    /// Value contains unnecessary leading ones
+    LeadingOnes,
 
     /// Value is truncated / malformed
     Truncated,
@@ -209,8 +209,8 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Error::LeadingZeroes => "leading zeroes in vint64 value",
-            Error::Truncated => "truncated vint64 value",
+            Error::LeadingOnes => "leading ones in vu64 value",
+            Error::Truncated => "truncated vu64 value",
         })
     }
 }
@@ -319,13 +319,15 @@ mod tests {
     */
 }
 
-pub fn decode_vu64<R: std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
+use super::buf::BufOneByte;
+
+pub fn decode_vu64<R: BufOneByte + std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
     let mut buf = [0u8; MAX_BYTES];
-    inp.read_exact(&mut buf[0..1])?;
-    let byte_1st = buf[0];
+    let byte_1st = inp.read_one_byte()?;
+    buf[0] = byte_1st;
     let len = decoded_len(byte_1st);
     if len > 1 {
-        inp.read_exact(&mut buf[1..len])?;
+        inp.read_exact_max8byte(&mut buf[1..len])?;
     }
     match decode_with_length(len, &buf[0..len]) {
         Ok(i) => Ok(i),

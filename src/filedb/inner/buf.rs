@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
 
 /// Chunk size MUST be a power of 2.
-const CHUNK_SIZE: u32 = 1024;
+const CHUNK_SIZE: u32 = 1024 * 4;
 const DEFAULT_NUM_CHUNKS: u16 = 16;
 
 /// Chunk buffer for reading or writing.
@@ -12,10 +12,10 @@ struct Chunk {
     pub data: Vec<u8>,
     /// chunk offset. it is a offset from start of the file.
     offset: u64,
-    /// uses counter. counts up if we read or write chunk.
-    uses: u64,
     /// dirty flag. we should write the chunk to the file.
     dirty: bool,
+    /// uses counter. counts up if we read or write chunk.
+    uses: u32,
 }
 
 impl Chunk {
@@ -34,8 +34,8 @@ impl Chunk {
         Ok(Chunk {
             data,
             offset,
-            uses: 0,
             dirty: false,
+            uses: 0,
         })
     }
     //
@@ -118,6 +118,16 @@ pub struct BufFile {
     end: u64,
     //
     fetch_cache: Option<(u64, usize)>,
+    //
+    #[cfg(feature = "buf_lru")]
+    uses_cnt: u32,
+    //
+    // a minimum uses counter, but grater than 0.
+    #[cfg(feature = "buf_stats")]
+    stats_min_uses: u32,
+    // a maximum uses counter
+    #[cfg(feature = "buf_stats")]
+    stats_max_uses: u32,
 }
 
 // ref.) http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
@@ -157,6 +167,12 @@ impl BufFile {
             pos: 0,
             end,
             fetch_cache: None,
+            #[cfg(feature = "buf_lru")]
+            uses_cnt: 0,
+            #[cfg(feature = "buf_stats")]
+            stats_min_uses: 0,
+            #[cfg(feature = "buf_stats")]
+            stats_max_uses: 0,
         })
     }
     ///
@@ -177,14 +193,41 @@ impl BufFile {
         self.map.clear();
         Ok(())
     }
+    ///
+    #[cfg(feature = "buf_stats")]
+    pub fn statistics(&self) -> Vec<(String, i64)> {
+        let mut vec = Vec::new();
+        vec.push((
+            "BufFile.stats_min_uses".to_string(),
+            self.stats_min_uses as i64,
+        ));
+        vec.push((
+            "BufFile.stats_max_uses".to_string(),
+            self.stats_max_uses as i64,
+        ));
+        vec
+    }
 }
 
 impl BufFile {
+    #[inline]
+    fn touch(&mut self, chunk_idx: usize) {
+        #[cfg(not(feature = "buf_lru"))]
+        {
+            self.chunks[chunk_idx].uses += 1;
+        }
+        #[cfg(feature = "buf_lru")]
+        {
+            self.uses_cnt += 1;
+            self.chunks[chunk_idx].uses = self.uses_cnt;
+        }
+    }
     //
     fn fetch_chunk(&mut self, offset: u64) -> Result<&mut Chunk> {
         let offset = offset & self.chunk_mask;
         if let Some((off, idx)) = self.fetch_cache {
             if off == offset {
+                self.touch(idx);
                 return Ok(&mut self.chunks[idx]);
             }
         }
@@ -194,6 +237,7 @@ impl BufFile {
             self.add_chunk(offset)?
         };
         self.fetch_cache = Some((offset, idx));
+        self.touch(idx);
         Ok(&mut self.chunks[idx])
     }
     //
@@ -211,22 +255,45 @@ impl BufFile {
             }
         } else {
             // LFU: Least Frequently Used
-            // find the minimum uses counter.
-            let mut min_idx = 0;
-            if self.chunks[min_idx].uses != 0 {
-                for i in 1..self.max_num_chunks {
-                    if self.chunks[i].uses < self.chunks[min_idx].uses {
-                        min_idx = i;
-                        if self.chunks[min_idx].uses == 0 {
-                            break;
+            let min_idx = {
+                // find the minimum uses counter.
+                let mut min_idx = 0;
+                let mut min_uses = self.chunks[min_idx].uses;
+                if min_uses != 0 {
+                    for i in 1..self.max_num_chunks {
+                        if self.chunks[i].uses < min_uses {
+                            min_idx = i;
+                            min_uses = self.chunks[min_idx].uses;
+                            if min_uses == 0 {
+                                break;
+                            }
+                        } else {
+                            #[cfg(feature = "buf_stats")]
+                            {
+                                if self.chunks[i].uses > self.stats_max_uses {
+                                    self.stats_max_uses = self.chunks[i].uses;
+                                }
+                            }
                         }
                     }
                 }
-            }
-            // clear all uses counter
-            self.chunks.iter_mut().for_each(|chunk| {
-                chunk.uses = 0;
-            });
+                #[cfg(feature = "buf_stats")]
+                {
+                    if min_uses > 0 && min_uses < self.stats_min_uses {
+                        self.stats_min_uses = min_uses;
+                    }
+                }
+                // clear all uses counter
+                self.chunks.iter_mut().for_each(|chunk| {
+                    chunk.uses = 0;
+                });
+                #[cfg(feature = "buf_lru")]
+                {
+                    // clear LRU(: Least Reacently Used) counter
+                    self.uses_cnt = 0;
+                }
+                min_idx
+            };
             // Make a new chunk, write the old chunk to disk, replace old chunk
             match Chunk::new(offset, self.end, self.chunk_size, &mut self.file) {
                 Ok(x) => {
@@ -243,14 +310,61 @@ impl BufFile {
     }
 }
 
+pub trait BufOneByte {
+    fn read_one_byte(&mut self) -> Result<u8>;
+    fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()>;
+}
+
+impl BufOneByte for BufFile {
+    fn read_one_byte(&mut self) -> Result<u8> {
+        let curr = self.pos;
+        let one_byte = {
+            let chunk = self.fetch_chunk(curr)?;
+            let data_slice = &chunk.data[(curr - chunk.offset) as usize..];
+            if !data_slice.is_empty() {
+                data_slice[0]
+            } else {
+                let mut buf = [0u8; 1];
+                let _ = self.read_exact(&mut buf)?;
+                return Ok(buf[0]);
+            }
+        };
+        self.pos += 1;
+        Ok(one_byte)
+    }
+    fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()> {
+        debug_assert!(buf.len() <= 8, "buf.len(): {} <= 8", buf.len());
+        let curr = self.pos;
+        let len = {
+            let chunk = self.fetch_chunk(curr)?;
+            let buf_len = buf.len();
+            let data_slice = &chunk.data[(curr - chunk.offset) as usize..];
+            if buf_len <= data_slice.len() {
+                buf.copy_from_slice(&data_slice[..buf_len]);
+                buf_len
+            } else {
+                self.read_exact(buf)?;
+                return Ok(());
+            }
+        };
+        self.pos += len as u64;
+        Ok(())
+    }
+}
+
 impl Read for BufFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let curr = self.pos;
         let len = {
             let chunk = self.fetch_chunk(curr)?;
-            chunk.uses += 1;
+            let buf_len = buf.len();
             let mut data_slice = &chunk.data[(curr - chunk.offset) as usize..];
-            data_slice.read(buf)?
+            if buf_len <= data_slice.len() {
+                buf.copy_from_slice(&data_slice[..buf_len]);
+                buf_len
+            } else {
+                data_slice.read(buf)?
+            }
         };
         self.pos += len as u64;
         Ok(len)
@@ -262,7 +376,6 @@ impl Write for BufFile {
         let curr = self.pos;
         let len = {
             let chunk = self.fetch_chunk(curr)?;
-            chunk.uses += 1;
             chunk.dirty = true;
             let mut data_slice = &mut chunk.data[(curr - chunk.offset) as usize..];
             data_slice.write(buf)?
@@ -302,7 +415,7 @@ impl Seek for BufFile {
             }
         };
         if new_pos <= self.end {
-            let _ = self.fetch_chunk(new_pos)?;
+            //let _ = self.fetch_chunk(new_pos)?;
             self.pos = new_pos;
             Ok(new_pos)
         } else {
@@ -332,8 +445,15 @@ mod debug {
         //
         #[cfg(target_pointer_width = "64")]
         {
+            #[cfg(not(feature = "buf_stats"))]
             assert_eq!(std::mem::size_of::<BufFile>(), 120);
-            assert_eq!(std::mem::size_of::<Chunk>(), 48);
+            #[cfg(feature = "buf_stats")]
+            assert_eq!(std::mem::size_of::<BufFile>(), 128);
+            #[cfg(not(feature = "buf_stats"))]
+            assert_eq!(std::mem::size_of::<Chunk>(), 40);
+            #[cfg(feature = "buf_stats")]
+            assert_eq!(std::mem::size_of::<Chunk>(), 40);
+            //
             assert_eq!(std::mem::size_of::<(u64, usize)>(), 16);
             assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 24);
             assert_eq!(std::mem::size_of::<Vec<u8>>(), 24);

@@ -1,47 +1,16 @@
+use super::super::super::DbXxx;
+use super::super::{CountOfPerSize, FileDbNode, KeyType};
+use super::kc::KeyCacheTrait;
+use super::{dat, idx, kc};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::rc::Rc;
 
-use super::super::super::DbXxx;
-use super::super::{FileDbNode, KeyType};
-use super::{dat, idx, unu};
-
-#[cfg(feature = "key_cache")]
-use super::kc;
-#[cfg(feature = "key_cache")]
-use super::kc::KeyCacheTrait;
-
 pub trait FileDbXxxInnerKT {
     fn as_bytes(&self) -> Vec<u8>;
     fn cmp(&self, other: &Self) -> std::cmp::Ordering;
     fn from(bytes: &[u8]) -> Self;
-}
-
-impl FileDbXxxInnerKT for String {
-    fn as_bytes(&self) -> Vec<u8> {
-        self.as_bytes().to_vec()
-    }
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        std::cmp::Ord::cmp(self, other)
-    }
-    fn from(bytes: &[u8]) -> Self {
-        String::from_utf8_lossy(&bytes).to_string()
-    }
-}
-
-impl FileDbXxxInnerKT for u64 {
-    fn as_bytes(&self) -> Vec<u8> {
-        //self.to_le_bytes().to_vec()
-        super::vu64::encode(*self).as_ref().to_vec()
-    }
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        std::cmp::Ord::cmp(self, other)
-    }
-    fn from(bytes: &[u8]) -> Self {
-        //u64::from_le_bytes(bytes.try_into().unwrap())
-        super::vu64::decode(bytes).unwrap()
-    }
 }
 
 #[derive(Debug)]
@@ -52,9 +21,7 @@ pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
     //
     dat_file: dat::DatFile,
     idx_file: idx::IdxFile,
-    unu_file: unu::UnuFile,
     //
-    #[cfg(feature = "key_cache")]
     key_cache: kc::KeyCache<KT>,
     //
     _phantom: std::marker::PhantomData<KT>,
@@ -70,15 +37,12 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         //
         let dat_file = dat::DatFile::open(&path, ks_name, KeyType::Str)?;
         let idx_file = idx::IdxFile::open(&path, ks_name, KeyType::Str)?;
-        let unu_file = unu::UnuFile::open(&path, ks_name, KeyType::Str)?;
         Ok(Self {
             parent,
             dat_file,
             idx_file,
-            unu_file,
             mem: BTreeMap::new(),
             dirty: false,
-            #[cfg(feature = "key_cache")]
             key_cache: kc::KeyCache::new(),
             _phantom: std::marker::PhantomData,
         })
@@ -90,34 +54,18 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
 
 // for utils
 impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
-    #[cfg(feature = "key_cache")]
     fn clear_key_cache(&mut self, key_offset: u64) {
         self.key_cache.delete(&key_offset);
     }
-    #[cfg(feature = "key_cache")]
     fn _clear_key_cache_all(&mut self) {
         self.key_cache.clear();
     }
-    #[cfg(not(feature = "key_cache"))]
-    pub fn load_key_string(&mut self, key_offset: u64) -> Result<String> {
-        debug_assert!(key_offset != 0);
-        let string = self
-            .dat_file
-            .read_record_key(key_offset)?
-            .map(|key| String::from_utf8_lossy(&key).to_string())
-            .unwrap();
-        Ok(string)
-    }
-    #[cfg(feature = "key_cache")]
     pub fn load_key_string(&mut self, key_offset: u64) -> Result<Rc<KT>> {
         debug_assert!(key_offset != 0);
         let string = match self.key_cache.get(&key_offset) {
             Some(s) => s,
             None => {
-                let vec = self
-                    .dat_file
-                    .read_record_key(key_offset)?
-                    .unwrap();
+                let vec = self.dat_file.read_record_key(key_offset)?.unwrap();
                 self.key_cache.put(&key_offset, KT::from(&vec)).unwrap()
             }
         };
@@ -125,10 +73,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     pub fn load_key_string_no_cache(&self, key_offset: u64) -> Result<KT> {
         debug_assert!(key_offset != 0);
-        let vec = self
-            .dat_file
-            .read_record_key(key_offset)?
-            .unwrap();
+        let vec = self.dat_file.read_record_key(key_offset)?.unwrap();
         Ok(KT::from(&vec))
     }
     fn load_value(&self, key_offset: u64) -> Result<Option<Vec<u8>>> {
@@ -137,6 +82,9 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             .dat_file
             .read_record(key_offset)?
             .map(|(_key, val)| val))
+    }
+    fn load_record_size(&self, key_offset: u64) -> Result<usize> {
+        self.dat_file.read_record_size(key_offset)
     }
     fn keys_binary_search(
         &mut self,
@@ -178,9 +126,8 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
         self.idx_file.to_graph_string()
     }
     pub fn to_graph_string_with_key_string(&self) -> Result<String> {
-        self.idx_file
-            .to_graph_string_with_key_string(self)
-            //.to_graph_string_with_key_string(self.dat_file.clone())
+        self.idx_file.to_graph_string_with_key_string(self)
+        //.to_graph_string_with_key_string(self.dat_file.clone())
     }
     // check the index tree is balanced
     pub fn is_balanced(&self) -> Result<bool> {
@@ -203,12 +150,25 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
         self.idx_file.depth_of_node_tree(&top_node)
     }
     // count of free node
-    pub fn count_of_free_node(&self) -> Result<Vec<(usize, u64)>> {
+    pub fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         self.idx_file.count_of_free_node()
     }
-    // count of used node
-    pub fn count_of_used_node(&self) -> Result<Vec<(usize, u64)>> {
-        self.idx_file.count_of_used_node()
+    // count of free record
+    pub fn count_of_free_record(&self) -> Result<CountOfPerSize> {
+        self.dat_file.count_of_free_record()
+    }
+    // count of used record and used node
+    pub fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
+        self.idx_file
+            .count_of_used_node(|off| self.load_record_size(off))
+    }
+    /// buffer statistics
+    #[cfg(feature = "buf_stats")]
+    pub fn statistics(&self) -> Vec<(String, i64)> {
+        let mut vec = self.dat_file.statistics();
+        let mut vec2 = self.idx_file.statistics();
+        vec.append(&mut vec2);
+        vec
     }
 }
 
@@ -260,22 +220,12 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     #[inline]
     fn store_value_on_insert(&mut self, key_offset: u64, value: &[u8]) -> Result<u64> {
-        if let Some((r_key, r_val)) = self.dat_file.read_record(key_offset)? {
-            if r_val.len() == value.len() {
-                if r_val != value {
-                    self.dat_file.write_record(key_offset, &r_key, value)?;
-                    self.dirty = true;
-                }
-            } else {
-                let _reserve_len = self.dat_file.delete_record(key_offset)?;
-                self.unu_file.add_unu(key_offset)?;
-                let new_key_offset = self.dat_file.add_record(&r_key, value)?;
-                return Ok(new_key_offset);
-            }
+        if let Some(r_key) = self.dat_file.read_record_key(key_offset)? {
+            let new_key_offset = self.dat_file.write_record(key_offset, &r_key, value)?;
+            Ok(new_key_offset)
         } else {
             panic!("dat_file.read_record({})", key_offset);
         }
-        Ok(key_offset)
     }
     #[inline]
     fn balance_on_insert(
@@ -351,12 +301,16 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         Ok(node)
     }
     fn delete_at(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
+        let key_offset = node.keys[i];
+        debug_assert!(key_offset != 0, "key_offset: {} != 0", key_offset);
+        {
+            self.clear_key_cache(key_offset);
+            self.dat_file.delete_record(key_offset)?;
+        }
         let node_offset1 = node.downs[i];
         if node_offset1 == 0 {
             let _key_offset = node.keys.remove(i);
             let _node_offset = node.downs.remove(i);
-            #[cfg(feature = "key_cache")]
-            self.clear_key_cache(_key_offset);
             let new_node = self.idx_file.write_node(node)?;
             Ok(new_node)
         } else {
@@ -575,7 +529,6 @@ impl<KT: FileDbXxxInnerKT> DbXxx<KT> for FileDbXxxInner<KT> {
             // save all data and meta
             self.dat_file.sync_all()?;
             self.idx_file.sync_all()?;
-            self.unu_file.sync_all()?;
             self.dirty = false;
         }
         Ok(())
@@ -585,7 +538,6 @@ impl<KT: FileDbXxxInnerKT> DbXxx<KT> for FileDbXxxInner<KT> {
             // save all data
             self.dat_file.sync_data()?;
             self.idx_file.sync_data()?;
-            self.unu_file.sync_data()?;
             self.dirty = false;
         }
         Ok(())

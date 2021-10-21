@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use super::super::KeyType;
+use super::super::{CountOfPerSize, KeyType};
 use super::dat;
 use super::vfile::{VarCursor, VarFile};
 use std::cell::RefCell;
@@ -23,7 +23,8 @@ impl IdxFile {
             .write(true)
             .create(true)
             .open(pb)?;
-        let mut file = VarFile::with_capacity(16, 1024, std_file)?;
+        //let mut file = VarFile::with_capacity(16, 1024, std_file)?;
+        let mut file = VarFile::new(std_file)?;
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
         if len == 0 {
@@ -49,6 +50,11 @@ impl IdxFile {
     pub fn clear_buf(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         locked.0.clear_buf()
+    }
+    #[cfg(feature = "buf_stats")]
+    pub fn statistics(&self) -> Vec<(String, i64)> {
+        let locked = self.0.borrow();
+        locked.0.statistics()
     }
     //
     pub fn read_top_node(&self) -> Result<IdxNode> {
@@ -111,7 +117,8 @@ impl IdxFile {
         idx_to_graph_string(&mut locked.0, "", &top_node)
     }
     pub fn to_graph_string_with_key_string<KT>(&self, dbxxx: &FileDbXxxInner<KT>) -> Result<String>
-        where KT : FileDbXxxInnerKT + std::fmt::Display,
+    where
+        KT: FileDbXxxInnerKT + std::fmt::Display,
     {
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
@@ -418,20 +425,36 @@ impl IdxFile {
         }
         Ok(vec)
     }
-    pub fn count_of_used_node(&self) -> Result<Vec<(usize, u64)>> {
-        let sz_ary = NODE_SIZE_ARY;
-        //
-        let mut vec = Vec::new();
-        for node_size in sz_ary {
+    pub fn count_of_used_node<F>(
+        &self,
+        read_record_size_func: F,
+    ) -> Result<(CountOfPerSize, CountOfPerSize)>
+    where
+        F: Fn(u64) -> Result<usize> + std::marker::Copy,
+    {
+        let mut node_vec = Vec::new();
+        for node_size in NODE_SIZE_ARY {
             let cnt = 0;
-            vec.push((node_size, cnt));
+            node_vec.push((node_size, cnt));
+        }
+        //
+        let mut record_vec = Vec::new();
+        for record_size in super::dat::REC_SIZE_ARY {
+            let cnt = 0;
+            record_vec.push((record_size, cnt));
         }
         //
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
-        idx_count_of_used_node(&mut locked.0, &top_node, &mut vec)?;
+        idx_count_of_used_node(
+            &mut locked.0,
+            &top_node,
+            &mut node_vec,
+            &mut record_vec,
+            read_record_size_func,
+        )?;
         //
-        Ok(vec)
+        Ok((record_vec, node_vec))
     }
 }
 
@@ -764,7 +787,7 @@ used node:
 */
 
 fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
-    let mut buff_cursor = VarCursor::with_capacity(9 * (7 + 8));
+    let mut buff_cursor = VarCursor::with_capacity(9 * (2 * NODE_SLOTS_MAX as usize - 1));
     //
     let key_count = node.keys.len();
     buff_cursor.write_node_size(key_count)?;
@@ -908,7 +931,7 @@ fn idx_to_graph_string_with_key_string<KT>(
     dbxxx: &FileDbXxxInner<KT>,
 ) -> Result<String>
 where
-    KT : FileDbXxxInnerKT + std::fmt::Display,
+    KT: FileDbXxxInnerKT + std::fmt::Display,
 {
     let mut gs = format!(
         "{}{}:0x{:04x},{03}\n",
@@ -940,12 +963,8 @@ where
         if node_offset != 0 {
             let node = idx_read_node(file, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
-            let gs0 = idx_to_graph_string_with_key_string(
-                file,
-                &format!("{}    ", head),
-                &node,
-                dbxxx,
-            )?;
+            let gs0 =
+                idx_to_graph_string_with_key_string(file, &format!("{}    ", head), &node, dbxxx)?;
             gs += &gs0;
         }
     }
@@ -954,28 +973,41 @@ where
     Ok(gs)
 }
 
-fn idx_count_of_used_node(
+fn idx_count_of_used_node<F>(
     file: &mut VarFile,
     node: &IdxNode,
-    vec: &mut Vec<(usize, u64)>,
-) -> Result<()> {
-    let sz_idx = vec.iter().position(|v| v.0 == node.size).unwrap();
-    vec[sz_idx].1 += 1;
+    node_vec: &mut Vec<(usize, u64)>,
+    record_vec: &mut Vec<(usize, u64)>,
+    read_record_size_func: F,
+) -> Result<()>
+where
+    F: Fn(u64) -> Result<usize> + Copy,
+{
+    let sz_idx = node_vec.iter().position(|v| v.0 == node.size).unwrap();
+    node_vec[sz_idx].1 += 1;
     //
     let mut i = node.downs.len() - 1;
     let node_offset = node.downs[i];
     if node_offset != 0 {
         let node = idx_read_node(file, node_offset)
             .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
-        idx_count_of_used_node(file, &node, vec)?;
+        idx_count_of_used_node(file, &node, node_vec, record_vec, read_record_size_func)?;
     }
     while i > 0 {
         i -= 1;
+        //
+        let key_offset = node.keys[i];
+        if key_offset != 0 {
+            let record_size = read_record_size_func(key_offset)?;
+            let sz_idx = record_vec.iter().position(|v| v.0 == record_size).unwrap();
+            record_vec[sz_idx].1 += 1;
+        }
+        //
         let node_offset = node.downs[i];
         if node_offset != 0 {
             let node = idx_read_node(file, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
-            idx_count_of_used_node(file, &node, vec)?;
+            idx_count_of_used_node(file, &node, node_vec, record_vec, read_record_size_func)?;
         }
     }
     //

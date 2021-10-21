@@ -4,21 +4,17 @@ use std::path::{Path, PathBuf};
 
 use super::{FileDbList, FileDbMap, FileDbNode};
 
-//pub(crate) mod dblist;
-//pub(crate) mod dbmap;
 pub(crate) mod dbxxx;
 
 mod dat;
 mod idx;
-mod unu;
 
 mod buf;
 mod vfile;
 
 #[cfg(feature = "vf_vu64")]
-mod vu64;
+pub mod vu64;
 
-#[cfg(feature = "key_cache")]
 mod kc;
 
 #[derive(Debug)]

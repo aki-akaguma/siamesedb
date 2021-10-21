@@ -19,16 +19,66 @@ impl KeyType {
 }
 
 mod inner;
-//use inner::dblist::FileDbListInner;
-//use inner::dbmap::FileDbMapInner;
-use inner::dbxxx::FileDbXxxInner;
+use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use inner::FileDbInner;
+#[cfg(feature = "vf_vu64")]
+use inner::vu64;
 
 use super::DbXxx;
 
-//type FileDbMapInner22 = FileDbMapInner;
-type FileDbMapInner22 = FileDbXxxInner<String>;
-type FileDbListInner22 = FileDbXxxInner<u64>;
+type CountOfPerSize = Vec<(usize, u64)>;
+
+type FileDbMapInner = FileDbXxxInner<String>;
+type FileDbListInner = FileDbXxxInner<u64>;
+
+impl FileDbXxxInnerKT for String {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        std::cmp::Ord::cmp(self, other)
+    }
+    fn as_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+    fn from(bytes: &[u8]) -> Self {
+        String::from_utf8_lossy(bytes).to_string()
+    }
+}
+
+#[cfg(feature = "vf_u32u32")]
+use std::convert::TryInto;
+
+#[cfg(feature = "vf_u64u64")]
+use std::convert::TryInto;
+
+impl FileDbXxxInnerKT for u64 {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        std::cmp::Ord::cmp(self, other)
+    }
+    #[cfg(feature = "vf_u32u32")]
+    fn as_bytes(&self) -> Vec<u8> {
+        (*self as u32).to_le_bytes().to_vec()
+    }
+    #[cfg(feature = "vf_u32u32")]
+    fn from(bytes: &[u8]) -> Self {
+        debug_assert!(bytes.len() == 4, "bytes.len():{} == 4", bytes.len());
+        u32::from_le_bytes(bytes.try_into().unwrap()) as u64
+    }
+    #[cfg(feature = "vf_u64u64")]
+    fn as_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+    #[cfg(feature = "vf_u64u64")]
+    fn from(bytes: &[u8]) -> Self {
+        u64::from_le_bytes(bytes.try_into().unwrap())
+    }
+    #[cfg(feature = "vf_vu64")]
+    fn as_bytes(&self) -> Vec<u8> {
+        vu64::encode(*self).as_ref().to_vec()
+    }
+    #[cfg(feature = "vf_vu64")]
+    fn from(bytes: &[u8]) -> Self {
+        vu64::decode(bytes).unwrap()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct FileDb(Rc<RefCell<FileDbInner>>);
@@ -37,10 +87,10 @@ pub struct FileDb(Rc<RefCell<FileDbInner>>);
 pub struct FileDbNode(Weak<RefCell<FileDbInner>>);
 
 #[derive(Debug, Clone)]
-pub struct FileDbMap(Rc<RefCell<FileDbMapInner22>>);
+pub struct FileDbMap(Rc<RefCell<FileDbMapInner>>);
 
 #[derive(Debug, Clone)]
-pub struct FileDbList(Rc<RefCell<FileDbListInner22>>);
+pub struct FileDbList(Rc<RefCell<FileDbListInner>>);
 
 impl FileDb {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -125,7 +175,7 @@ impl FileDbNode {
 
 impl FileDbMap {
     pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbMap> {
-        Ok(Self(Rc::new(RefCell::new(FileDbMapInner22::open(
+        Ok(Self(Rc::new(RefCell::new(FileDbMapInner::open(
             parent, ks_name,
         )?))))
     }
@@ -161,12 +211,21 @@ impl FileDbMap {
         self.0.borrow().depth_of_node_tree()
     }
     /// count of free node
-    pub fn count_of_free_node(&self) -> Result<Vec<(usize, u64)>> {
+    pub fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         self.0.borrow().count_of_free_node()
     }
-    /// count of used node
-    pub fn count_of_used_node(&self) -> Result<Vec<(usize, u64)>> {
+    /// count of free record
+    pub fn count_of_free_record(&self) -> Result<CountOfPerSize> {
+        self.0.borrow().count_of_free_record()
+    }
+    /// count of used record and used node
+    pub fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
         self.0.borrow().count_of_used_node()
+    }
+    /// buffer statistics
+    #[cfg(feature = "buf_stats")]
+    pub fn statistics(&self) -> Vec<(String, i64)> {
+        self.0.borrow().statistics()
     }
 }
 
@@ -193,7 +252,7 @@ impl DbMap for FileDbMap {
 
 impl FileDbList {
     pub fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbList> {
-        Ok(Self(Rc::new(RefCell::new(FileDbListInner22::open(
+        Ok(Self(Rc::new(RefCell::new(FileDbListInner::open(
             parent, ks_name,
         )?))))
     }
@@ -229,12 +288,21 @@ impl FileDbList {
         self.0.borrow().depth_of_node_tree()
     }
     /// count of free node
-    pub fn count_of_free_node(&self) -> Result<Vec<(usize, u64)>> {
+    pub fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         self.0.borrow().count_of_free_node()
     }
-    /// count of used node
-    pub fn count_of_used_node(&self) -> Result<Vec<(usize, u64)>> {
+    /// count of free record
+    pub fn count_of_free_record(&self) -> Result<CountOfPerSize> {
+        self.0.borrow().count_of_free_record()
+    }
+    /// count of used record and used node
+    pub fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
         self.0.borrow().count_of_used_node()
+    }
+    /// buffer statistics
+    #[cfg(feature = "buf_stats")]
+    pub fn statistics(&self) -> Vec<(String, i64)> {
+        self.0.borrow().statistics()
     }
 }
 
@@ -262,7 +330,7 @@ mod debug {
     #[test]
     fn test_size_of() {
         use super::{FileDb, FileDbList, FileDbMap};
-        use super::{FileDbInner, FileDbListInner22, FileDbMapInner22};
+        use super::{FileDbInner, FileDbListInner, FileDbMapInner};
         //
         #[cfg(target_pointer_width = "64")]
         {
@@ -271,11 +339,8 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbList>(), 8);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 88);
-            #[cfg(not(feature = "key_cache"))]
-            assert_eq!(std::mem::size_of::<FileDbMapInner22>(), 64);
-            #[cfg(feature = "key_cache")]
-            assert_eq!(std::mem::size_of::<FileDbMapInner22>(), 88);
-            assert_eq!(std::mem::size_of::<FileDbListInner22>(), 88);
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 80);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 80);
         }
         //
         #[cfg(target_pointer_width = "32")]
@@ -285,11 +350,8 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbList>(), 4);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 44);
-            #[cfg(not(feature = "key_cache"))]
-            assert_eq!(std::mem::size_of::<FileDbMapInner22>(), 32);
-            #[cfg(feature = "key_cache")]
-            assert_eq!(std::mem::size_of::<FileDbMapInner22>(), 44);
-            assert_eq!(std::mem::size_of::<FileDbListInner22>(), 44);
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 44);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 44);
         }
     }
 }

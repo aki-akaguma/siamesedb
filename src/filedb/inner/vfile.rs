@@ -38,6 +38,7 @@ impl VarFile {
     }
     /// Creates a new VarFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
+    #[allow(dead_code)]
     pub fn with_capacity(max_num_chunks: u16, chunk_size: u32, file: File) -> Result<VarFile> {
         Ok(Self {
             buf_file: BufFile::with_capacity(max_num_chunks, chunk_size, file)?,
@@ -54,6 +55,11 @@ impl VarFile {
     ///
     pub fn clear_buf(&mut self) -> Result<()> {
         self.buf_file.clear_buf()
+    }
+    ///
+    #[cfg(feature = "buf_stats")]
+    pub fn statistics(&self) -> Vec<(String, i64)> {
+        self.buf_file.statistics()
     }
 }
 
@@ -187,6 +193,27 @@ impl VarCursor {
 #[cfg(feature = "vf_u32u32")]
 impl VarFile {
     #[inline]
+    pub fn read_record_size(&mut self) -> Result<usize> {
+        Ok(self.read_u32_le()? as usize)
+    }
+    #[inline]
+    pub fn read_record_offset(&mut self) -> Result<u64> {
+        Ok(self.read_u32_le()? as u64)
+    }
+    #[inline]
+    pub fn write_record_size(&mut self, rec_sz: usize) -> Result<()> {
+        debug_assert!(rec_sz <= u32::MAX as usize);
+        self.write_u32_le(rec_sz as u32)
+    }
+    #[inline]
+    pub fn write_record_offset(&mut self, offset: u64) -> Result<()> {
+        self.write_u32_le(offset as u32)
+    }
+}
+
+#[cfg(feature = "vf_u32u32")]
+impl VarFile {
+    #[inline]
     pub fn read_key_len(&mut self) -> Result<u64> {
         Ok(self.read_u32_le()? as u64)
     }
@@ -195,12 +222,12 @@ impl VarFile {
         Ok(self.read_u32_le()? as u64)
     }
     #[inline]
-    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+    pub fn _write_key_len(&mut self, key_len: usize) -> Result<()> {
         debug_assert!(key_len <= u32::MAX as usize);
         self.write_u32_le(key_len as u32)
     }
     #[inline]
-    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+    pub fn _write_value_len(&mut self, value_len: usize) -> Result<()> {
         debug_assert!(value_len <= u32::MAX as usize);
         self.write_u32_le(value_len as u32)
     }
@@ -240,6 +267,37 @@ impl VarCursor {
         debug_assert!(node_offset <= u32::MAX as u64);
         self.write_u32_le(node_offset as u32)
     }
+    #[inline]
+    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+        debug_assert!(key_len <= u32::MAX as usize);
+        self.write_u32_le(key_len as u32)
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+        debug_assert!(value_len <= u32::MAX as usize);
+        self.write_u32_le(value_len as u32)
+    }
+}
+
+#[cfg(feature = "vf_u64u64")]
+impl VarFile {
+    #[inline]
+    pub fn read_record_size(&mut self) -> Result<usize> {
+        Ok(self.read_u64_le()? as usize)
+    }
+    #[inline]
+    pub fn read_record_offset(&mut self) -> Result<u64> {
+        self.read_u64_le()
+    }
+    #[inline]
+    pub fn write_record_size(&mut self, rec_sz: usize) -> Result<()> {
+        debug_assert!(rec_sz <= u64::MAX as usize);
+        self.write_u64_le(rec_sz as u64)
+    }
+    #[inline]
+    pub fn write_record_offset(&mut self, offset: u64) -> Result<()> {
+        self.write_u64_le(offset)
+    }
 }
 
 #[cfg(feature = "vf_u64u64")]
@@ -253,12 +311,12 @@ impl VarFile {
         self.read_u64_le()
     }
     #[inline]
-    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+    pub fn _write_key_len(&mut self, key_len: usize) -> Result<()> {
         debug_assert!(key_len <= u64::MAX as usize);
         self.write_u64_le(key_len as u64)
     }
     #[inline]
-    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+    pub fn _write_value_len(&mut self, value_len: usize) -> Result<()> {
         debug_assert!(value_len <= u64::MAX as usize);
         self.write_u64_le(value_len as u64)
     }
@@ -294,6 +352,37 @@ impl VarCursor {
     pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
         self.write_u64_le(node_offset)
     }
+    #[inline]
+    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+        debug_assert!(key_len <= u64::MAX as usize);
+        self.write_u64_le(key_len as u64)
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+        debug_assert!(value_len <= u64::MAX as usize);
+        self.write_u64_le(value_len as u64)
+    }
+}
+
+#[cfg(feature = "vf_vu64")]
+impl VarFile {
+    #[inline]
+    pub fn read_record_size(&mut self) -> Result<usize> {
+        vu64::decode_vu64(&mut self.buf_file).map(|o| o as usize)
+    }
+    #[inline]
+    pub fn read_record_offset(&mut self) -> Result<u64> {
+        self.read_u64_le()
+    }
+    #[inline]
+    pub fn write_record_size(&mut self, rec_sz: usize) -> Result<()> {
+        debug_assert!(rec_sz <= u64::MAX as usize);
+        self.write_all(vu64::encode(rec_sz as u64).as_ref())
+    }
+    #[inline]
+    pub fn write_record_offset(&mut self, offset: u64) -> Result<()> {
+        self.write_u64_le(offset)
+    }
 }
 
 #[cfg(feature = "vf_vu64")]
@@ -307,12 +396,12 @@ impl VarFile {
         vu64::decode_vu64(&mut self.buf_file)
     }
     #[inline]
-    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+    pub fn _write_key_len(&mut self, key_len: usize) -> Result<()> {
         debug_assert!(key_len <= u64::MAX as usize);
         self.write_all(vu64::encode(key_len as u64).as_ref())
     }
     #[inline]
-    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+    pub fn _write_value_len(&mut self, value_len: usize) -> Result<()> {
         debug_assert!(value_len <= u64::MAX as usize);
         self.write_all(vu64::encode(value_len as u64).as_ref())
     }
@@ -348,6 +437,16 @@ impl VarCursor {
     pub fn write_node_offset(&mut self, node_offset: u64) -> Result<()> {
         self.write_all(vu64::encode(node_offset).as_ref())
     }
+    #[inline]
+    pub fn write_key_len(&mut self, key_len: usize) -> Result<()> {
+        debug_assert!(key_len <= u64::MAX as usize);
+        self.write_all(vu64::encode(key_len as u64).as_ref())
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: usize) -> Result<()> {
+        debug_assert!(value_len <= u64::MAX as usize);
+        self.write_all(vu64::encode(value_len as u64).as_ref())
+    }
 }
 
 //--
@@ -357,6 +456,7 @@ mod debug {
         use super::VarFile;
         //
         #[cfg(target_pointer_width = "64")]
+        #[cfg(not(feature = "buf_stats"))]
         {
             #[cfg(feature = "vf_u32u32")]
             assert_eq!(std::mem::size_of::<VarFile>(), 120);
@@ -366,6 +466,28 @@ mod debug {
             assert_eq!(std::mem::size_of::<VarFile>(), 120);
         }
         #[cfg(target_pointer_width = "32")]
+        #[cfg(not(feature = "buf_stats"))]
+        {
+            #[cfg(feature = "vf_u32u32")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+            #[cfg(feature = "vf_u64u64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+            #[cfg(feature = "vf_vu64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+        }
+        //
+        #[cfg(target_pointer_width = "64")]
+        #[cfg(feature = "buf_stats")]
+        {
+            #[cfg(feature = "vf_u32u32")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 128);
+            #[cfg(feature = "vf_u64u64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 128);
+            #[cfg(feature = "vf_vu64")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 128);
+        }
+        #[cfg(target_pointer_width = "32")]
+        #[cfg(feature = "buf_stats")]
         {
             #[cfg(feature = "vf_u32u32")]
             assert_eq!(std::mem::size_of::<VarFile>(), 76);

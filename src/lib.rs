@@ -48,7 +48,7 @@ use shamdb::open_file;
 use shamdb::DbList;
 
 fn main() -> std::io::Result<()> {
-    let db_name = "target/tmp/doc-test1.shamdb";
+    let db_name = "target/tmp/doc-test2.shamdb";
     // remove database
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
