@@ -217,6 +217,10 @@ fn free_rec_list_offset_of_header(_rec_size: usize) -> u64 {
     REC_SIZE_FREE_OFFSET[REC_SIZE_FREE_OFFSET.len() - 1] as u64
 }
 
+fn is_large_record_size(record_size: usize) -> bool {
+    record_size >= REC_SIZE_ARY[REC_SIZE_ARY.len() - 1]
+}
+
 fn record_size_roudup(record_size: usize) -> usize {
     debug_assert!(record_size > 0, "record_size: {} > 0", record_size);
     for &n_sz in REC_SIZE_ARY.iter().take(REC_SIZE_ARY.len() - 1) {
@@ -224,8 +228,8 @@ fn record_size_roudup(record_size: usize) -> usize {
             return n_sz;
         }
     }
-    eprintln!("WARN:: record is over size: {}", record_size);
-    record_size
+    //eprintln!("WARN:: record is over size: {}", record_size);
+    ((record_size + 511) / 512) * 512
 }
 
 fn dat_file_read_free_record_offset(file: &mut VarFile, record_size: usize) -> Result<u64> {
@@ -276,26 +280,58 @@ fn dat_file_count_of_free_list(file: &mut VarFile, new_record_size: usize) -> Re
 
 fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: usize) -> Result<u64> {
     let free_1st = dat_file_read_free_record_offset(file, new_record_size)?;
-    if free_1st != 0 {
-        let free_next = {
-            let _ = file.seek(SeekFrom::Start(free_1st))?;
-            let (free_next, node_len) = {
-                let node_len = file.read_record_size()?;
-                debug_assert!(node_len > 0x7F);
-                let node_offset = file.read_record_offset()?;
-                (node_offset, node_len & 0x7F)
+    if !is_large_record_size(new_record_size) {
+        if free_1st != 0 {
+            let free_next = {
+                let _ = file.seek(SeekFrom::Start(free_1st))?;
+                let (free_next, node_len) = {
+                    let node_len = file.read_record_size()?;
+                    debug_assert!(node_len > 0x7F);
+                    let node_offset = file.read_record_offset()?;
+                    (node_offset, node_len & 0x7F)
+                };
+                //
+                let _ = file.seek(SeekFrom::Start(free_1st))?;
+                file.write_record_size(node_len)?;
+                let buff = vec![0; node_len];
+                file.write_all(&buff)?;
+                //
+                free_next
             };
-            //
-            let _ = file.seek(SeekFrom::Start(free_1st))?;
-            file.write_record_size(node_len)?;
-            let buff = vec![0; node_len];
-            file.write_all(&buff)?;
-            //
-            free_next
-        };
-        dat_file_write_free_record_offset(file, new_record_size, free_next)?;
+            dat_file_write_free_record_offset(file, new_record_size, free_next)?;
+        }
+        Ok(free_1st)
+    } else {
+            let mut free_prev = 0;
+            let mut free_curr = free_1st;
+            while free_curr != 0 {
+                let _ = file.seek(SeekFrom::Start(free_curr))?;
+                let (free_next, record_len) = {
+                    let record_len = file.read_record_size()?;
+                    debug_assert!(record_len > 0x7F);
+                    let record_offset = file.read_record_offset()?;
+                    (record_offset, record_len & 0x7F)
+                };
+                if new_record_size >= record_len {
+                    if free_prev > 0 {
+                        let _ = file.seek(SeekFrom::Start(free_prev))?;
+                        let _record_len = file.read_record_size()?;
+                        file.write_record_offset(free_next)?;
+                    } else if free_prev == 0 {
+                        dat_file_write_free_record_offset(file, new_record_size, free_next)?;
+                    }
+                    //
+                    let _ = file.seek(SeekFrom::Start(free_curr))?;
+                    file.write_record_size(record_len)?;
+                    let buff = vec![0; record_len];
+                    file.write_all(&buff)?;
+                    return Ok(free_curr);
+                }
+                free_prev = free_curr;
+                free_curr = free_next;
+            }
+            return Ok(free_curr);
     }
-    Ok(free_1st)
 }
 
 fn dat_file_push_free_list(

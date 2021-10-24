@@ -18,10 +18,33 @@ fn _test_a1() {
     // 1m
     //
     /*
+    */
     #[rustfmt::skip]
     _test_db_map(
-        TestC { max_cnt: 1_000_000, f_get: false, f_delete: false, ..Default::default() },
+        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10, ..Default::default() },
         CheckC { check: true, ..Default::default() },
+        /*
+        |i: usize| { format!("key{:01}", i) },
+        |i: usize| { format!("value{:01}", i) },
+        */
+        /*
+        */
+        |i: usize| { format!("key{:01}", i).repeat(25) },
+        |i: usize| { format!("value{:01}", i).repeat(60) },
+    );
+    /*
+    #[rustfmt::skip]
+    _test_db_list(
+        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10, ..Default::default() },
+        CheckC { check: true, ..Default::default() },
+        /*
+        |i: usize| { i as u64 },
+        |i: usize| { format!("value{:01}", i) },
+        */
+        /*
+        */
+        |i: usize| { i as u64 },
+        |i: usize| { format!("value{:01}", i).repeat(70) },
     );
     */
     /*
@@ -48,46 +71,15 @@ fn _test_a1() {
     56.70user 0.97system 0:58.23elapsed 99%CPU (0avgtext+0avgdata 2304maxresident)k
     0inputs+141216outputs (0major+213minor)pagefaults 0swaps
     */
+    /*
     #[rustfmt::skip]
     _test_db_map(
-        TestC { max_cnt: 1_000_000, f_get: true, f_delete: true },
+        TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
         CheckC { check: true, ..Default::default() },
+        |i: usize| { format!("key{:01}", i) },
+        |i: usize| { format!("value{:01}", i) },
     );
-    /*
-     */
-    /*
-    start put
-    finish put: 28.611µs/op
-    record free: [(15, 0), (23, 0), (31, 0), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node free: [(31, 524), (71, 0), (103, 1), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-    record used: [(15, 100), (23, 999900), (31, 9000000), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node used: [(31, 0), (71, 1326542), (103, 235357), (143, 29382), (175, 0), (215, 0), (231, 0), (256, 0)]
-    db_map.is_balanced(): true
-    db_map.is_dense(): true
-    db_map.depth_of_node_tree(): 8
-    start get
-    finish get: 10.881µs/op
-    start delete
-    finish delete: 26.525µs/op
-    record free: [(15, 100), (23, 999900), (31, 9000000), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node free: [(31, 524), (71, 1326542), (103, 235357), (143, 29382), (175, 0), (215, 0), (231, 0), (256, 0)]
-    record used: [(15, 0), (23, 0), (31, 0), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node used: [(31, 0), (71, 0), (103, 1), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-    db_map.is_balanced(): true
-    db_map.is_dense(): true
-    db_map.depth_of_node_tree(): 1
-    658.32user 12.09system 11:13.59elapsed 99%CPU (0avgtext+0avgdata 2296maxresident)k
-    0inputs+2308000outputs (0major+217minor)pagefaults 0swaps
     */
-    /*
-        #[rustfmt::skip]
-        _test_db_map(
-            TestC { max_cnt: 10_000_000, f_get: true, f_delete: true, ..Default::default() },
-            CheckC { check: true, ..Default::default() },
-        );
-    */
-    /*
-     */
 }
 
 fn _test_a2() {
@@ -100,6 +92,8 @@ fn _test_a2() {
     _test_db_map(
         TestC { max_cnt: 10_000, f_get: true, f_delete: true, ..Default::default() },
         CheckC { check: false, ..Default::default() },
+        |i: usize| { format!("key{:01}", i) },
+        |i: usize| { format!("value{:01}", i) },
     );
     */
     //
@@ -412,9 +406,10 @@ struct TestC {
     max_cnt: usize,
     f_get: bool,
     f_delete: bool,
+    f_repeat: usize,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 struct CheckC {
     check: bool,
     f_mst: bool,
@@ -423,103 +418,130 @@ struct CheckC {
 
 use std::convert::TryInto;
 
-fn _test_db_map(test_cnf: TestC, check_cnf: CheckC) {
+fn _test_db_map<FK, FV>(test_cnf: TestC, check_cnf: CheckC, fmt_key_func: FK, fmt_val_func: FV)
+where
+    FK: Fn(usize) -> String,
+    FV: Fn(usize) -> String,
+{
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = shamdb::open_file(db_name).unwrap();
     let mut db_map = db.db_map("some_map1").unwrap();
     //
-    println!("start put");
-    let instant_st = std::time::Instant::now();
-    for i in 0..test_cnf.max_cnt {
-        let key = format!("key{:01}", i);
-        let val = format!("value{:01}", i);
-        db_map.put_string(&key, &val).unwrap();
-    }
-    let instant_ed = std::time::Instant::now();
-    let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
-    println!("finish put: {:?}/op", instant_per_op);
-    //
-    db_map.sync_data().unwrap();
-    //
-    if check_cnf.check {
-        _print_check_db_map(&db_map, check_cnf.clone());
-    }
-    //
-    if test_cnf.f_get {
-        println!("start get");
+    for _ in 0..test_cnf.f_repeat.max(1) {
+        println!("start put");
         let instant_st = std::time::Instant::now();
         for i in 0..test_cnf.max_cnt {
-            let key = format!("key{:01}", i);
-            let val = format!("value{:01}", i);
-            let s = db_map.get_string(&key).unwrap();
-            assert!(val == s.unwrap());
+            let key = fmt_key_func(i);
+            let val = fmt_val_func(i);
+            db_map.put_string(&key, &val).unwrap();
         }
         let instant_ed = std::time::Instant::now();
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
-        println!("finish get: {:?}/op", instant_per_op);
-    }
-    //
-    if test_cnf.f_delete {
-        println!("start delete");
-        let instant_st = std::time::Instant::now();
-        for i in 0..test_cnf.max_cnt {
-            let key = format!("key{:01}", i);
-            db_map.delete(&key).unwrap();
-        }
-        let instant_ed = std::time::Instant::now();
-        let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
-        println!("finish delete: {:?}/op", instant_per_op);
+        println!("finish put: {:?}/op", instant_per_op);
         //
         db_map.sync_data().unwrap();
         //
         if check_cnf.check {
-            _print_check_db_map(&db_map, check_cnf);
+            _print_check_db_map(&db_map, check_cnf.clone());
+        }
+        //
+        if test_cnf.f_get {
+            println!("start get");
+            let instant_st = std::time::Instant::now();
+            for i in 0..test_cnf.max_cnt {
+                let key = fmt_key_func(i);
+                let val = fmt_val_func(i);
+                let s = db_map.get_string(&key).unwrap();
+                assert!(Some(val) == s, "key: {}, s: {:?}", key, s);
+            }
+            let instant_ed = std::time::Instant::now();
+            let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
+            println!("finish get: {:?}/op", instant_per_op);
+        }
+        //
+        if test_cnf.f_delete {
+            println!("start delete");
+            let instant_st = std::time::Instant::now();
+            for i in 0..test_cnf.max_cnt {
+                let key = fmt_key_func(i);
+                db_map.delete(&key).unwrap();
+            }
+            let instant_ed = std::time::Instant::now();
+            let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
+            println!("finish delete: {:?}/op", instant_per_op);
+            //
+            db_map.sync_data().unwrap();
+            //
+            if check_cnf.check {
+                _print_check_db_map(&db_map, check_cnf);
+            }
         }
     }
 }
 
-fn _test_db_list(test_cnf: TestC, check_cnf: CheckC) {
+fn _test_db_list<FK, FV>(test_cnf: TestC, check_cnf: CheckC, fmt_key_func: FK, fmt_val_func: FV)
+where
+    FK: Fn(usize) -> u64,
+    FV: Fn(usize) -> String,
+{
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = shamdb::open_file(db_name).unwrap();
     let mut db_list = db.db_list("some_list1").unwrap();
     //
-    println!("start put");
-    for i in 0..test_cnf.max_cnt {
-        let key = i as u64;
-        let val = format!("value{:01}", i);
-        db_list.put_string(key, &val).unwrap();
-    }
-    db_list.sync_data().unwrap();
-    println!("finish put");
-    //
-    if check_cnf.check {
-        _print_check_db_list(&db_list, check_cnf.clone());
-    }
-    //
-    if test_cnf.f_get {
-        println!("start get");
+    for _ in 0..test_cnf.f_repeat.max(1) {
+        println!("start put");
+        let instant_st = std::time::Instant::now();
         for i in 0..test_cnf.max_cnt {
+            /*
             let key = i as u64;
             let val = format!("value{:01}", i);
-            let s = db_list.get_string(key).unwrap();
-            assert!(val == s.unwrap());
+            */
+            let key = fmt_key_func(i);
+            let val = fmt_val_func(i);
+            db_list.put_string(key, &val).unwrap();
         }
-        println!("finish get");
-    }
-    //
-    if test_cnf.f_delete {
-        println!("start delete");
-        for i in 0..test_cnf.max_cnt {
-            let key = i as u64;
-            db_list.delete(key).unwrap();
-        }
+        let instant_ed = std::time::Instant::now();
+        let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
+        println!("finish put: {:?}/op", instant_per_op);
+        //
         db_list.sync_data().unwrap();
-        println!("fin delete");
         //
         if check_cnf.check {
-            _print_check_db_list(&db_list, check_cnf);
+            _print_check_db_list(&db_list, check_cnf.clone());
+        }
+        //
+        if test_cnf.f_get {
+            println!("start get");
+            let instant_st = std::time::Instant::now();
+            for i in 0..test_cnf.max_cnt {
+                let key = fmt_key_func(i);
+                let val = fmt_val_func(i);
+                let s = db_list.get_string(key).unwrap();
+                assert!(Some(val) == s, "key: {}, s: {:?}", key, s);
+            }
+            let instant_ed = std::time::Instant::now();
+            let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
+            println!("finish get: {:?}/op", instant_per_op);
+        }
+        //
+        if test_cnf.f_delete {
+            println!("start delete");
+            let instant_st = std::time::Instant::now();
+            for i in 0..test_cnf.max_cnt {
+                let key = fmt_key_func(i);
+                db_list.delete(key).unwrap();
+            }
+            let instant_ed = std::time::Instant::now();
+            let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
+            println!("finish delete: {:?}/op", instant_per_op);
+            //
+            db_list.sync_data().unwrap();
+            //
+            if check_cnf.check {
+                _print_check_db_list(&db_list, check_cnf);
+            }
         }
     }
 }
@@ -529,9 +551,9 @@ fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
         println!("{}", db_map.to_graph_string_with_key_string().unwrap());
     }
     println!("record free: {:?}", db_map.count_of_free_record().unwrap());
-    println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     let (rec_v, node_v) = db_map.count_of_used_node().unwrap();
     println!("record used: {:?}", rec_v);
+    println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     if check_cnf.f_mst {
@@ -551,9 +573,9 @@ fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {
         println!("{}", db_list.to_graph_string_with_key_string().unwrap());
     }
     println!("record free: {:?}", db_list.count_of_free_record().unwrap());
-    println!("node free: {:?}", db_list.count_of_free_node().unwrap());
     let (rec_v, node_v) = db_list.count_of_used_node().unwrap();
     println!("record used: {:?}", rec_v);
+    println!("node free: {:?}", db_list.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
     println!("db_list.is_balanced(): {}", db_list.is_balanced().unwrap());
     if check_cnf.f_mst {

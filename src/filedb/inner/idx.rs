@@ -983,8 +983,15 @@ fn idx_count_of_used_node<F>(
 where
     F: Fn(u64) -> Result<usize> + Copy,
 {
-    let sz_idx = node_vec.iter().position(|v| v.0 == node.size).unwrap();
-    node_vec[sz_idx].1 += 1;
+    match node_vec.iter().position(|v| v.0 == node.size) {
+        Some(sz_idx) => {
+            node_vec[sz_idx].1 += 1;
+        }
+        None => {
+            let last = node_vec.len() - 1;
+            node_vec[last].1 += 1;
+        }
+    }
     //
     let mut i = node.downs.len() - 1;
     let node_offset = node.downs[i];
@@ -999,8 +1006,15 @@ where
         let key_offset = node.keys[i];
         if key_offset != 0 {
             let record_size = read_record_size_func(key_offset)?;
-            let sz_idx = record_vec.iter().position(|v| v.0 == record_size).unwrap();
-            record_vec[sz_idx].1 += 1;
+            match record_vec.iter().position(|v| v.0 == record_size) {
+                Some(sz_idx) => {
+                    record_vec[sz_idx].1 += 1;
+                }
+                None => {
+                    let last = record_vec.len() - 1;
+                    record_vec[last].1 += 1;
+                }
+            }
         }
         //
         let node_offset = node.downs[i];
