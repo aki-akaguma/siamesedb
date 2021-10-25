@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 use std::io::Result;
 use std::rc::Rc;
 
+#[cfg(feature = "record_size_stats")]
+use super::super::RecordSizeStats;
+
 pub trait FileDbXxxInnerKT {
     fn as_bytes(&self) -> Vec<u8>;
     fn cmp(&self, other: &Self) -> std::cmp::Ordering;
@@ -164,11 +167,16 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
     }
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
-        let mut vec = self.dat_file.statistics();
-        let mut vec2 = self.idx_file.statistics();
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
+        let mut vec = self.dat_file.buf_stats();
+        let mut vec2 = self.idx_file.buf_stats();
         vec.append(&mut vec2);
         vec
+    }
+    /// record size statistics
+    #[cfg(feature = "record_size_stats")]
+    pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
+        self.idx_file.record_size_stats(|off| self.load_record_size(off))
     }
 }
 

@@ -195,7 +195,7 @@ impl BufFile {
     }
     ///
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let mut vec = Vec::new();
         vec.push((
             "BufFile.stats_min_uses".to_string(),

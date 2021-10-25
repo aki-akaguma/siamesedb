@@ -44,9 +44,9 @@ impl DatFile {
         locked.0.clear_buf()
     }
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = self.0.borrow();
-        locked.0.statistics()
+        locked.0.buf_stats()
     }
     //
     pub(crate) fn read_record_size(&self, offset: u64) -> Result<usize> {
@@ -302,36 +302,44 @@ fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: usize) -> Result<
         }
         Ok(free_1st)
     } else {
-            let mut free_prev = 0;
-            let mut free_curr = free_1st;
-            while free_curr != 0 {
-                let _ = file.seek(SeekFrom::Start(free_curr))?;
-                let (free_next, record_len) = {
-                    let record_len = file.read_record_size()?;
-                    debug_assert!(record_len > 0x7F);
-                    let record_offset = file.read_record_offset()?;
-                    (record_offset, record_len & 0x7F)
-                };
-                if new_record_size >= record_len {
-                    if free_prev > 0 {
-                        let _ = file.seek(SeekFrom::Start(free_prev))?;
-                        let _record_len = file.read_record_size()?;
-                        file.write_record_offset(free_next)?;
-                    } else if free_prev == 0 {
-                        dat_file_write_free_record_offset(file, new_record_size, free_next)?;
-                    }
-                    //
-                    let _ = file.seek(SeekFrom::Start(free_curr))?;
-                    file.write_record_size(record_len)?;
-                    let buff = vec![0; record_len];
-                    file.write_all(&buff)?;
-                    return Ok(free_curr);
-                }
-                free_prev = free_curr;
-                free_curr = free_next;
-            }
-            return Ok(free_curr);
+        dat_file_pop_free_list_large(file, new_record_size, free_1st)
     }
+}
+
+fn dat_file_pop_free_list_large(
+    file: &mut VarFile,
+    new_record_size: usize,
+    free_1st: u64,
+) -> Result<u64> {
+    let mut free_prev = 0;
+    let mut free_curr = free_1st;
+    while free_curr != 0 {
+        let _ = file.seek(SeekFrom::Start(free_curr))?;
+        let (free_next, record_len) = {
+            let record_len = file.read_record_size()?;
+            debug_assert!(record_len > 0x7F);
+            let record_offset = file.read_record_offset()?;
+            (record_offset, record_len & 0x7F)
+        };
+        if new_record_size >= record_len {
+            if free_prev > 0 {
+                let _ = file.seek(SeekFrom::Start(free_prev))?;
+                let _record_len = file.read_record_size()?;
+                file.write_record_offset(free_next)?;
+            } else {
+                dat_file_write_free_record_offset(file, new_record_size, free_next)?;
+            }
+            //
+            let _ = file.seek(SeekFrom::Start(free_curr))?;
+            file.write_record_size(record_len)?;
+            let buff = vec![0; record_len];
+            file.write_all(&buff)?;
+            return Ok(free_curr);
+        }
+        free_prev = free_curr;
+        free_curr = free_next;
+    }
+    Ok(free_curr)
 }
 
 fn dat_file_push_free_list(

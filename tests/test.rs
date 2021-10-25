@@ -27,6 +27,29 @@ mod test {
         let r = db_map.get_string("key3").unwrap();
         assert_eq!(r, None);
         //
+        // large data
+        let key = &"key9".repeat(25);
+        let val = &"value8".repeat(70);
+        let val2 = &"value9".repeat(70);
+        // insert
+        db_map.put_string(key, val).unwrap();
+        // get hits
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, Some(val.to_string()));
+        // delete
+        db_map.delete(key).unwrap();
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, None);
+        // insert
+        db_map.put_string(key, val2).unwrap();
+        // get hits
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, Some(val2.to_string()));
+        // delete
+        db_map.delete(key).unwrap();
+        let r = db_map.get_string(key).unwrap();
+        assert_eq!(r, None);
+        //
         db_map.sync_data().unwrap();
     }
     fn basic_test_list(db_list: &mut dyn DbList) {

@@ -28,6 +28,9 @@ use super::DbXxx;
 
 type CountOfPerSize = Vec<(usize, u64)>;
 
+#[cfg(feature = "record_size_stats")]
+type RecordSizeStats = Vec<(usize, u64)>;
+
 type FileDbMapInner = FileDbXxxInner<String>;
 type FileDbListInner = FileDbXxxInner<u64>;
 
@@ -216,8 +219,13 @@ impl FileDbMap {
     }
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
-        self.0.borrow().statistics()
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
+        self.0.borrow().buf_stats()
+    }
+    /// record size statistics
+    #[cfg(feature = "record_size_stats")]
+    pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
+        self.0.borrow().record_size_stats()
     }
 }
 
@@ -293,8 +301,13 @@ impl FileDbList {
     }
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
-        self.0.borrow().statistics()
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
+        self.0.borrow().buf_stats()
+    }
+    /// record size statistics
+    #[cfg(feature = "record_size_stats")]
+    pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
+        self.0.borrow().record_size_stats()
     }
 }
 

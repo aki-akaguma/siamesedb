@@ -18,10 +18,10 @@ fn _test_a1() {
     // 1m
     //
     /*
-    */
+     */
     #[rustfmt::skip]
     _test_db_map(
-        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10, ..Default::default() },
+        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10 },
         CheckC { check: true, ..Default::default() },
         /*
         |i: usize| { format!("key{:01}", i) },
@@ -443,7 +443,7 @@ where
         db_map.sync_data().unwrap();
         //
         if check_cnf.check {
-            _print_check_db_map(&db_map, check_cnf.clone());
+            _print_check_db_map(&db_map, check_cnf);
         }
         //
         if test_cnf.f_get {
@@ -509,7 +509,7 @@ where
         db_list.sync_data().unwrap();
         //
         if check_cnf.check {
-            _print_check_db_list(&db_list, check_cnf.clone());
+            _print_check_db_list(&db_list, check_cnf);
         }
         //
         if test_cnf.f_get {
@@ -565,7 +565,9 @@ fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
         db_map.depth_of_node_tree().unwrap()
     );
     #[cfg(feature = "buf_stats")]
-    println!("db_map.statistics(): {:?}", db_map.statistics());
+    println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
+    #[cfg(feature = "record_size_stats")]
+    println!("record_size_stats(): {:?}", db_map.record_size_stats().unwrap());
 }
 
 fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {
@@ -587,5 +589,5 @@ fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {
         db_list.depth_of_node_tree().unwrap()
     );
     #[cfg(feature = "buf_stats")]
-    println!("db_list.statistics(): {:?}", db_list.statistics());
+    println!("db_list.buf_stats(): {:?}", db_list.buf_stats());
 }

@@ -9,6 +9,9 @@ use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::rc::Rc;
 
+#[cfg(feature = "record_size_stats")]
+use super::super::RecordSizeStats;
+
 const IDX_HEADER_SZ: u64 = 128;
 
 #[derive(Debug, Clone)]
@@ -52,9 +55,9 @@ impl IdxFile {
         locked.0.clear_buf()
     }
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = self.0.borrow();
-        locked.0.statistics()
+        locked.0.buf_stats()
     }
     //
     pub fn read_top_node(&self) -> Result<IdxNode> {
@@ -455,6 +458,27 @@ impl IdxFile {
         )?;
         //
         Ok((record_vec, node_vec))
+    }
+    #[cfg(feature = "record_size_stats")]
+    pub fn record_size_stats<F>(
+        &self,
+        read_record_size_func: F,
+    ) -> Result<RecordSizeStats>
+    where
+        F: Fn(u64) -> Result<usize> + std::marker::Copy,
+    {
+        let mut record_vec = Vec::new();
+        //
+        let top_node = self.read_top_node()?;
+        let mut locked = self.0.borrow_mut();
+        idx_record_size_stats(
+            &mut locked.0,
+            &top_node,
+            &mut record_vec,
+            read_record_size_func,
+        )?;
+        //
+        Ok(record_vec)
     }
 }
 
@@ -1022,6 +1046,49 @@ where
             let node = idx_read_node(file, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
             idx_count_of_used_node(file, &node, node_vec, record_vec, read_record_size_func)?;
+        }
+    }
+    //
+    Ok(())
+}
+
+fn idx_record_size_stats<F>(
+    file: &mut VarFile,
+    node: &IdxNode,
+    record_vec: &mut Vec<(usize, u64)>,
+    read_record_size_func: F,
+) -> Result<()>
+where
+    F: Fn(u64) -> Result<usize> + Copy,
+{
+    let mut i = node.downs.len() - 1;
+    let node_offset = node.downs[i];
+    if node_offset != 0 {
+        let node = idx_read_node(file, node_offset)
+            .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
+        idx_record_size_stats(file, &node, record_vec, read_record_size_func)?;
+    }
+    while i > 0 {
+        i -= 1;
+        //
+        let key_offset = node.keys[i];
+        if key_offset != 0 {
+            let record_size = read_record_size_func(key_offset)?;
+            match record_vec.binary_search_by_key(&record_size, |&(a, _b)| a ) {
+                Ok(sz_idx) => {
+                    record_vec[sz_idx].1 += 1;
+                },
+                Err(sz_idx) => {
+                    record_vec.insert(sz_idx, (record_size, 1));
+                },
+            }
+        }
+        //
+        let node_offset = node.downs[i];
+        if node_offset != 0 {
+            let node = idx_read_node(file, node_offset)
+                .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset));
+            idx_record_size_stats(file, &node, record_vec, read_record_size_func)?;
         }
     }
     //

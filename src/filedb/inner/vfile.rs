@@ -58,8 +58,8 @@ impl VarFile {
     }
     ///
     #[cfg(feature = "buf_stats")]
-    pub fn statistics(&self) -> Vec<(String, i64)> {
-        self.buf_file.statistics()
+    pub fn buf_stats(&self) -> Vec<(String, i64)> {
+        self.buf_file.buf_stats()
     }
 }
 
