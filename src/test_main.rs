@@ -21,7 +21,7 @@ fn _test_a1() {
      */
     #[rustfmt::skip]
     _test_db_map(
-        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10 },
+        TestC { max_cnt: 10_000, f_get: true, f_delete: true, f_repeat: 10 },
         CheckC { check: true, ..Default::default() },
         /*
         |i: usize| { format!("key{:01}", i) },
@@ -567,7 +567,10 @@ fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
     #[cfg(feature = "record_size_stats")]
-    println!("record_size_stats(): {:?}", db_map.record_size_stats().unwrap());
+    println!(
+        "record_size_stats(): {:?}",
+        db_map.record_size_stats().unwrap()
+    );
 }
 
 fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {

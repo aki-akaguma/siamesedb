@@ -1,5 +1,5 @@
 use super::super::super::DbXxx;
-use super::super::{CountOfPerSize, FileDbNode, KeyType};
+use super::super::{CountOfPerSize, FileDbNode};
 use super::kc::KeyCacheTrait;
 use super::{dat, idx, kc};
 use std::cmp::Ordering;
@@ -11,8 +11,9 @@ use std::rc::Rc;
 use super::super::RecordSizeStats;
 
 pub trait FileDbXxxInnerKT {
-    fn as_bytes(&self) -> Vec<u8>;
+    fn signature() -> [u8; 8];
     fn cmp(&self, other: &Self) -> std::cmp::Ordering;
+    fn as_bytes(&self) -> Vec<u8>;
     fn from(bytes: &[u8]) -> Self;
 }
 
@@ -38,8 +39,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             locked.path.clone()
         };
         //
-        let dat_file = dat::DatFile::open(&path, ks_name, KeyType::Str)?;
-        let idx_file = idx::IdxFile::open(&path, ks_name, KeyType::Str)?;
+        let dat_file = dat::DatFile::open(&path, ks_name, KT::signature())?;
+        let idx_file = idx::IdxFile::open(&path, ks_name, KT::signature())?;
         Ok(Self {
             parent,
             dat_file,
@@ -176,7 +177,8 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
     /// record size statistics
     #[cfg(feature = "record_size_stats")]
     pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
-        self.idx_file.record_size_stats(|off| self.load_record_size(off))
+        self.idx_file
+            .record_size_stats(|off| self.load_record_size(off))
     }
 }
 

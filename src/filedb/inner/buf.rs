@@ -92,7 +92,7 @@ impl OffIdx {
             Err(_x) => None,
         }
     }
-    fn clear(&mut self) {
+    fn _clear(&mut self) {
         self.vec.clear();
     }
 }
@@ -186,11 +186,11 @@ impl BufFile {
         self.file.sync_data()
     }
     ///
-    pub fn clear_buf(&mut self) -> Result<()> {
+    pub fn _clear_buf(&mut self) -> Result<()> {
         self.flush()?;
         self.fetch_cache = None;
         self.chunks.clear();
-        self.map.clear();
+        self.map._clear();
         Ok(())
     }
     ///

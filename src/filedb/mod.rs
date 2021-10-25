@@ -35,6 +35,9 @@ type FileDbMapInner = FileDbXxxInner<String>;
 type FileDbListInner = FileDbXxxInner<u64>;
 
 impl FileDbXxxInnerKT for String {
+    fn signature() -> [u8; 8] {
+        [b's', b't', b'r', b'i', b'n', b'g', 0u8, 0u8]
+    }
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         std::cmp::Ord::cmp(self, other)
     }
@@ -53,6 +56,9 @@ use std::convert::TryInto;
 use std::convert::TryInto;
 
 impl FileDbXxxInnerKT for u64 {
+    fn signature() -> [u8; 8] {
+        [b'u', b'6', b'4', 0u8, 0u8, 0u8, 0u8, 0u8]
+    }
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         std::cmp::Ord::cmp(self, other)
     }

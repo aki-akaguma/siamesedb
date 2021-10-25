@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-
-use super::super::KeyType;
 use super::vfile::{VarCursor, VarFile};
 use std::cell::RefCell;
 use std::fs::OpenOptions;
@@ -8,11 +5,16 @@ use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::rc::Rc;
 
+type HeaderSignature = [u8; 8];
+
+const _DAT_HEADER_SZ: u64 = 128;
+const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'h', b'a', b'm', b'd', b'b', b'0', 0u8];
+
 #[derive(Debug, Clone)]
-pub struct DatFile(Rc<RefCell<(VarFile, KeyType)>>);
+pub struct DatFile(Rc<RefCell<VarFile>>);
 
 impl DatFile {
-    pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, kt: KeyType) -> Result<Self> {
+    pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, sig2: HeaderSignature) -> Result<Self> {
         let mut pb = path.as_ref().to_path_buf();
         pb.push(format!("{}.dat", ks_name));
         let std_file = OpenOptions::new()
@@ -24,54 +26,50 @@ impl DatFile {
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
         if len == 0 {
-            dat_file_write_init_header(&mut file, kt)?;
+            dat_file_write_init_header(&mut file, sig2)?;
         } else {
-            dat_file_check_header(&mut file, kt)?;
+            dat_file_check_header(&mut file, sig2)?;
         }
         //
-        Ok(Self(Rc::new(RefCell::new((file, kt)))))
+        Ok(Self(Rc::new(RefCell::new(file))))
     }
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        locked.0.sync_all()
+        locked.sync_all()
     }
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        locked.0.sync_data()
-    }
-    pub fn clear_buf(&self) -> Result<()> {
-        let mut locked = self.0.borrow_mut();
-        locked.0.clear_buf()
+        locked.sync_data()
     }
     #[cfg(feature = "buf_stats")]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = self.0.borrow();
-        locked.0.buf_stats()
+        locked.buf_stats()
     }
     //
     pub(crate) fn read_record_size(&self, offset: u64) -> Result<usize> {
         let mut locked = self.0.borrow_mut();
-        dat_read_record_size(&mut locked.0, offset)
+        dat_read_record_size(&mut locked, offset)
     }
     pub fn read_record_key(&self, offset: u64) -> Result<Option<Vec<u8>>> {
         let mut locked = self.0.borrow_mut();
-        dat_read_record_key(&mut locked.0, offset)
+        dat_read_record_key(&mut locked, offset)
     }
     pub fn read_record(&self, offset: u64) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut locked = self.0.borrow_mut();
-        dat_read_record(&mut locked.0, offset)
+        dat_read_record(&mut locked, offset)
     }
     pub fn write_record(&self, offset: u64, key: &[u8], value: &[u8]) -> Result<u64> {
         let mut locked = self.0.borrow_mut();
-        dat_write_record(&mut locked.0, offset, key, value, false)
+        dat_write_record(&mut locked, offset, key, value, false)
     }
     pub fn delete_record(&self, offset: u64) -> Result<u64> {
         let mut locked = self.0.borrow_mut();
-        dat_delete_record(&mut locked.0, offset)
+        dat_delete_record(&mut locked, offset)
     }
     pub fn add_record(&self, key: &[u8], value: &[u8]) -> Result<u64> {
         let mut locked = self.0.borrow_mut();
-        dat_add_record(&mut locked.0, key, value)
+        dat_add_record(&mut locked, key, value)
     }
 }
 
@@ -83,7 +81,7 @@ impl DatFile {
         let mut vec = Vec::new();
         let mut locked = self.0.borrow_mut();
         for record_size in sz_ary {
-            let cnt = dat_file_count_of_free_list(&mut locked.0, record_size)?;
+            let cnt = dat_file_count_of_free_list(&mut locked, record_size)?;
             vec.push((record_size, cnt));
         }
         Ok(vec)
@@ -119,60 +117,52 @@ The db data header size is 128 bytes.
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
 | 0      | 4     | signature1  | [b's', b'h', b'a', b'm']  |
-| 4      | 4     | signature2  | [b'd', b'b', b'0', 0u8]   |
-| 8      | 8     | reserve0    |                           |
-| 16     | 8     | free16 off  | offset of free 16 list    |
-| 24     | 8     | free24 off  | offset of free 24 list    |
-| 32     | 8     | free32 off  | offset of free 32 list    |
-| 40     | 8     | free48 off  | offset of free 48 list    |
-| 48     | 8     | free64 off  | offset of free 64 list    |
-| 56     | 8     | free92 off  | offset of free 92 list    |
-| 64     | 8     | free128 off | offset of free 128 list   |
-| 72     | 8     | free256 off | offset of free 256 list   |
-| 80     | 8     | freevar off | offset of free var list   |
-| 88     | 48    | reserve1    |                           |
+| 4      | 4     | signature1  | [b'd', b'b', b'1', 0u8]   |
+| 8      | 8     | signature2  | 8 bytes type signature    |
+| 16     | 8     | reserve0    |                           |
+| 24     | 8     | free1 off   | offset of free 1st list   |
+| 32     | 8     | free2 off   | offset of free 2ndlist    |
+| 40     | 8     | free3 off   | offset of free 3rd list   |
+| 48     | 8     | free4 off   | offset of free 4th list   |
+| 56     | 8     | free5 off   | offset of free 5th list   |
+| 64     | 8     | free6 off   | offset of free 6th list   |
+| 72     | 8     | free7 off   | offset of free 7th list   |
+| 80     | 8     | free8 off   | offset of free 8th list   |
+| 88     | 40    | reserve1    |                           |
 +--------+-------+-------------+---------------------------+
 ```
 
-- signature1: always fixed 4 bytes
-- signature2: fixed 4 bytes, variable in future.
+- signature1: always fixed 8 bytes
+- signature2: 8 bytes type signature
 
 */
-fn dat_file_write_init_header(file: &mut VarFile, kt: KeyType) -> Result<()> {
+fn dat_file_write_init_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(0))?;
-    //
-    let kt_byte = kt.signature();
-    // signature
-    let _ = file.write_all(&[b's', b'h', b'a', b'm'])?;
-    let _ = file.write_all(&[b'd', b'b', kt_byte, b'0'])?;
-    // root offset
+    // signature1
+    let _ = file.write(&DAT_HEADER_SIGNATURE)?;
+    // signature2
+    let _ = file.write(&signature2)?;
+    // reserve0
     file.write_u64_le(0)?;
-    // free16 .. rserve1
-    let _ = file.write(&[0u8; 112]);
+    // free1 .. rserve1
+    let _ = file.write(&[0u8; 104]);
     //
     Ok(())
 }
 
-fn dat_file_check_header(file: &mut VarFile, kt: KeyType) -> Result<()> {
+fn dat_file_check_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(0))?;
-    //
-    let kt_byte = kt.signature();
-    // signature
-    let mut sig1 = [0u8, 0u8, 0u8, 0u8];
-    let mut sig2 = [0u8, 0u8, 0u8, 0u8];
+    // signature1
+    let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
     let _sz = file.read_exact(&mut sig1)?;
-    if sig1 != [b's', b'h', b'a', b'm'] {
-        panic!("invalid header signature1");
-    }
+    assert!(!(sig1 != DAT_HEADER_SIGNATURE), "invalid header signature1");
+    // signature2
+    let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
     let _sz = file.read_exact(&mut sig2)?;
-    if sig2 != [b'd', b'b', kt_byte, b'0'] {
-        panic!("invalid header signature2");
-    }
+    assert!(!(sig2 != signature2), "invalid header signature2, type signature: {:?}", sig2);
     // reserve0
     let _reserve0 = file.read_u64_le()?;
-    if _reserve0 != 0 {
-        panic!("invalid reserve0");
-    }
+    assert!(!(_reserve0 != 0), "invalid reserve0");
     //
     Ok(())
 }
@@ -228,7 +218,6 @@ fn record_size_roudup(record_size: usize) -> usize {
             return n_sz;
         }
     }
-    //eprintln!("WARN:: record is over size: {}", record_size);
     ((record_size + 511) / 512) * 512
 }
 

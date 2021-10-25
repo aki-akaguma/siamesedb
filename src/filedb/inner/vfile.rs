@@ -53,8 +53,8 @@ impl VarFile {
         self.buf_file.sync_data()
     }
     ///
-    pub fn clear_buf(&mut self) -> Result<()> {
-        self.buf_file.clear_buf()
+    pub fn _clear_buf(&mut self) -> Result<()> {
+        self.buf_file._clear_buf()
     }
     ///
     #[cfg(feature = "buf_stats")]

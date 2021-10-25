@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-
-use super::super::{CountOfPerSize, KeyType};
+use super::super::CountOfPerSize;
 use super::dat;
 use super::vfile::{VarCursor, VarFile};
 use std::cell::RefCell;
@@ -12,13 +10,17 @@ use std::rc::Rc;
 #[cfg(feature = "record_size_stats")]
 use super::super::RecordSizeStats;
 
+type HeaderSignature = [u8; 8];
+
 const IDX_HEADER_SZ: u64 = 128;
+const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'h', b'a', b'm', b'd', b'b', b'1', 0u8];
+const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
 
 #[derive(Debug, Clone)]
-pub struct IdxFile(Rc<RefCell<(VarFile, KeyType)>>);
+pub struct IdxFile(Rc<RefCell<VarFile>>);
 
 impl IdxFile {
-    pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, kt: KeyType) -> Result<Self> {
+    pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, sig2: HeaderSignature) -> Result<Self> {
         let mut pb = path.as_ref().to_path_buf();
         pb.push(format!("{}.idx", ks_name));
         let std_file = OpenOptions::new()
@@ -31,39 +33,35 @@ impl IdxFile {
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
         if len == 0 {
-            idx_file_write_init_header(&mut file, kt)?;
+            idx_file_write_init_header(&mut file, sig2)?;
             // writing top node
             let top_node = IdxNode::new(IDX_HEADER_SZ);
             let _new_node = idx_write_node(&mut file, top_node, true)?;
             debug_assert!(_new_node.offset == IDX_HEADER_SZ);
         } else {
-            idx_file_check_header(&mut file, kt)?;
+            idx_file_check_header(&mut file, sig2)?;
         }
         //
-        Ok(Self(Rc::new(RefCell::new((file, kt)))))
+        Ok(Self(Rc::new(RefCell::new(file))))
     }
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        locked.0.sync_all()
+        locked.sync_all()
     }
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        locked.0.sync_data()
-    }
-    pub fn clear_buf(&self) -> Result<()> {
-        let mut locked = self.0.borrow_mut();
-        locked.0.clear_buf()
+        locked.sync_data()
     }
     #[cfg(feature = "buf_stats")]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = self.0.borrow();
-        locked.0.buf_stats()
+        locked.buf_stats()
     }
     //
     pub fn read_top_node(&self) -> Result<IdxNode> {
         let offset = {
             let mut locked = self.0.borrow_mut();
-            idx_file_read_top_node_offset(&mut locked.0)?
+            idx_file_read_top_node_offset(&mut locked)?
         };
         self.read_node(offset)
     }
@@ -72,18 +70,18 @@ impl IdxFile {
             let new_top_node = self.write_new_node(node)?;
             {
                 let mut locked = self.0.borrow_mut();
-                idx_file_write_top_node_offset(&mut locked.0, new_top_node.offset)?;
+                idx_file_write_top_node_offset(&mut locked, new_top_node.offset)?;
             }
             Ok(new_top_node)
         } else {
             let top_node_offset = {
                 let mut locked = self.0.borrow_mut();
-                idx_file_read_top_node_offset(&mut locked.0)?
+                idx_file_read_top_node_offset(&mut locked)?
             };
             let new_top_node = self.write_node(node)?;
             if new_top_node.offset != top_node_offset {
                 let mut locked = self.0.borrow_mut();
-                idx_file_write_top_node_offset(&mut locked.0, new_top_node.offset)?;
+                idx_file_write_top_node_offset(&mut locked, new_top_node.offset)?;
             }
             Ok(new_top_node)
         }
@@ -91,24 +89,24 @@ impl IdxFile {
     //
     pub fn read_node(&self, offset: u64) -> Result<IdxNode> {
         let mut locked = self.0.borrow_mut();
-        idx_read_node(&mut locked.0, offset)
+        idx_read_node(&mut locked, offset)
     }
     pub fn write_node(&self, node: IdxNode) -> Result<IdxNode> {
         let mut locked = self.0.borrow_mut();
-        idx_write_node(&mut locked.0, node, false)
+        idx_write_node(&mut locked, node, false)
     }
     pub fn write_new_node(&self, mut node: IdxNode) -> Result<IdxNode> {
         node.offset = {
             let mut locked = self.0.borrow_mut();
-            let _ = locked.0.seek(SeekFrom::End(0));
-            locked.0.stream_position()?
+            let _ = locked.seek(SeekFrom::End(0));
+            locked.stream_position()?
         };
         let mut locked = self.0.borrow_mut();
-        idx_write_node(&mut locked.0, node, true)
+        idx_write_node(&mut locked, node, true)
     }
     pub fn delete_node(&self, node: IdxNode) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        idx_delete_node(&mut locked.0, node)
+        idx_delete_node(&mut locked, node)
     }
 }
 
@@ -117,7 +115,7 @@ impl IdxFile {
     pub fn to_graph_string(&self) -> Result<String> {
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
-        idx_to_graph_string(&mut locked.0, "", &top_node)
+        idx_to_graph_string(&mut locked, "", &top_node)
     }
     pub fn to_graph_string_with_key_string<KT>(&self, dbxxx: &FileDbXxxInner<KT>) -> Result<String>
     where
@@ -125,7 +123,7 @@ impl IdxFile {
     {
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
-        idx_to_graph_string_with_key_string(&mut locked.0, "", &top_node, dbxxx)
+        idx_to_graph_string_with_key_string(&mut locked, "", &top_node, dbxxx)
     }
     // check the index tree is balanced
     pub fn is_balanced(&self, node: &IdxNode) -> Result<bool> {
@@ -423,7 +421,7 @@ impl IdxFile {
         let mut vec = Vec::new();
         let mut locked = self.0.borrow_mut();
         for node_size in sz_ary {
-            let cnt = idx_file_count_of_free_list(&mut locked.0, node_size)?;
+            let cnt = idx_file_count_of_free_list(&mut locked, node_size)?;
             vec.push((node_size, cnt));
         }
         Ok(vec)
@@ -450,7 +448,7 @@ impl IdxFile {
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
         idx_count_of_used_node(
-            &mut locked.0,
+            &mut locked,
             &top_node,
             &mut node_vec,
             &mut record_vec,
@@ -460,10 +458,7 @@ impl IdxFile {
         Ok((record_vec, node_vec))
     }
     #[cfg(feature = "record_size_stats")]
-    pub fn record_size_stats<F>(
-        &self,
-        read_record_size_func: F,
-    ) -> Result<RecordSizeStats>
+    pub fn record_size_stats<F>(&self, read_record_size_func: F) -> Result<RecordSizeStats>
     where
         F: Fn(u64) -> Result<usize> + std::marker::Copy,
     {
@@ -472,7 +467,7 @@ impl IdxFile {
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
         idx_record_size_stats(
-            &mut locked.0,
+            &mut locked,
             &top_node,
             &mut record_vec,
             read_record_size_func,
@@ -494,83 +489,68 @@ The db index header size is 128 bytes.
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
 | 0      | 4     | signature1  | [b's', b'h', b'a', b'm']  |
-| 4      | 4     | signature2  | [b'd', b'b', b'1', 0u8]   |
-| 8      | 8     | top node    | offset of top node        |
-| 16     | 8     | free16 off  | offset of free 16 list    |
-| 24     | 8     | free24 off  | offset of free 24 list    |
-| 32     | 8     | free32 off  | offset of free 32 list    |
-| 40     | 8     | free48 off  | offset of free 48 list    |
-| 48     | 8     | free64 off  | offset of free 64 list    |
-| 56     | 8     | free92 off  | offset of free 92 list    |
-| 64     | 8     | free128 off | offset of free 128 list   |
-| 72     | 8     | free256 off | offset of free 256 list   |
-| 80     | 8     | freevar off | offset of free var list   |
-| 88     | 48    | reserve1    |                           |
+| 4      | 4     | signature1  | [b'd', b'b', b'1', 0u8]   |
+| 8      | 8     | signature2  | 8 bytes type signature    |
+| 16     | 8     | top node    | offset of top node        |
+| 24     | 8     | free1 off   | offset of free 1st list   |
+| 32     | 8     | free2 off   | offset of free 2ndlist    |
+| 40     | 8     | free3 off   | offset of free 3rd list   |
+| 48     | 8     | free4 off   | offset of free 4th list   |
+| 56     | 8     | free5 off   | offset of free 5th list   |
+| 64     | 8     | free6 off   | offset of free 6th list   |
+| 72     | 8     | free7 off   | offset of free 7th list   |
+| 80     | 8     | free8 off   | offset of free 8th list   |
+| 88     | 40    | reserve1    |                           |
 +--------+-------+-------------+---------------------------+
 ```
 
-- signature1: always fixed 4 bytes
-- signature2: fixed 4 bytes, variable in future.
+- signature1: always fixed 8 bytes
+- signature2: 8 bytes type signature
 
 */
-fn idx_file_write_init_header(file: &mut VarFile, kt: KeyType) -> Result<()> {
+fn idx_file_write_init_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(0))?;
-    //
-    let kt_byte = kt.signature();
-    // signature
-    let _ = file.write(&[b's', b'h', b'a', b'm'])?;
-    let _ = file.write(&[b'd', b'b', kt_byte, b'1'])?;
+    // signature1
+    let _ = file.write(&IDX_HEADER_SIGNATURE)?;
+    // signature2
+    let _ = file.write(&signature2)?;
     // root offset
     file.write_u64_le(IDX_HEADER_SZ)?;
-    // free16 .. rserve1
-    let _ = file.write(&[0u8; 112]);
+    // free1 .. rserve1
+    let _ = file.write(&[0u8; 104]);
     //
     Ok(())
 }
 
-fn idx_file_check_header(file: &mut VarFile, kt: KeyType) -> Result<()> {
+fn idx_file_check_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(0))?;
-    //
-    let kt_byte = kt.signature();
-    // signature
-    let mut sig1 = [0u8, 0u8, 0u8, 0u8];
-    let mut sig2 = [0u8, 0u8, 0u8, 0u8];
+    // signature1
+    let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
     let _sz = file.read_exact(&mut sig1)?;
-    if sig1 != [b's', b'h', b'a', b'm'] {
-        panic!("invalid header signature1");
-    }
+    assert!(!(sig1 != IDX_HEADER_SIGNATURE), "invalid header signature1");
+    // signature2
+    let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
     let _sz = file.read_exact(&mut sig2)?;
-    if sig2 != [b'd', b'b', kt_byte, b'1'] {
-        panic!("invalid header signature2");
-    }
+    assert!(!(sig2 != signature2), "invalid header signature2, type signature: {:?}", sig2);
     // top node offset
     let _top_node_offset = file.read_u64_le()?;
-    if _top_node_offset == 0 {
-        panic!("invalid root offset");
-    }
+    assert!(!(_top_node_offset == 0), "invalid root offset");
     //
     Ok(())
 }
 
 fn idx_file_read_top_node_offset(file: &mut VarFile) -> Result<u64> {
-    let _ = file.seek(SeekFrom::Start(8))?;
+    let _ = file.seek(SeekFrom::Start(IDX_HEADER_TOP_NODE_OFFSET))?;
     file.read_u64_le()
 }
 
 fn idx_file_write_top_node_offset(file: &mut VarFile, offset: u64) -> Result<()> {
-    let _ = file.seek(SeekFrom::Start(8))?;
+    let _ = file.seek(SeekFrom::Start(IDX_HEADER_TOP_NODE_OFFSET))?;
     file.write_u64_le(offset)?;
     Ok(())
 }
 
-// (NODE_SLOTS_MAX as usize * 2 - 1)
-const NODE_SIZE_ARY: [usize; 8] = [31, 71, 103, 143, 175, 215, 231, 256];
-
-//const NODE_SIZE_ARY: [usize; 9] = [15, 31, 71, 103, 143, 175, 215, 231, 256];
-//const NODE_SIZE_ARY: [usize; 9] = [15, 23, 31, 39, 47, 51, 63, 71, 256];
-//const NODE_SIZE_ARY: [usize; 9] = [17, 26, 35, 44, 53, 62, 71, 80, 256];
-//const NODE_SIZE_ARY: [usize; 9] = [18, 27, 36, 45, 54, 63, 72, 81, 256];
-
+const NODE_SIZE_FREE_OFFSET_1ST: usize = 24;
 const NODE_SIZE_FREE_OFFSET: [usize; 8] = [
     NODE_SIZE_FREE_OFFSET_1ST,
     NODE_SIZE_FREE_OFFSET_1ST + 8,
@@ -581,11 +561,9 @@ const NODE_SIZE_FREE_OFFSET: [usize; 8] = [
     NODE_SIZE_FREE_OFFSET_1ST + 8 * 6,
     NODE_SIZE_FREE_OFFSET_1ST + 8 * 7,
 ];
-//const NODE_SIZE_FREE_OFFSET: [usize; 9] = [16, 24, 32, 40, 48, 56, 64, 72, 80];
+const NODE_SIZE_ARY: [usize; 8] = [31, 71, 103, 143, 175, 215, 231, 256];
 
-const NODE_SIZE_FREE_OFFSET_1ST: usize = 16;
-
-fn free_nn_list_offset_of_header(_node_size: usize) -> u64 {
+fn free_node_list_offset_of_header(_node_size: usize) -> u64 {
     debug_assert!(_node_size > 0, "_node_size: {} > 0", _node_size);
     for i in 0..NODE_SIZE_ARY.len() {
         if NODE_SIZE_ARY[i] == _node_size {
@@ -601,6 +579,10 @@ fn free_nn_list_offset_of_header(_node_size: usize) -> u64 {
     NODE_SIZE_FREE_OFFSET[NODE_SIZE_FREE_OFFSET.len() - 1] as u64
 }
 
+fn is_large_node_size(node_size: usize) -> bool {
+    node_size >= NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 1]
+}
+
 fn node_size_roudup(node_size: usize) -> usize {
     debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
     debug_assert!(node_size <= 0x7F, "node_size: {} <= 0x7F", node_size);
@@ -610,16 +592,16 @@ fn node_size_roudup(node_size: usize) -> usize {
         }
     }
     eprintln!("WARN:: node is over size: {}", node_size);
-    node_size
+    ((node_size + 63) / 64) * 64
 }
 
-fn idx_file_read_free_nn_offset(file: &mut VarFile, node_size: usize) -> Result<u64> {
-    let _ = file.seek(SeekFrom::Start(free_nn_list_offset_of_header(node_size)))?;
+fn idx_file_read_free_node_offset(file: &mut VarFile, node_size: usize) -> Result<u64> {
+    let _ = file.seek(SeekFrom::Start(free_node_list_offset_of_header(node_size)))?;
     file.read_u64_le()
 }
 
-fn idx_file_write_free_nn_offset(file: &mut VarFile, node_size: usize, offset: u64) -> Result<()> {
-    let _ = file.seek(SeekFrom::Start(free_nn_list_offset_of_header(node_size)))?;
+fn idx_file_write_free_node_offset(file: &mut VarFile, node_size: usize, offset: u64) -> Result<()> {
+    let _ = file.seek(SeekFrom::Start(free_node_list_offset_of_header(node_size)))?;
     file.write_u64_le(offset)
 }
 
@@ -639,7 +621,7 @@ free node:
 
 fn idx_file_count_of_free_list(file: &mut VarFile, new_node_size: usize) -> Result<u64> {
     let mut count = 0;
-    let free_1st = idx_file_read_free_nn_offset(file, new_node_size)?;
+    let free_1st = idx_file_read_free_node_offset(file, new_node_size)?;
     if free_1st != 0 {
         let mut free_next_offset = free_1st;
         while free_next_offset != 0 {
@@ -657,27 +639,67 @@ fn idx_file_count_of_free_list(file: &mut VarFile, new_node_size: usize) -> Resu
 }
 
 fn idx_file_pop_free_list(file: &mut VarFile, new_node_size: usize) -> Result<u64> {
-    let free_1st = idx_file_read_free_nn_offset(file, new_node_size)?;
-    if free_1st != 0 {
-        let free_next = {
-            let _ = file.seek(SeekFrom::Start(free_1st))?;
-            let (free_next, node_len) = {
-                let node_len = file.read_node_size()?;
-                debug_assert!(node_len > 0x7F);
-                let node_offset = file.read_node_offset()?;
-                (node_offset, node_len & 0x7F)
+    let free_1st = idx_file_read_free_node_offset(file, new_node_size)?;
+    if !is_large_node_size(new_node_size) {
+        if free_1st != 0 {
+            let free_next = {
+                let _ = file.seek(SeekFrom::Start(free_1st))?;
+                let (free_next, node_len) = {
+                    let node_len = file.read_node_size()?;
+                    debug_assert!(node_len > 0x7F);
+                    let node_offset = file.read_node_offset()?;
+                    (node_offset, node_len & 0x7F)
+                };
+                //
+                let _ = file.seek(SeekFrom::Start(free_1st))?;
+                file.write_node_size(node_len)?;
+                let buff = vec![0; node_len];
+                file.write_all(&buff)?;
+                //
+                free_next
             };
+            idx_file_write_free_node_offset(file, new_node_size, free_next)?;
+        }
+        Ok(free_1st)
+    } else {
+        idx_file_pop_free_list_large(file, new_node_size, free_1st)
+    }
+}
+
+fn idx_file_pop_free_list_large(
+    file: &mut VarFile,
+    new_node_size: usize,
+    free_1st: u64,
+) -> Result<u64> {
+    let mut free_prev = 0;
+    let mut free_curr = free_1st;
+    while free_curr != 0 {
+        let _ = file.seek(SeekFrom::Start(free_curr))?;
+        let (free_next, node_len) = {
+            let node_len = file.read_node_size()?;
+            debug_assert!(node_len > 0x7F);
+            let node_offset = file.read_node_offset()?;
+            (node_offset, node_len & 0x7F)
+        };
+        if new_node_size >= node_len {
+            if free_prev > 0 {
+                let _ = file.seek(SeekFrom::Start(free_prev))?;
+                let _node_len = file.read_node_size()?;
+                file.write_node_offset(free_next)?;
+            } else {
+                idx_file_write_free_node_offset(file, new_node_size, free_next)?;
+            }
             //
-            let _ = file.seek(SeekFrom::Start(free_1st))?;
+            let _ = file.seek(SeekFrom::Start(free_curr))?;
             file.write_node_size(node_len)?;
             let buff = vec![0; node_len];
             file.write_all(&buff)?;
-            //
-            free_next
-        };
-        idx_file_write_free_nn_offset(file, new_node_size, free_next)?;
+            return Ok(free_curr);
+        }
+        free_prev = free_curr;
+        free_curr = free_next;
     }
-    Ok(free_1st)
+    Ok(free_curr)
 }
 
 fn idx_file_push_free_list(
@@ -691,23 +713,16 @@ fn idx_file_push_free_list(
     debug_assert!(old_node_size > 0);
     debug_assert!(old_node_size <= 0x7F);
     //
-    let free_1st = idx_file_read_free_nn_offset(file, old_node_size)?;
+    let free_1st = idx_file_read_free_node_offset(file, old_node_size)?;
     {
         let _a = file.seek(SeekFrom::Start(old_node_offset))?;
         debug_assert!(_a == old_node_offset);
         file.write_node_size(old_node_size | 0x80)?;
         file.write_node_offset(free_1st)?;
     }
-    idx_file_write_free_nn_offset(file, old_node_size, old_node_offset)?;
+    idx_file_write_free_node_offset(file, old_node_size, old_node_offset)?;
     Ok(())
 }
-
-//pub const NODE_SLOTS_MAX: u16 = 5;
-//pub const NODE_SLOTS_MAX: u16 = 7;
-//pub const NODE_SLOTS_MAX: u16 = 9;
-//pub const NODE_SLOTS_MAX: u16 = 11;
-//pub const NODE_SLOTS_MAX: u16 = 13;
-//pub const NODE_SLOTS_MAX: u16 = 15;
 
 #[cfg(feature = "vf_u32u32")]
 pub const NODE_SLOTS_MAX: u16 = 15;
@@ -1074,13 +1089,13 @@ where
         let key_offset = node.keys[i];
         if key_offset != 0 {
             let record_size = read_record_size_func(key_offset)?;
-            match record_vec.binary_search_by_key(&record_size, |&(a, _b)| a ) {
+            match record_vec.binary_search_by_key(&record_size, |&(a, _b)| a) {
                 Ok(sz_idx) => {
                     record_vec[sz_idx].1 += 1;
-                },
+                }
                 Err(sz_idx) => {
                     record_vec.insert(sz_idx, (record_size, 1));
-                },
+                }
             }
         }
         //
