@@ -17,8 +17,6 @@ fn _test_a1() {
     //
     // 1m
     //
-    /*
-     */
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 10_000, f_get: true, f_delete: true, f_repeat: 10 },
@@ -33,9 +31,11 @@ fn _test_a1() {
         |i: usize| { format!("value{:01}", i).repeat(60) },
     );
     /*
+    */
+    /*
     #[rustfmt::skip]
     _test_db_list(
-        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10, ..Default::default() },
+        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 10 },
         CheckC { check: true, ..Default::default() },
         /*
         |i: usize| { i as u64 },

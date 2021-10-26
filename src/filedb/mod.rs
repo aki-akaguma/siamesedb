@@ -26,10 +26,10 @@ use inner::FileDbInner;
 
 use super::DbXxx;
 
-type CountOfPerSize = Vec<(usize, u64)>;
+type CountOfPerSize = Vec<(u32, u64)>;
 
 #[cfg(feature = "record_size_stats")]
-type RecordSizeStats = Vec<(usize, u64)>;
+type RecordSizeStats = Vec<(u32, u64)>;
 
 type FileDbMapInner = FileDbXxxInner<String>;
 type FileDbListInner = FileDbXxxInner<u64>;

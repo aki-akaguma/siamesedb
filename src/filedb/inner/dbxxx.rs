@@ -87,7 +87,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             .read_record(key_offset)?
             .map(|(_key, val)| val))
     }
-    fn load_record_size(&self, key_offset: u64) -> Result<usize> {
+    fn load_record_size(&self, key_offset: u64) -> Result<u32> {
         self.dat_file.read_record_size(key_offset)
     }
     fn keys_binary_search(

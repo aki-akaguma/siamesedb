@@ -1,5 +1,6 @@
 use super::vfile::{VarCursor, VarFile};
 use std::cell::RefCell;
+use std::convert::TryInto;
 use std::fs::OpenOptions;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -47,7 +48,7 @@ impl DatFile {
         locked.buf_stats()
     }
     //
-    pub(crate) fn read_record_size(&self, offset: u64) -> Result<usize> {
+    pub(crate) fn read_record_size(&self, offset: u64) -> Result<u32> {
         let mut locked = self.0.borrow_mut();
         dat_read_record_size(&mut locked, offset)
     }
@@ -63,7 +64,7 @@ impl DatFile {
         let mut locked = self.0.borrow_mut();
         dat_write_record(&mut locked, offset, key, value, false)
     }
-    pub fn delete_record(&self, offset: u64) -> Result<u64> {
+    pub fn delete_record(&self, offset: u64) -> Result<u32> {
         let mut locked = self.0.borrow_mut();
         dat_delete_record(&mut locked, offset)
     }
@@ -75,7 +76,7 @@ impl DatFile {
 
 // for debug
 impl DatFile {
-    pub fn count_of_free_record(&self) -> Result<Vec<(usize, u64)>> {
+    pub fn count_of_free_record(&self) -> Result<Vec<(u32, u64)>> {
         let sz_ary = REC_SIZE_ARY;
         //
         let mut vec = Vec::new();
@@ -159,7 +160,11 @@ fn dat_file_check_header(file: &mut VarFile, signature2: HeaderSignature) -> Res
     // signature2
     let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
     let _sz = file.read_exact(&mut sig2)?;
-    assert!(!(sig2 != signature2), "invalid header signature2, type signature: {:?}", sig2);
+    assert!(
+        !(sig2 != signature2),
+        "invalid header signature2, type signature: {:?}",
+        sig2
+    );
     // reserve0
     let _reserve0 = file.read_u64_le()?;
     assert!(!(_reserve0 != 0), "invalid reserve0");
@@ -167,7 +172,7 @@ fn dat_file_check_header(file: &mut VarFile, signature2: HeaderSignature) -> Res
     Ok(())
 }
 
-pub(crate) const REC_SIZE_ARY: [usize; 8] = [
+pub(crate) const REC_SIZE_ARY: [u32; 8] = [
     8 * 2 - 1,
     8 * 3 - 1,
     8 * 4 - 1,
@@ -178,7 +183,7 @@ pub(crate) const REC_SIZE_ARY: [usize; 8] = [
     8 * 256 - 1,
 ];
 
-const REC_SIZE_FREE_OFFSET: [usize; 8] = [
+const REC_SIZE_FREE_OFFSET: [u64; 8] = [
     REC_SIZE_FREE_OFFSET_1ST,
     REC_SIZE_FREE_OFFSET_1ST + 8,
     REC_SIZE_FREE_OFFSET_1ST + 8 * 2,
@@ -189,29 +194,29 @@ const REC_SIZE_FREE_OFFSET: [usize; 8] = [
     REC_SIZE_FREE_OFFSET_1ST + 8 * 7,
 ];
 
-const REC_SIZE_FREE_OFFSET_1ST: usize = 16;
+const REC_SIZE_FREE_OFFSET_1ST: u64 = 16;
 
-fn free_rec_list_offset_of_header(_rec_size: usize) -> u64 {
-    debug_assert!(_rec_size > 0, "_rec_size: {} > 0", _rec_size);
+fn free_rec_list_offset_of_header(record_size: u32) -> u64 {
+    debug_assert!(record_size > 0, "record_size: {} > 0", record_size);
     for i in 0..REC_SIZE_ARY.len() {
-        if REC_SIZE_ARY[i] == _rec_size {
-            return REC_SIZE_FREE_OFFSET[i] as u64;
+        if REC_SIZE_ARY[i] == record_size {
+            return REC_SIZE_FREE_OFFSET[i];
         }
     }
     debug_assert!(
-        _rec_size > REC_SIZE_ARY[REC_SIZE_ARY.len() - 2],
-        "_rec_size: {} > REC_SIZE_ARY[REC_SIZE_ARY.len() - 2]: {}",
-        _rec_size,
+        record_size > REC_SIZE_ARY[REC_SIZE_ARY.len() - 2],
+        "record_size: {} > REC_SIZE_ARY[REC_SIZE_ARY.len() - 2]: {}",
+        record_size,
         REC_SIZE_ARY[REC_SIZE_ARY.len() - 2]
     );
-    REC_SIZE_FREE_OFFSET[REC_SIZE_FREE_OFFSET.len() - 1] as u64
+    REC_SIZE_FREE_OFFSET[REC_SIZE_FREE_OFFSET.len() - 1]
 }
 
-fn is_large_record_size(record_size: usize) -> bool {
+fn is_large_record_size(record_size: u32) -> bool {
     record_size >= REC_SIZE_ARY[REC_SIZE_ARY.len() - 1]
 }
 
-fn record_size_roudup(record_size: usize) -> usize {
+fn record_size_roudup(record_size: u32) -> u32 {
     debug_assert!(record_size > 0, "record_size: {} > 0", record_size);
     for &n_sz in REC_SIZE_ARY.iter().take(REC_SIZE_ARY.len() - 1) {
         if record_size <= n_sz {
@@ -221,14 +226,14 @@ fn record_size_roudup(record_size: usize) -> usize {
     ((record_size + 511) / 512) * 512
 }
 
-fn dat_file_read_free_record_offset(file: &mut VarFile, record_size: usize) -> Result<u64> {
+fn dat_file_read_free_record_offset(file: &mut VarFile, record_size: u32) -> Result<u64> {
     let _ = file.seek(SeekFrom::Start(free_rec_list_offset_of_header(record_size)))?;
     file.read_u64_le()
 }
 
 fn dat_file_write_free_record_offset(
     file: &mut VarFile,
-    record_size: usize,
+    record_size: u32,
     offset: u64,
 ) -> Result<()> {
     let _ = file.seek(SeekFrom::Start(free_rec_list_offset_of_header(record_size)))?;
@@ -248,7 +253,7 @@ free node:
 ```
 */
 
-fn dat_file_count_of_free_list(file: &mut VarFile, new_record_size: usize) -> Result<u64> {
+fn dat_file_count_of_free_list(file: &mut VarFile, new_record_size: u32) -> Result<u64> {
     let mut count = 0;
     let free_1st = dat_file_read_free_record_offset(file, new_record_size)?;
     if free_1st != 0 {
@@ -267,7 +272,7 @@ fn dat_file_count_of_free_list(file: &mut VarFile, new_record_size: usize) -> Re
     Ok(count)
 }
 
-fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: usize) -> Result<u64> {
+fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: u32) -> Result<u64> {
     let free_1st = dat_file_read_free_record_offset(file, new_record_size)?;
     if !is_large_record_size(new_record_size) {
         if free_1st != 0 {
@@ -282,7 +287,7 @@ fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: usize) -> Result<
                 //
                 let _ = file.seek(SeekFrom::Start(free_1st))?;
                 file.write_record_size(node_len)?;
-                let buff = vec![0; node_len];
+                let buff = vec![0; node_len.try_into().unwrap()];
                 file.write_all(&buff)?;
                 //
                 free_next
@@ -297,7 +302,7 @@ fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: usize) -> Result<
 
 fn dat_file_pop_free_list_large(
     file: &mut VarFile,
-    new_record_size: usize,
+    new_record_size: u32,
     free_1st: u64,
 ) -> Result<u64> {
     let mut free_prev = 0;
@@ -321,7 +326,7 @@ fn dat_file_pop_free_list_large(
             //
             let _ = file.seek(SeekFrom::Start(free_curr))?;
             file.write_record_size(record_len)?;
-            let buff = vec![0; record_len];
+            let buff = vec![0; record_len.try_into().unwrap()];
             file.write_all(&buff)?;
             return Ok(free_curr);
         }
@@ -334,7 +339,7 @@ fn dat_file_pop_free_list_large(
 fn dat_file_push_free_list(
     file: &mut VarFile,
     old_record_offset: u64,
-    old_record_size: usize,
+    old_record_size: u32,
 ) -> Result<()> {
     if old_record_offset == 0 {
         return Ok(());
@@ -355,8 +360,8 @@ fn dat_file_push_free_list(
 fn dat_serialize_to_buf(key: &[u8], value: &[u8]) -> Result<Vec<u8>> {
     let mut buff_cursor = VarCursor::with_capacity(128);
     //
-    let key_len = key.len();
-    let value_len = value.len();
+    let key_len = key.len() as u32;
+    let value_len = value.len() as u32;
     //
     buff_cursor.write_key_len(key_len)?;
     let _ = buff_cursor.write_all(key)?;
@@ -376,31 +381,31 @@ fn dat_write_record(
     debug_assert!(is_new || offset != 0);
     let mut buf_vec = dat_serialize_to_buf(key, value)?;
     let buf_ref = &mut buf_vec;
-    let new_record_len = buf_ref.len();
+    let new_record_size = buf_ref.len() as u32;
     //
-    let new_record_len = record_size_roudup(new_record_len);
-    if buf_ref.len() < new_record_len {
-        buf_ref.resize(new_record_len, 0u8);
+    let new_record_size = record_size_roudup(new_record_size);
+    if buf_ref.len() < (new_record_size as usize) {
+        buf_ref.resize(new_record_size as usize, 0u8);
     }
     //
     if !is_new {
         let _ = file.seek(SeekFrom::Start(offset))?;
-        let old_record_len = file.read_record_size()?;
-        if new_record_len <= old_record_len {
+        let old_record_size = file.read_record_size()?;
+        if new_record_size <= old_record_size {
             // over writes.
             let _ = file.seek(SeekFrom::Start(offset))?;
-            file.write_record_size(old_record_len)?;
+            file.write_record_size(old_record_size)?;
             file.write_all(buf_ref)?;
             return Ok(offset);
         } else {
             // delete old and add new
             // old
-            dat_file_push_free_list(file, offset, old_record_len)?;
+            dat_file_push_free_list(file, offset, old_record_size)?;
         }
     }
     // add new.
     {
-        let free_record_offset = dat_file_pop_free_list(file, new_record_len)?;
+        let free_record_offset = dat_file_pop_free_list(file, new_record_size)?;
         let new_record_offset = if free_record_offset != 0 {
             let _ = file.seek(SeekFrom::Start(free_record_offset))?;
             free_record_offset
@@ -408,7 +413,7 @@ fn dat_write_record(
             let _ = file.seek(SeekFrom::End(0))?;
             file.stream_position()?
         };
-        file.write_record_size(new_record_len)?;
+        file.write_record_size(new_record_size)?;
         file.write_all(buf_ref)?;
         Ok(new_record_offset)
     }
@@ -449,7 +454,7 @@ fn dat_read_record_key(file: &mut VarFile, offset: u64) -> Result<Option<Vec<u8>
     Ok(Some(key))
 }
 
-fn dat_read_record_size(file: &mut VarFile, offset: u64) -> Result<usize> {
+fn dat_read_record_size(file: &mut VarFile, offset: u64) -> Result<u32> {
     debug_assert!(offset != 0);
     //
     let _ = file.seek(SeekFrom::Start(offset))?;
@@ -458,12 +463,12 @@ fn dat_read_record_size(file: &mut VarFile, offset: u64) -> Result<usize> {
     Ok(record_size)
 }
 
-fn dat_delete_record(file: &mut VarFile, offset: u64) -> Result<u64> {
+fn dat_delete_record(file: &mut VarFile, offset: u64) -> Result<u32> {
     let _ = file.seek(SeekFrom::Start(offset))?;
     let old_record_len = file.read_record_size()?;
     dat_file_push_free_list(file, offset, old_record_len)?;
     //
-    Ok(old_record_len as u64)
+    Ok(old_record_len)
 }
 
 fn dat_add_record(file: &mut VarFile, key: &[u8], value: &[u8]) -> Result<u64> {
