@@ -1,10 +1,9 @@
+use super::buf::BufFile;
 use std::fs::File;
 use std::io::{Cursor, Read, Result, Seek, SeekFrom, Write};
 
-use super::buf::BufFile;
-
 #[cfg(feature = "vf_vu64")]
-use super::vu64;
+use super::vu64_io::{ReadVu64, WriteVu64};
 
 /// Variable length integer access for a random access file.
 #[derive(Debug)]
@@ -352,45 +351,48 @@ impl VarCursor {
 impl VarFile {
     #[inline]
     pub fn read_vu64_u16(&mut self) -> Result<u16> {
-        vu64::decode_vu64(&mut self.buf_file).map(|n| n as u16)
+        self.buf_file.read_and_decode_vu64().map(|n| n as u16)
     }
     #[inline]
     pub fn read_vu64_u32(&mut self) -> Result<u32> {
-        vu64::decode_vu64(&mut self.buf_file).map(|n| n as u32)
+        self.buf_file.read_and_decode_vu64().map(|n| n as u32)
     }
     #[inline]
     pub fn read_vu64_u64(&mut self) -> Result<u64> {
-        vu64::decode_vu64(&mut self.buf_file)
+        self.buf_file.read_and_decode_vu64()
     }
     #[inline]
-    pub fn _write_vu64_u16(&mut self, val: u16) -> Result<()> {
-        self.write_all(vu64::encode(val as u64).as_ref())
+    pub fn _write_vu64_u16(&mut self, value: u16) -> Result<()> {
+        self.buf_file.encode_and_write_vu64(value as u64)
     }
     #[inline]
-    pub fn write_vu64_u32(&mut self, val: u32) -> Result<()> {
-        self.write_all(vu64::encode(val as u64).as_ref())
+    pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
+        self.buf_file.encode_and_write_vu64(value as u64)
     }
     #[inline]
-    pub fn write_vu64_u64(&mut self, val: u64) -> Result<()> {
-        self.write_all(vu64::encode(val).as_ref())
+    pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
+        self.buf_file.encode_and_write_vu64(value)
     }
 }
 
 #[cfg(feature = "vf_vu64")]
 impl VarCursor {
     #[inline]
-    pub fn write_vu64_u16(&mut self, val: u16) -> Result<()> {
-        self.write_all(vu64::encode(val as u64).as_ref())
+    pub fn write_vu64_u16(&mut self, value: u16) -> Result<()> {
+        self.encode_and_write_vu64(value as u64)
     }
     #[inline]
-    pub fn write_vu64_u32(&mut self, val: u32) -> Result<()> {
-        self.write_all(vu64::encode(val as u64).as_ref())
+    pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
+        self.encode_and_write_vu64(value as u64)
     }
     #[inline]
-    pub fn write_vu64_u64(&mut self, val: u64) -> Result<()> {
-        self.write_all(vu64::encode(val).as_ref())
+    pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
+        self.encode_and_write_vu64(value)
     }
 }
+
+#[cfg(feature = "vf_vu64")]
+impl WriteVu64 for VarCursor {}
 
 #[cfg(feature = "vf_vu64")]
 impl VarFile {

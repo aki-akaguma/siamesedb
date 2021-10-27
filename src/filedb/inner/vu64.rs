@@ -322,22 +322,3 @@ mod tests {
     }
     */
 }
-
-use super::buf::BufOneByte;
-
-pub fn decode_vu64<R: BufOneByte + std::io::Read + ?Sized>(inp: &mut R) -> std::io::Result<u64> {
-    let mut buf = [0u8; MAX_BYTES];
-    let byte_1st = inp.read_one_byte()?;
-    buf[0] = byte_1st;
-    let len = decoded_len(byte_1st);
-    if len > 1 {
-        inp.read_exact_max8byte(&mut buf[1..len as usize])?;
-    }
-    match decode_with_length(len, &buf[0..len as usize]) {
-        Ok(i) => Ok(i),
-        Err(err) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("{}", err),
-        )),
-    }
-}

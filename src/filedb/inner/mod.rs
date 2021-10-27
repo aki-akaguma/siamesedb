@@ -15,6 +15,8 @@ mod vfile;
 
 #[cfg(feature = "vf_vu64")]
 pub mod vu64;
+#[cfg(feature = "vf_vu64")]
+pub mod vu64_io;
 
 mod kc;
 

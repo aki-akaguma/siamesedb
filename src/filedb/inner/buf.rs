@@ -310,12 +310,11 @@ impl BufFile {
     }
 }
 
-pub trait BufOneByte {
-    fn read_one_byte(&mut self) -> Result<u8>;
-    fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()>;
-}
+#[cfg(feature = "vf_vu64")]
+use super::vu64_io::{ReadVu64, WriteVu64};
 
-impl BufOneByte for BufFile {
+#[cfg(feature = "vf_vu64")]
+impl ReadVu64 for BufFile {
     fn read_one_byte(&mut self) -> Result<u8> {
         let curr = self.pos;
         let one_byte = {
@@ -351,6 +350,9 @@ impl BufOneByte for BufFile {
         Ok(())
     }
 }
+
+#[cfg(feature = "vf_vu64")]
+impl WriteVu64 for BufFile {}
 
 impl Read for BufFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
