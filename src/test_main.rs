@@ -17,6 +17,7 @@ fn _test_a1() {
     //
     // 1m
     //
+    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 10_000, f_get: true, f_delete: true, f_repeat: 10 },
@@ -30,7 +31,6 @@ fn _test_a1() {
         |i: usize| { format!("key{:01}", i).repeat(25) },
         |i: usize| { format!("value{:01}", i).repeat(60) },
     );
-    /*
     */
     /*
     #[rustfmt::skip]
@@ -71,7 +71,6 @@ fn _test_a1() {
     56.70user 0.97system 0:58.23elapsed 99%CPU (0avgtext+0avgdata 2304maxresident)k
     0inputs+141216outputs (0major+213minor)pagefaults 0swaps
     */
-    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -79,7 +78,8 @@ fn _test_a1() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
-    */
+    /*
+     */
 }
 
 fn _test_a2() {

@@ -49,10 +49,7 @@ impl FileDbXxxInnerKT for String {
     }
 }
 
-#[cfg(feature = "vf_u32u32")]
-use std::convert::TryInto;
-
-#[cfg(feature = "vf_u64u64")]
+#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
 use std::convert::TryInto;
 
 impl FileDbXxxInnerKT for u64 {

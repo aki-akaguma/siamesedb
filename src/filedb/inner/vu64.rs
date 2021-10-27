@@ -22,10 +22,10 @@ but 0x00 is represented by 0x00.
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{self, Debug, Display};
 
-/// Maximum length of a `v64` in bytes
+/// Maximum length of a `vu64` in bytes
 pub const MAX_BYTES: usize = 9;
 
-/// `v64`: serialized variable-length 64-bit integers.
+/// `vu64`: serialized variable-length 64-bit integers.
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Vu64 {
     /// Encoded length in bytes
@@ -73,8 +73,9 @@ impl TryFrom<&[u8]> for Vu64 {
     }
 }
 
-/// Get the length of an encoded `v64` for the given value in bytes.
-pub fn encoded_len(value: u64) -> usize {
+/// Get the length of an encoded `vu64` for the given value in bytes.
+#[inline]
+pub fn encoded_len(value: u64) -> u8 {
     match value.leading_zeros() {
         0..=7 => 9,
         8..=14 => 8,
@@ -102,47 +103,46 @@ pub fn encoded_len(value: u64) -> usize {
     }
 }
 
-/// Get the length of a `v64` from the first byte.
+/// Get the length of a `vu64` from the first byte.
 ///
 /// NOTE: The returned value is inclusive of the first byte itself.
 #[inline]
-pub fn decoded_len(byte: u8) -> usize {
-    byte.leading_ones() as usize + 1
+pub fn decoded_len(byte: u8) -> u8 {
+    byte.leading_ones() as u8 + 1
 }
 
-/// Encode an unsigned 64-bit integer as `v64`.
+/// Encode an unsigned 64-bit integer as `vu64`.
 #[inline]
 pub fn encode(value: u64) -> Vu64 {
     let mut bytes = [0u8; MAX_BYTES];
     let length = encoded_len(value);
+    let follow_len = length - 1;
     //
-    if length == 1 {
+    if follow_len == 0 {
         // 1-byte special case
         bytes[0] = value as u8;
-    } else if length < 8 {
+    } else if follow_len < 7 {
         let encoded = value << length as u64;
         bytes[..8].copy_from_slice(&encoded.to_le_bytes());
         let b1st = bytes[0];
-        bytes[0] = !((!(b1st >> 1)) >> (length - 1));
-    } else if length == 8 {
-        // 8-byte special case
-        bytes[1..].copy_from_slice(&value.to_le_bytes());
-        bytes[0] = 0xFE;
-    } else if length == 9 {
-        // 9-byte special case
-        bytes[1..].copy_from_slice(&value.to_le_bytes());
-        bytes[0] = 0xFF;
+        bytes[0] = !((!(b1st >> 1)) >> follow_len);
     } else {
-        #[allow(unsafe_code)]
-        unsafe {
-            core::hint::unreachable_unchecked()
+        bytes[1..].copy_from_slice(&value.to_le_bytes());
+        if follow_len == 7 {
+            // 8-byte special case
+            bytes[0] = 0xFE;
+        } else if follow_len == 8 {
+            // 9-byte special case
+            bytes[0] = 0xFF;
+        } else {
+            #[allow(unsafe_code)]
+            unsafe {
+                core::hint::unreachable_unchecked()
+            }
         }
     }
     //
-    Vu64 {
-        bytes,
-        length: length as u8,
-    }
+    Vu64 { bytes, length }
 }
 
 /// Decode a `v64`-encoded unsigned 64-bit integer.
@@ -156,14 +156,22 @@ pub fn decode(bytes: &[u8]) -> Result<u64, Error> {
         return Err(Error::Truncated);
     }
     let length = decoded_len(bytes[0]);
-    decode_with_length(length, bytes)
+    let result = decode_with_length(length, bytes)?;
+    check_result_with_length(length, result)
 }
 
 #[inline]
-pub fn decode_with_length(length: usize, bytes: &[u8]) -> Result<u64, Error> {
-    //let length = decoded_len(*bytes.first().ok_or(Error::Truncated)?);
-    //
-    if bytes.len() < length {
+pub fn check_result_with_length(length: u8, result: u64) -> Result<u64, Error> {
+    if length == 1 || result >= (1 << (7 * (length - 1))) {
+        Ok(result)
+    } else {
+        Err(Error::LeadingOnes)
+    }
+}
+
+#[inline]
+pub fn decode_with_length(length: u8, bytes: &[u8]) -> Result<u64, Error> {
+    if bytes.len() < length as usize {
         return Err(Error::Truncated);
     }
     //
@@ -172,7 +180,7 @@ pub fn decode_with_length(length: usize, bytes: &[u8]) -> Result<u64, Error> {
         bytes[0] as u64
     } else if length < 8 {
         let mut encoded = [0u8; 8];
-        encoded[..length].copy_from_slice(&bytes[..length]);
+        encoded[..length as usize].copy_from_slice(&bytes[..length as usize]);
         encoded[0] <<= length;
         u64::from_le_bytes(encoded) >> length
     } else if length == 8 {
@@ -188,12 +196,8 @@ pub fn decode_with_length(length: usize, bytes: &[u8]) -> Result<u64, Error> {
         }
     };
     //
-    // Ensure there are no superfluous leading (little-endian) ones
-    if length == 1 || result >= (1 << (7 * (length - 1))) {
-        Ok(result)
-    } else {
-        Err(Error::LeadingOnes)
-    }
+    debug_assert!(length == 1 || result >= (1 << (7 * (length - 1))));
+    Ok(result)
 }
 
 /// Error type
@@ -327,9 +331,9 @@ pub fn decode_vu64<R: BufOneByte + std::io::Read + ?Sized>(inp: &mut R) -> std::
     buf[0] = byte_1st;
     let len = decoded_len(byte_1st);
     if len > 1 {
-        inp.read_exact_max8byte(&mut buf[1..len])?;
+        inp.read_exact_max8byte(&mut buf[1..len as usize])?;
     }
-    match decode_with_length(len, &buf[0..len]) {
+    match decode_with_length(len, &buf[0..len as usize]) {
         Ok(i) => Ok(i),
         Err(err) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
