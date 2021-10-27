@@ -174,19 +174,23 @@ pub fn decode_with_length(length: u8, bytes: &[u8]) -> Result<u64, Error> {
     if bytes.len() < length as usize {
         return Err(Error::Truncated);
     }
+    let follow_len = length - 1;
     //
-    let result = if length == 1 {
+    let result = if follow_len == 0 {
         // 1-byte special case
         bytes[0] as u64
-    } else if length < 8 {
+    } else if follow_len < 7 {
         let mut encoded = [0u8; 8];
         encoded[..length as usize].copy_from_slice(&bytes[..length as usize]);
-        encoded[0] <<= length;
-        u64::from_le_bytes(encoded) >> length
-    } else if length == 8 {
+        let lsb = encoded[0] << length;
+        let val = u64::from_le_bytes(encoded) & !0xFFu64;
+        (val | lsb as u64) >> length
+    } else if follow_len == 7 {
         // 8-byte special case
-        u64::from_le_bytes(bytes[1..8].try_into().unwrap())
-    } else if length == 9 {
+        let mut encoded = [0u8; 8];
+        encoded[..7].copy_from_slice(&bytes[1..8]);
+        u64::from_le_bytes(encoded)
+    } else if follow_len == 8 {
         // 9-byte special case
         u64::from_le_bytes(bytes[1..9].try_into().unwrap())
     } else {
@@ -225,7 +229,7 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     //use super::{decode, encode, signed};
-    use super::{decode, encode};
+    use super::{decode, encode, encoded_len};
     //
     #[test]
     fn encode_decode_1() {
@@ -260,6 +264,43 @@ mod tests {
             encode(core::u64::MAX).as_ref(),
             &[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]
         );
+    }
+    #[test]
+    fn encode_len_6() {
+        let val = 0x0300_0000_0000;
+        assert_eq!(encoded_len(val), 6);
+        assert_eq!(encode(val).as_ref(), &[0xf8, 0x00, 0x00, 0x00, 0x00, 0xc0]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_len_7() {
+        let val = 0x1_0000_0000_0000;
+        assert_eq!(encoded_len(val), 7);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_len_8() {
+        let val = 0x00f0_0000_0000_0000;
+        assert_eq!(encoded_len(val), 8);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_len_9() {
+        let val = 0x0100_0000_0000_0000;
+        assert_eq!(encoded_len(val), 9);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
     }
     /*
     #[test]
@@ -321,4 +362,12 @@ mod tests {
         assert_eq!(signed::decode(&mut slice).unwrap(), -0x0f0f_f0f0);
     }
     */
+    #[test]
+    fn encode_all() {
+        let mut val: u64 = 1;
+        for _i in 0..64 {
+            val = (val << 1) | 0x01;
+            assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        }
+    }
 }

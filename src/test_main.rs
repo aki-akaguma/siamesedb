@@ -20,7 +20,7 @@ fn _test_a1() {
     /*
     #[rustfmt::skip]
     _test_db_map(
-        TestC { max_cnt: 10_000, f_get: true, f_delete: true, f_repeat: 10 },
+        TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 3 },
         CheckC { check: true, ..Default::default() },
         /*
         |i: usize| { format!("key{:01}", i) },
