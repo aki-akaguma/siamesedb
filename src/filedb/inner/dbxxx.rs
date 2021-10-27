@@ -7,7 +7,6 @@ use std::collections::BTreeMap;
 use std::io::Result;
 use std::rc::Rc;
 
-#[cfg(feature = "record_size_stats")]
 use super::super::RecordSizeStats;
 
 pub trait FileDbXxxInnerKT {
@@ -175,7 +174,6 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
         vec
     }
     /// record size statistics
-    #[cfg(feature = "record_size_stats")]
     pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
         self.idx_file
             .record_size_stats(|off| self.load_record_size(off))

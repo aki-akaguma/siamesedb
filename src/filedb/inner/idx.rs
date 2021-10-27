@@ -7,7 +7,6 @@ use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-#[cfg(feature = "record_size_stats")]
 use super::super::RecordSizeStats;
 
 type HeaderSignature = [u8; 8];
@@ -457,7 +456,6 @@ impl IdxFile {
         //
         Ok((record_vec, node_vec))
     }
-    #[cfg(feature = "record_size_stats")]
     pub fn record_size_stats<F>(&self, read_record_size_func: F) -> Result<RecordSizeStats>
     where
         F: Fn(u64) -> Result<u32> + std::marker::Copy,

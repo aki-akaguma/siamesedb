@@ -15,7 +15,7 @@ name = "test_main"
 path = "src/test_main.rs"
 
 [features]
-default = ["vf_vu64", "record_size_stats"]
+default = ["vf_vu64"]
 #default = ["vf_vu64", "buf_lru"]
 
 # for developping
@@ -25,7 +25,6 @@ vf_vu64 = []
 
 buf_lru = []
 buf_stats = []
-record_size_stats = []
 
 [dependencies]
 

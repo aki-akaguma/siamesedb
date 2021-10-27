@@ -566,7 +566,6 @@ fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
     );
     #[cfg(feature = "buf_stats")]
     println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
-    #[cfg(feature = "record_size_stats")]
     println!(
         "record_size_stats(): {:?}",
         db_map.record_size_stats().unwrap()
