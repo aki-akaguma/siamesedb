@@ -1,6 +1,7 @@
 use super::super::super::DbXxx;
 use super::super::{CountOfPerSize, FileDbNode};
 use super::kc::KeyCacheTrait;
+use super::semtype::*;
 use super::{dat, idx, kc};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -57,37 +58,37 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
 
 // for utils
 impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
-    fn clear_key_cache(&mut self, key_offset: u64) {
-        self.key_cache.delete(&key_offset);
+    fn clear_key_cache(&mut self, record_offset: RecordOffset) {
+        self.key_cache.delete(&record_offset);
     }
     fn _clear_key_cache_all(&mut self) {
         self.key_cache.clear();
     }
-    pub fn load_key_string(&mut self, key_offset: u64) -> Result<Rc<KT>> {
-        debug_assert!(key_offset != 0);
-        let string = match self.key_cache.get(&key_offset) {
+    pub fn load_key_string(&mut self, record_offset: RecordOffset) -> Result<Rc<KT>> {
+        debug_assert!(record_offset != RecordOffset::new(0));
+        let string = match self.key_cache.get(&record_offset) {
             Some(s) => s,
             None => {
-                let vec = self.dat_file.read_record_key(key_offset)?.unwrap();
-                self.key_cache.put(&key_offset, KT::from(&vec)).unwrap()
+                let vec = self.dat_file.read_record_key(record_offset)?.unwrap();
+                self.key_cache.put(&record_offset, KT::from(&vec)).unwrap()
             }
         };
         Ok(string)
     }
-    pub fn load_key_string_no_cache(&self, key_offset: u64) -> Result<KT> {
-        debug_assert!(key_offset != 0);
-        let vec = self.dat_file.read_record_key(key_offset)?.unwrap();
+    pub fn load_key_string_no_cache(&self, record_offset: RecordOffset) -> Result<KT> {
+        debug_assert!(record_offset != RecordOffset::new(0));
+        let vec = self.dat_file.read_record_key(record_offset)?.unwrap();
         Ok(KT::from(&vec))
     }
-    fn load_value(&self, key_offset: u64) -> Result<Option<Vec<u8>>> {
-        debug_assert!(key_offset != 0);
+    fn load_value(&self, record_offset: RecordOffset) -> Result<Option<Vec<u8>>> {
+        debug_assert!(record_offset != RecordOffset::new(0));
         Ok(self
             .dat_file
-            .read_record(key_offset)?
+            .read_record(record_offset)?
             .map(|(_key, val)| val))
     }
-    fn load_record_size(&self, key_offset: u64) -> Result<u32> {
-        self.dat_file.read_record_size(key_offset)
+    fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
+        self.dat_file.read_record_size(record_offset)
     }
     fn keys_binary_search(
         &mut self,
@@ -104,7 +105,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             let key_offset = unsafe { *node.keys.get_unchecked(mid) };
             //let key_offset = node.keys[mid];
             //
-            debug_assert!(key_offset != 0);
+            debug_assert!(key_offset != RecordOffset::new(0));
             let key_string = self.load_key_string(key_offset)?;
             //
             let cmp = key.cmp(&key_string);
@@ -190,16 +191,20 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     ) -> Result<idx::IdxNode> {
         if node.keys.is_empty() {
             let new_key_offset = self.dat_file.add_record(&key.as_bytes(), value)?;
-            return Ok(idx::IdxNode::new_active(new_key_offset, 0, 0));
+            return Ok(idx::IdxNode::new_active(
+                new_key_offset,
+                NodeOffset::new(0),
+                NodeOffset::new(0),
+            ));
         }
         let r = self.keys_binary_search(&mut node, key)?;
         match r {
             Ok(k) => {
-                let key_offset = node.keys[k];
-                debug_assert!(key_offset != 0);
-                let new_key_offset = self.store_value_on_insert(key_offset, value)?;
-                if key_offset != new_key_offset {
-                    node.keys[k] = new_key_offset;
+                let record_offset = node.keys[k];
+                debug_assert!(record_offset != RecordOffset::new(0));
+                let new_record_offset = self.store_value_on_insert(record_offset, value)?;
+                if record_offset != new_record_offset {
+                    node.keys[k] = new_record_offset;
                     self.dirty = true;
                     return self.idx_file.write_node(node);
                 }
@@ -207,17 +212,17 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             }
             Err(k) => {
                 let node_offset1 = node.downs[k];
-                let node2 = if node_offset1 != 0 {
+                let node2 = if !node_offset1.is_zero() {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     self.insert_into_node_tree(node1, key, value)?
                 } else {
                     let new_key_offset = self.dat_file.add_record(&key.as_bytes(), value)?;
-                    idx::IdxNode::new_active(new_key_offset, 0, 0)
+                    idx::IdxNode::new_active(new_key_offset, NodeOffset::new(0), NodeOffset::new(0))
                 };
                 if node2.is_active_on_insert() {
                     self.balance_on_insert(node, k, &node2)
                 } else {
-                    debug_assert!(node2.offset != 0);
+                    debug_assert!(!node2.offset.is_zero());
                     let node2 = self.idx_file.write_node(node2)?;
                     node.downs[k] = node2.offset;
                     self.dirty = true;
@@ -227,12 +232,16 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         }
     }
     #[inline]
-    fn store_value_on_insert(&mut self, key_offset: u64, value: &[u8]) -> Result<u64> {
-        if let Some(r_key) = self.dat_file.read_record_key(key_offset)? {
-            let new_key_offset = self.dat_file.write_record(key_offset, &r_key, value)?;
+    fn store_value_on_insert(
+        &mut self,
+        record_offset: RecordOffset,
+        value: &[u8],
+    ) -> Result<RecordOffset> {
+        if let Some(r_key) = self.dat_file.read_record_key(record_offset)? {
+            let new_key_offset = self.dat_file.write_record(record_offset, &r_key, value)?;
             Ok(new_key_offset)
         } else {
-            panic!("dat_file.read_record({})", key_offset);
+            panic!("dat_file.read_record({})", record_offset);
         }
     }
     #[inline]
@@ -257,14 +266,16 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     #[inline]
     fn split_on_insert(&mut self, mut node: idx::IdxNode) -> Result<idx::IdxNode> {
-        let mut node1 = idx::IdxNode::new(0);
+        let mut node1 = idx::IdxNode::new(NodeOffset::new(0));
         let slice = &node.keys[idx::NODE_SLOTS_MAX_HALF as usize..node.keys.len()];
         node1.keys.extend_from_slice(slice);
         let slice = &node.downs[idx::NODE_SLOTS_MAX_HALF as usize..node.downs.len()];
         node1.downs.extend_from_slice(slice);
         //
-        node.keys.resize(idx::NODE_SLOTS_MAX_HALF as usize, 0);
-        node.downs.resize(idx::NODE_SLOTS_MAX_HALF as usize, 0);
+        node.keys
+            .resize(idx::NODE_SLOTS_MAX_HALF as usize, RecordOffset::new(0));
+        node.downs
+            .resize(idx::NODE_SLOTS_MAX_HALF as usize, NodeOffset::new(0));
         //
         let key_offset1 = node.keys.remove(idx::NODE_SLOTS_MAX_HALF as usize - 1);
         let node1 = self.idx_file.write_new_node(node1)?;
@@ -291,7 +302,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             }
             Err(k) => {
                 let node_offset1 = node.downs[k];
-                if node_offset1 != 0 {
+                if !node_offset1.is_zero() {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     let node1 = self.delete_from_node_tree(node1, key)?;
                     node.downs[k] = node1.offset;
@@ -309,32 +320,36 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         Ok(node)
     }
     fn delete_at(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
-        let key_offset = node.keys[i];
-        debug_assert!(key_offset != 0, "key_offset: {} != 0", key_offset);
+        let record_offset = node.keys[i];
+        debug_assert!(
+            record_offset != RecordOffset::new(0),
+            "key_offset: {} != 0",
+            record_offset
+        );
         {
-            self.clear_key_cache(key_offset);
-            self.dat_file.delete_record(key_offset)?;
+            self.clear_key_cache(record_offset);
+            self.dat_file.delete_record(record_offset)?;
         }
         let node_offset1 = node.downs[i];
-        if node_offset1 == 0 {
+        if node_offset1.is_zero() {
             let _key_offset = node.keys.remove(i);
             let _node_offset = node.downs.remove(i);
             let new_node = self.idx_file.write_node(node)?;
             Ok(new_node)
         } else {
             let node1 = self.idx_file.read_node(node_offset1)?;
-            let (key_offset, node1) = self.delete_max(node1)?;
-            node.keys[i] = key_offset;
+            let (record_offset, node1) = self.delete_max(node1)?;
+            node.keys[i] = record_offset;
             node.downs[i] = node1.offset;
             let node = self.idx_file.write_node(node)?;
             self.balance_left(node, i)
         }
     }
-    fn delete_max(&mut self, mut node: idx::IdxNode) -> Result<(u64, idx::IdxNode)> {
+    fn delete_max(&mut self, mut node: idx::IdxNode) -> Result<(RecordOffset, idx::IdxNode)> {
         let j = node.keys.len();
         let i = j - 1;
         let node_offset1 = node.downs[j];
-        if node_offset1 == 0 {
+        if node_offset1.is_zero() {
             node.downs.remove(j);
             let key_offset2 = node.keys.remove(i);
             let new_node = self.idx_file.write_node(node)?;
@@ -350,7 +365,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     fn balance_left(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
         let node_offset1 = node.downs[i];
-        if node_offset1 == 0 {
+        if node_offset1.is_zero() {
             return Ok(node);
         }
         let mut node1 = self.idx_file.read_node(node_offset1)?;
@@ -360,8 +375,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         let j = i + 1;
         let key_offset2 = node.keys[i];
         let node_offset2 = node.downs[j];
-        debug_assert!(node_offset2 != 0);
-        if node_offset2 != 0 {
+        debug_assert!(!node_offset2.is_zero());
+        if !node_offset2.is_zero() {
             let mut node2 = self.idx_file.read_node(node_offset2)?;
             if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
                 // unification
@@ -392,7 +407,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     fn balance_right(&mut self, mut node: idx::IdxNode, j: usize) -> Result<idx::IdxNode> {
         let node_offset1 = node.downs[j];
-        if node_offset1 == 0 {
+        if node_offset1.is_zero() {
             return Ok(node);
         }
         let mut node1 = self.idx_file.read_node(node_offset1)?;
@@ -402,8 +417,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         let i = j - 1;
         let key_offset2 = node.keys[i];
         let node_offset2 = node.downs[i];
-        debug_assert!(node_offset2 != 0);
-        if node_offset2 != 0 {
+        debug_assert!(!node_offset2.is_zero());
+        if !node_offset2.is_zero() {
             let mut node2 = self.idx_file.read_node(node_offset2)?;
             if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
                 // unification
@@ -433,30 +448,30 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     fn move_a_node_from_right_to_left(
         &mut self,
-        key_offset: u64,
+        record_offset: RecordOffset,
         node_l: &mut idx::IdxNode,
         node_r: &mut idx::IdxNode,
-    ) -> u64 {
-        node_l.keys.push(key_offset);
+    ) -> RecordOffset {
+        node_l.keys.push(record_offset);
         node_l.downs.push(node_r.downs.remove(0));
         node_r.keys.remove(0)
     }
     fn move_left_right(
         &mut self,
-        key_offset: u64,
+        record_offset: RecordOffset,
         node_l: &mut idx::IdxNode,
         node_r: &mut idx::IdxNode,
-    ) -> u64 {
+    ) -> RecordOffset {
         let j = node_l.keys.len();
         let i = j - 1;
-        node_r.keys.insert(0, key_offset);
+        node_r.keys.insert(0, record_offset);
         node_r.downs.insert(0, node_l.downs.remove(j));
         node_l.keys.remove(i)
     }
     fn trim(&self, node: idx::IdxNode) -> Result<idx::IdxNode> {
         if node.downs.len() == 1 {
             let node_offset1 = node.downs[0];
-            if node_offset1 != 0 {
+            if !node_offset1.is_zero() {
                 let node1 = self.idx_file.read_node(node_offset1)?;
                 self.idx_file.delete_node(node)?;
                 return Ok(node1);
@@ -476,12 +491,12 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         match r {
             Ok(k) => {
                 let key_offset = node.keys[k];
-                debug_assert!(key_offset != 0);
+                debug_assert!(key_offset != RecordOffset::new(0));
                 self.load_value(key_offset)
             }
             Err(k) => {
                 let node_offset1 = node.downs[k];
-                if node_offset1 != 0 {
+                if !node_offset1.is_zero() {
                     let mut node1 = self.idx_file.read_node(node_offset1)?;
                     self.find_in_node_tree(&mut node1, key)
                 } else {
@@ -499,7 +514,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             Ok(_k) => Ok(true),
             Err(k) => {
                 let node_offset1 = node.downs[k];
-                if node_offset1 != 0 {
+                if !node_offset1.is_zero() {
                     let mut node1 = self.idx_file.read_node(node_offset1)?;
                     self.has_key_in_node_tree(&mut node1, key)
                 } else {

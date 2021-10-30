@@ -440,6 +440,7 @@ impl Drop for BufFile {
 }
 
 //--
+#[cfg(test)]
 mod debug {
     #[test]
     fn test_size_of() {

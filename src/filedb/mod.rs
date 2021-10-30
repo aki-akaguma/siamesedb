@@ -24,11 +24,13 @@ use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use inner::vu64;
 use inner::FileDbInner;
 
+use inner::semtype::*;
+
 use super::DbXxx;
 
 type CountOfPerSize = Vec<(u32, u64)>;
 
-type RecordSizeStats = Vec<(u32, u64)>;
+type RecordSizeStats = Vec<(RecordSize, u64)>;
 
 type FileDbMapInner = FileDbXxxInner<String>;
 type FileDbListInner = FileDbXxxInner<u64>;

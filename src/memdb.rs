@@ -243,6 +243,7 @@ impl<'a> DbList for MemoryDbListInner<'a> {
 }
 
 //--
+#[cfg(test)]
 mod debug {
     #[test]
     fn test_size_of() {

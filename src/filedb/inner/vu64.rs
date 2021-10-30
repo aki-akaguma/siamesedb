@@ -22,6 +22,42 @@ but 0x00 is represented by 0x00.
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{self, Debug, Display};
 
+/// Maximun integer whose length of `vu64` is 1 byte.
+#[allow(dead_code)]
+pub const MAX_LEN1: u64 = 0x7F;
+
+/// Maximun integer whose length of `vu64` is 2 byte.
+#[allow(dead_code)]
+pub const MAX_LEN2: u64 = 0x3FFF;
+
+/// Maximun integer whose length of `vu64` is 3 byte.
+#[allow(dead_code)]
+pub const MAX_LEN3: u64 = 0x1F_FFFF;
+
+/// Maximun integer whose length of `vu64` is 4 byte.
+#[allow(dead_code)]
+pub const MAX_LEN4: u64 = 0x0FFF_FFFF;
+
+/// Maximun integer whose length of `vu64` is 5 byte.
+#[allow(dead_code)]
+pub const MAX_LEN5: u64 = 0x07_FFFF_FFFF;
+
+/// Maximun integer whose length of `vu64` is 6 byte.
+#[allow(dead_code)]
+pub const MAX_LEN6: u64 = 0x03FF_FFFF_FFFF;
+
+/// Maximun integer whose length of `vu64` is 7 byte.
+#[allow(dead_code)]
+pub const MAX_LEN7: u64 = 0x01_FFFF_FFFF_FFFF;
+
+/// Maximun integer whose length of `vu64` is 8 byte.
+#[allow(dead_code)]
+pub const MAX_LEN8: u64 = 0xFF_FFFF_FFFF_FFFF;
+
+/// Maximun integer whose length of `vu64` is 9 byte.
+#[allow(dead_code)]
+pub const MAX_LEN9: u64 = core::u64::MAX;
+
 /// Maximum length of a `vu64` in bytes
 pub const MAX_BYTES: usize = 9;
 
@@ -230,6 +266,7 @@ impl std::error::Error for Error {}
 mod tests {
     //use super::{decode, encode, signed};
     use super::{decode, encode, encoded_len};
+    use super::{MAX_LEN1, MAX_LEN2, MAX_LEN3, MAX_LEN4, MAX_LEN5, MAX_LEN6, MAX_LEN7, MAX_LEN8};
     //
     #[test]
     fn encode_decode_1() {
@@ -240,10 +277,6 @@ mod tests {
     fn encode_decode_2() {
         let val = 123456789;
         assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
-    }
-    #[test]
-    fn encode_zero() {
-        assert_eq!(encode(0).as_ref(), &[0]);
     }
     #[test]
     fn encode_bit_pattern_examples() {
@@ -259,11 +292,145 @@ mod tests {
         );
     }
     #[test]
-    fn encode_maxint() {
+    fn encode_max_u64() {
+        let val = core::u64::MAX;
+        assert_eq!(encoded_len(val), 9);
         assert_eq!(
-            encode(core::u64::MAX).as_ref(),
+            encode(val).as_ref(),
             &[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]
         );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_u32() {
+        let val = core::u32::MAX as u64;
+        assert_eq!(encoded_len(val), 5);
+        assert_eq!(encode(val).as_ref(), &[0xf7, 0xff, 0xff, 0xff, 0x1f]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_u16() {
+        let val = core::u16::MAX as u64;
+        assert_eq!(encoded_len(val), 3);
+        assert_eq!(encode(val).as_ref(), &[0xdf, 0xff, 0x07]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_u8() {
+        let val = core::u8::MAX as u64;
+        assert_eq!(encoded_len(val), 2);
+        assert_eq!(encode(val).as_ref(), &[0xbf, 0x03]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_zero() {
+        let val = 0u64;
+        assert_eq!(encoded_len(val), 1);
+        assert_eq!(encode(val).as_ref(), &[0x00]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len1() {
+        let val = MAX_LEN1 as u64;
+        assert_eq!(encoded_len(val), 1);
+        assert_eq!(encode(val).as_ref(), &[0x7F]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 2);
+        assert_eq!(encode(val).as_ref(), &[0x80, 0x02]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len2() {
+        let val = MAX_LEN2 as u64;
+        assert_eq!(encoded_len(val), 2);
+        assert_eq!(encode(val).as_ref(), &[0xBF, 0xFF]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 3);
+        assert_eq!(encode(val).as_ref(), &[0xC0, 0x00, 0x02]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len3() {
+        let val = MAX_LEN3 as u64;
+        assert_eq!(encoded_len(val), 3);
+        assert_eq!(encode(val).as_ref(), &[0xDF, 0xFF, 0xFF]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 4);
+        assert_eq!(encode(val).as_ref(), &[0xE0, 0x00, 0x00, 0x02]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len4() {
+        let val = MAX_LEN4 as u64;
+        assert_eq!(encoded_len(val), 4);
+        assert_eq!(encode(val).as_ref(), &[0xEF, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 5);
+        assert_eq!(encode(val).as_ref(), &[0xF0, 0x00, 0x00, 0x00, 0x02]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len5() {
+        let val = MAX_LEN5 as u64;
+        assert_eq!(encoded_len(val), 5);
+        assert_eq!(encode(val).as_ref(), &[0xF7, 0xFF, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 6);
+        assert_eq!(encode(val).as_ref(), &[0xF8, 0x00, 0x00, 0x00, 0x00, 0x02]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len6() {
+        let val = MAX_LEN6 as u64;
+        assert_eq!(encoded_len(val), 6);
+        assert_eq!(encode(val).as_ref(), &[0xFB, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 7);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len7() {
+        let val = MAX_LEN7 as u64;
+        assert_eq!(encoded_len(val), 7);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xFD, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 8);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xFE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+    }
+    #[test]
+    fn encode_max_len8() {
+        let val = MAX_LEN8 as u64;
+        assert_eq!(encoded_len(val), 8);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
+        let val = val + 1;
+        assert_eq!(encoded_len(val), 9);
+        assert_eq!(
+            encode(val).as_ref(),
+            &[0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]
+        );
+        assert_eq!(decode(encode(val).as_ref()).unwrap(), val);
     }
     #[test]
     fn encode_len_6() {

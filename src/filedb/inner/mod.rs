@@ -6,6 +6,7 @@ use super::super::{DbList, DbMap};
 use super::{FileDbList, FileDbMap, FileDbNode};
 
 pub(crate) mod dbxxx;
+pub(crate) mod semtype;
 
 mod dat;
 mod idx;

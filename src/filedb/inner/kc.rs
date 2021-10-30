@@ -1,3 +1,4 @@
+use super::semtype::*;
 use std::rc::Rc;
 
 const CACHE_SIZE: usize = 128;
@@ -5,14 +6,14 @@ const CACHE_SIZE: usize = 128;
 #[derive(Debug)]
 struct KeyCacheBean<KT> {
     pub key_string: Rc<KT>,
-    key_offset: u64,
+    record_offset: RecordOffset,
     uses: u64,
 }
 
 impl<KT> KeyCacheBean<KT> {
-    fn new(key_offset: u64, key_string: Rc<KT>) -> Self {
+    fn new(record_offset: RecordOffset, key_string: Rc<KT>) -> Self {
         Self {
-            key_offset,
+            record_offset,
             key_string,
             uses: 0,
         }
@@ -43,9 +44,9 @@ pub trait KeyCacheTrait<KT> {
         self.len() == 0
     }
     fn len(&self) -> usize;
-    fn get(&mut self, offset: &u64) -> Option<Rc<KT>>;
-    fn put(&mut self, offset: &u64, key: KT) -> Option<Rc<KT>>;
-    fn delete(&mut self, offset: &u64);
+    fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>>;
+    fn put(&mut self, offset: &RecordOffset, key: KT) -> Option<Rc<KT>>;
+    fn delete(&mut self, offset: &RecordOffset);
     fn clear(&mut self);
 }
 
@@ -53,8 +54,11 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
     fn len(&self) -> usize {
         self.cache.len()
     }
-    fn get(&mut self, offset: &u64) -> Option<Rc<KT>> {
-        match self.cache.binary_search_by_key(offset, |a| a.key_offset) {
+    fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>> {
+        match self
+            .cache
+            .binary_search_by_key(&offset.as_value(), |a| a.record_offset.as_value())
+        {
             Ok(k) => {
                 let a = self.cache.get_mut(k).unwrap();
                 a.uses += 1;
@@ -63,8 +67,11 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
             Err(_k) => None,
         }
     }
-    fn put(&mut self, offset: &u64, key: KT) -> Option<Rc<KT>> {
-        match self.cache.binary_search_by_key(offset, |a| a.key_offset) {
+    fn put(&mut self, offset: &RecordOffset, key: KT) -> Option<Rc<KT>> {
+        match self
+            .cache
+            .binary_search_by_key(&offset.as_value(), |a| a.record_offset.as_value())
+        {
             Ok(k) => {
                 let a = self.cache.get_mut(k).unwrap();
                 a.uses += 1;
@@ -85,8 +92,11 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
             }
         }
     }
-    fn delete(&mut self, offset: &u64) {
-        match self.cache.binary_search_by_key(offset, |a| a.key_offset) {
+    fn delete(&mut self, offset: &RecordOffset) {
+        match self
+            .cache
+            .binary_search_by_key(&offset.as_value(), |a| a.record_offset.as_value())
+        {
             Ok(k) => {
                 self.cache.remove(k);
             }
