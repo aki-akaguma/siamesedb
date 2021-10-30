@@ -1,5 +1,5 @@
 [package]
-name = "shamdb"
+name = "siamesedb"
 version = "0.1.0"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
@@ -8,7 +8,7 @@ keywords = ["store", "database"]
 categories = ["database"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/aki-akaguma/shamdb"
+repository = "https://github.com/aki-akaguma/siamesedb"
 
 [[bin]]
 name = "test_main"

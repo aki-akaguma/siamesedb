@@ -1,4 +1,4 @@
-# shamdb
+# siamesedb
 
 The simple local key-value store.
 
@@ -23,14 +23,14 @@ The simple local key-value store.
 ### Example DbMap:
 
 ```rust
-use shamdb::DbMap;
+use siamesedb::DbMap;
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test1.shamdb";
     // remove database
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
-    let db = shamdb::open_file(db_name)?;
+    let db = siamesedb::open_file(db_name)?;
     // create or get db map
     let mut db_map = db.db_map("some_map1")?;
     //
@@ -47,14 +47,14 @@ fn main() -> std::io::Result<()> {
 ### Example DbList:
 
 ```rust
-use shamdb::DbList;
+use siamesedb::DbList;
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test2.shamdb";
     // remove database
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
-    let db = shamdb::open_file(db_name)?;
+    let db = siamesedb::open_file(db_name)?;
     let mut db_list = db.db_list("some_list1")?;
     let r = db_list.get_string(120)?;
     assert_eq!(r, None);

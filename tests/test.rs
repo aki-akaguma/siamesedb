@@ -1,5 +1,5 @@
 mod test {
-    use shamdb::{DbList, DbMap};
+    use siamesedb::{DbList, DbMap};
     //
     fn basic_test_map(db_map: &mut dyn DbMap) {
         // get nothing
@@ -128,13 +128,13 @@ mod test {
     ////
     #[test]
     fn test_memory_map() {
-        let db = shamdb::open_memory();
+        let db = siamesedb::open_memory();
         let mut db_map = db.db_map("some_map1");
         basic_test_map(&mut db_map);
     }
     #[test]
     fn test_memory_list() {
-        let db = shamdb::open_memory();
+        let db = siamesedb::open_memory();
         let mut db_list = db.db_list("some_list1");
         basic_test_list(&mut db_list);
     }
@@ -143,7 +143,7 @@ mod test {
     fn test_file_map() {
         let db_name = "target/tmp/test1.shamdb";
         let _ = std::fs::remove_dir_all(db_name);
-        let db = shamdb::open_file(db_name).unwrap();
+        let db = siamesedb::open_file(db_name).unwrap();
         let mut db_map = db.db_map("some_map1").unwrap();
         basic_test_map(&mut db_map);
         medium_test_map(&mut db_map);
@@ -152,7 +152,7 @@ mod test {
     fn test_file_list() {
         let db_name = "target/tmp/test2.shamdb";
         let _ = std::fs::remove_dir_all(db_name);
-        let db = shamdb::open_file(db_name).unwrap();
+        let db = siamesedb::open_file(db_name).unwrap();
         let mut db_list = db.db_list("some_list1").unwrap();
         basic_test_list(&mut db_list);
         medium_test_list(&mut db_list);

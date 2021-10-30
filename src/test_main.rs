@@ -1,7 +1,7 @@
-use shamdb::filedb::FileDbList;
-use shamdb::filedb::FileDbMap;
-use shamdb::DbList;
-use shamdb::DbMap;
+use siamesedb::filedb::FileDbList;
+use siamesedb::filedb::FileDbMap;
+use siamesedb::DbList;
+use siamesedb::DbMap;
 
 fn main() {
     _test_a1();
@@ -148,7 +148,7 @@ fn _test_a2() {
 fn _test00_map() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
-    let db = shamdb::open_file(db_name).unwrap();
+    let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map("some_map1").unwrap();
     //
     {
@@ -212,7 +212,7 @@ fn _test00_map() {
 fn _test00_list() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
-    let db = shamdb::open_file(db_name).unwrap();
+    let db = siamesedb::open_file(db_name).unwrap();
     let mut db_list = db.db_list("some_list1").unwrap();
     //
     {
@@ -282,7 +282,7 @@ fn _test00_list() {
 fn _test01() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
-    let db = shamdb::open_file(db_name).unwrap();
+    let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map("some_map1").unwrap();
     //
     let r = db_map.get_string("key1").unwrap();
@@ -326,7 +326,7 @@ fn _test01() {
 fn _test02() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
-    let db = shamdb::open_file(db_name).unwrap();
+    let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map("some_map1").unwrap();
     //
     for i in 1..20 {
@@ -425,7 +425,7 @@ where
 {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
-    let db = shamdb::open_file(db_name).unwrap();
+    let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map("some_map1").unwrap();
     //
     for _ in 0..test_cnf.f_repeat.max(1) {
@@ -487,7 +487,7 @@ where
 {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
-    let db = shamdb::open_file(db_name).unwrap();
+    let db = siamesedb::open_file(db_name).unwrap();
     let mut db_list = db.db_list("some_list1").unwrap();
     //
     for _ in 0..test_cnf.f_repeat.max(1) {
