@@ -16,7 +16,7 @@ This is a simple and fast encoder/decoder.
 | `11111110` | 56 bits   | 8 bytes     |
 | `11111111` | 64 bits   | 9 bytes     |
 
-This format is like [`vint64`](https://crates.io/crates/vint64),
+This format is a like [`vint64`](https://crates.io/crates/vint64),
 but 0x00 is represented by 0x00.
 */
 use core::convert::{TryFrom, TryInto};

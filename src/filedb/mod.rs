@@ -3,34 +3,15 @@ use std::cell::RefCell;
 use std::io::Result;
 use std::path::Path;
 use std::rc::{Rc, Weak};
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KeyType {
-    Str = 1,
-    Int = 2,
-}
-impl KeyType {
-    pub fn signature(&self) -> u8 {
-        match self {
-            KeyType::Str => b's',
-            KeyType::Int => b'i',
-        }
-    }
-}
-
 mod inner;
+use super::DbXxx;
 use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
+use inner::semtype::*;
 #[cfg(feature = "vf_vu64")]
 use inner::vu64;
 use inner::FileDbInner;
 
-use inner::semtype::*;
-
-use super::DbXxx;
-
 type CountOfPerSize = Vec<(u32, u64)>;
-
-type RecordSizeStats = Vec<(RecordSize, u64)>;
 
 type FileDbMapInner = FileDbXxxInner<String>;
 type FileDbListInner = FileDbXxxInner<u64>;
@@ -331,14 +312,53 @@ impl DbList for FileDbList {
     }
 }
 
+/// record size statistics.
+#[derive(Debug, Default)]
+pub struct RecordSizeStats(Vec<(RecordSize, u64)>);
+
+impl RecordSizeStats {
+    pub fn new(vec: Vec<(RecordSize, u64)>) -> Self {
+        Self(vec)
+    }
+    pub fn touch_size(&mut self, record_size: RecordSize) {
+        match self.0.binary_search_by_key(&record_size, |&(a, _b)| a) {
+            Ok(sz_idx) => {
+                self.0[sz_idx].1 += 1;
+            }
+            Err(sz_idx) => {
+                self.0.insert(sz_idx, (record_size, 1));
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for RecordSizeStats {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("[")?;
+        if self.0.len() > 1 {
+            for (a, b) in self.0.iter().take(self.0.len() - 1) {
+                formatter.write_fmt(format_args!("({}, {})", a, b))?;
+                formatter.write_str(", ")?;
+            }
+        }
+        if !self.0.is_empty() {
+            let (a, b) = self.0[self.0.len() - 1];
+            formatter.write_fmt(format_args!("({}, {})", a, b))?;
+        }
+        formatter.write_str("]")?;
+        Ok(())
+    }
+}
+
 //--
 #[cfg(test)]
 mod debug {
+    use super::RecordSizeStats;
+    use super::{FileDb, FileDbList, FileDbMap};
+    use super::{FileDbInner, FileDbListInner, FileDbMapInner};
+    //
     #[test]
     fn test_size_of() {
-        use super::{FileDb, FileDbList, FileDbMap};
-        use super::{FileDbInner, FileDbListInner, FileDbMapInner};
-        //
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 8);
@@ -348,6 +368,8 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbInner>(), 80);
             assert_eq!(std::mem::size_of::<FileDbMapInner>(), 80);
             assert_eq!(std::mem::size_of::<FileDbListInner>(), 80);
+            //
+            assert_eq!(std::mem::size_of::<RecordSizeStats>(), 24);
         }
         //
         #[cfg(target_pointer_width = "32")]
@@ -356,9 +378,11 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbMap>(), 4);
             assert_eq!(std::mem::size_of::<FileDbList>(), 4);
             //
-            assert_eq!(std::mem::size_of::<FileDbInner>(), 44);
-            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 44);
-            assert_eq!(std::mem::size_of::<FileDbListInner>(), 44);
+            assert_eq!(std::mem::size_of::<FileDbInner>(), 40);
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 40);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 40);
+            //
+            assert_eq!(std::mem::size_of::<RecordSizeStats>(), 12);
         }
     }
 }

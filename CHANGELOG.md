@@ -1,6 +1,12 @@
 TBD
 ===
 Unreleased changes. Release notes have not yet been written.
+* TODO: read& write node cache
+
+* removes unused enum KeyType from src/filedb/mod.rs
+* adds RecordSizeStats into src/filedb/mod.rs
+* adds read_one_byte() and read_exact_small() into BufFile for the fast.
+* fix: seek over the end.
 
 0.1.1 (2021-10-30)
 =====

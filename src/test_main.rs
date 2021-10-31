@@ -17,17 +17,18 @@ fn _test_a1() {
     //
     // 1m
     //
+    #[rustfmt::skip]
+    _test_db_map(
+        TestC { max_cnt: 1_000, f_get: false, f_delete: false, f_repeat: 1 },
+        CheckC { check: true, ..Default::default() },
+        |i: usize| { format!("key{:01}", i) },
+        |i: usize| { format!("value{:01}", i) },
+    );
     /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000, f_get: true, f_delete: true, f_repeat: 3 },
         CheckC { check: true, ..Default::default() },
-        /*
-        |i: usize| { format!("key{:01}", i) },
-        |i: usize| { format!("value{:01}", i) },
-        */
-        /*
-        */
         |i: usize| { format!("key{:01}", i).repeat(25) },
         |i: usize| { format!("value{:01}", i).repeat(60) },
     );
@@ -71,6 +72,7 @@ fn _test_a1() {
     56.70user 0.97system 0:58.23elapsed 99%CPU (0avgtext+0avgdata 2304maxresident)k
     0inputs+141216outputs (0major+213minor)pagefaults 0swaps
     */
+    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -78,7 +80,13 @@ fn _test_a1() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
-    /*
+    #[rustfmt::skip]
+    _test_db_list(
+        TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
+        CheckC { check: true, ..Default::default() },
+        |i: usize| { i as u64 },
+        |i: usize| { format!("value{:01}", i) },
+    );
      */
 }
 
@@ -567,7 +575,7 @@ fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
     println!(
-        "record_size_stats(): {:?}",
+        "record_size_stats(): {}",
         db_map.record_size_stats().unwrap()
     );
 }
@@ -592,4 +600,8 @@ fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {
     );
     #[cfg(feature = "buf_stats")]
     println!("db_list.buf_stats(): {:?}", db_list.buf_stats());
+    println!(
+        "record_size_stats(): {}",
+        db_list.record_size_stats().unwrap()
+    );
 }

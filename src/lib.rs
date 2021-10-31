@@ -72,10 +72,12 @@ use std::path::Path;
 pub mod filedb;
 pub mod memdb;
 
+/// Open the memory db. This data is not stored in file.
 pub fn open_memory<'a>() -> memdb::MemoryDb<'a> {
     memdb::MemoryDb::open()
 }
 
+/// Open the file db. This data is stored in file.
 pub fn open_file<P: AsRef<Path>>(path: P) -> Result<filedb::FileDb> {
     filedb::FileDb::open(path)
 }

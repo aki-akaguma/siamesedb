@@ -54,6 +54,10 @@ impl VarFile {
         self.seek(SeekFrom::Start(offset.as_value()))
             .map(Offset::<T>::new)
     }
+    ///
+    pub fn set_len<T>(&mut self, size: Offset<T>) -> Result<()> {
+        self.buf_file.set_len(size.as_value())
+    }
 }
 
 impl Read for VarFile {
@@ -505,50 +509,23 @@ impl VarCursor {
 //--
 #[cfg(test)]
 mod debug {
+    use super::VarFile;
+    //
     #[test]
     fn test_size_of() {
-        use super::VarFile;
-        //
         #[cfg(target_pointer_width = "64")]
-        #[cfg(not(feature = "buf_stats"))]
         {
-            #[cfg(feature = "vf_u32u32")]
+            #[cfg(not(feature = "buf_stats"))]
             assert_eq!(std::mem::size_of::<VarFile>(), 120);
-            #[cfg(feature = "vf_u64u64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 120);
-            #[cfg(feature = "vf_vu64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 120);
-        }
-        #[cfg(target_pointer_width = "32")]
-        #[cfg(not(feature = "buf_stats"))]
-        {
-            #[cfg(feature = "vf_u32u32")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 76);
-            #[cfg(feature = "vf_u64u64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 76);
-            #[cfg(feature = "vf_vu64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 76);
-        }
-        //
-        #[cfg(target_pointer_width = "64")]
-        #[cfg(feature = "buf_stats")]
-        {
-            #[cfg(feature = "vf_u32u32")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 128);
-            #[cfg(feature = "vf_u64u64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 128);
-            #[cfg(feature = "vf_vu64")]
+            #[cfg(feature = "buf_stats")]
             assert_eq!(std::mem::size_of::<VarFile>(), 128);
         }
         #[cfg(target_pointer_width = "32")]
-        #[cfg(feature = "buf_stats")]
         {
-            #[cfg(feature = "vf_u32u32")]
+            #[cfg(not(feature = "buf_stats"))]
             assert_eq!(std::mem::size_of::<VarFile>(), 76);
-            #[cfg(feature = "vf_u64u64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 76);
-            #[cfg(feature = "vf_vu64")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 76);
+            #[cfg(feature = "buf_stats")]
+            assert_eq!(std::mem::size_of::<VarFile>(), 84);
         }
     }
 }

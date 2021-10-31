@@ -462,18 +462,18 @@ impl IdxFile {
     where
         F: Fn(RecordOffset) -> Result<RecordSize> + std::marker::Copy,
     {
-        let mut record_vec = Vec::new();
+        let mut record_size_stats = RecordSizeStats::default();
         //
         let top_node = self.read_top_node()?;
         let mut locked = self.0.borrow_mut();
         idx_record_size_stats(
             &mut locked,
             &top_node,
-            &mut record_vec,
+            &mut record_size_stats,
             read_record_size_func,
         )?;
         //
-        Ok(record_vec)
+        Ok(record_size_stats)
     }
 }
 
@@ -1085,14 +1085,7 @@ where
         let record_offset = node.keys[i];
         if !record_offset.is_zero() {
             let record_size = read_record_size_func(record_offset)?;
-            match record_vec.binary_search_by_key(&record_size, |&(a, _b)| a) {
-                Ok(sz_idx) => {
-                    record_vec[sz_idx].1 += 1;
-                }
-                Err(sz_idx) => {
-                    record_vec.insert(sz_idx, (record_size, 1));
-                }
-            }
+            record_vec.touch_size(record_size);
         }
         //
         let node_offset = node.downs[i];

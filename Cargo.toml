@@ -14,6 +14,10 @@ repository = "https://github.com/aki-akaguma/siamesedb"
 name = "test_main"
 path = "src/test_main.rs"
 
+[[bin]]
+name = "test_main2"
+path = "src/test_main2.rs"
+
 [features]
 default = ["vf_vu64"]
 #default = ["vf_vu64", "buf_lru"]

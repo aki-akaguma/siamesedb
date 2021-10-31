@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 
 /// Chunk size MUST be a power of 2.
 const CHUNK_SIZE: u32 = 1024 * 4;
@@ -29,7 +29,10 @@ impl Chunk {
             } else {
                 &mut data[0..end_off]
             };
-            file.read_exact(buf)?;
+            if let Err(err) = file.read_exact(buf) {
+                let _ = std::marker::PhantomData::<i32>;
+                return Err(err);
+            }
         }
         Ok(Chunk {
             data,
@@ -43,6 +46,9 @@ impl Chunk {
         if !self.dirty {
             return Ok(());
         }
+        if self.offset > end_pos {
+            return Ok(());
+        }
         file.seek(SeekFrom::Start(self.offset))?;
         let end_off = (end_pos - self.offset) as usize;
         let buf = if end_off >= self.data.len() {
@@ -50,9 +56,16 @@ impl Chunk {
         } else {
             &self.data[0..end_off]
         };
-        file.write_all(buf)?;
-        self.dirty = false;
-        Ok(())
+        match file.write_all(buf) {
+            Ok(()) => {
+                self.dirty = false;
+                Ok(())
+            }
+            Err(err) => {
+                let _ = std::marker::PhantomData::<i32>;
+                Err(err)
+            }
+        }
     }
 }
 
@@ -175,17 +188,19 @@ impl BufFile {
             stats_max_uses: 0,
         })
     }
-    ///
+    /// Flush buffer and call `std::io::File.sync_all()`.
+    /// ref. [`std::io::File.sync_all()`](https://doc.rust-lang.org/std/fs/struct.File.html#method.sync_all)
     pub fn sync_all(&mut self) -> Result<()> {
         self.flush()?;
         self.file.sync_all()
     }
-    ///
+    /// Flush buffer and call `std::io::File.sync_data()`.
+    /// ref. [`std::io::File.sync_data()`](https://doc.rust-lang.org/std/fs/struct.File.html#method.sync_data)
     pub fn sync_data(&mut self) -> Result<()> {
         self.flush()?;
         self.file.sync_data()
     }
-    ///
+    /// Flush buffer and clear buffer chunks.
     pub fn _clear_buf(&mut self) -> Result<()> {
         self.flush()?;
         self.fetch_cache = None;
@@ -206,6 +221,73 @@ impl BufFile {
             self.stats_max_uses as i64,
         ));
         vec
+    }
+    /// Truncates or extends the underlying file, updating the size of this file to become size.
+    /// ref. [`std::io::File.set_len()`](https://doc.rust-lang.org/std/fs/struct.File.html#method.set_len)
+    pub fn set_len(&mut self, size: u64) -> Result<()> {
+        if self.end >= size {
+            // shrink bunks
+            for i in 0..self.chunks.len() {
+                let chunk = &self.chunks[i];
+                if chunk.offset + chunk.data.len() as u64 >= size {
+                    // data end is over the new end
+                    // nothing todo
+                } else if chunk.offset >= size {
+                    // chunk start is over the new end
+                    self.map.remove(&chunk.offset);
+                    self.chunks[i].uses = 0;
+                    self.fetch_cache = None;
+                }
+            }
+        }
+        self.end = size;
+        if self.end < self.pos {
+            self.pos = self.end
+        }
+        self.file.set_len(size)?;
+        //
+        Ok(())
+    }
+    /// Read one byte with a fast routine.
+    pub fn read_one_byte(&mut self) -> Result<u8> {
+        let curr = self.pos;
+        let one_byte = {
+            let chunk = self.fetch_chunk(curr)?;
+            let data_slice = &chunk.data[(curr - chunk.offset) as usize..];
+            if !data_slice.is_empty() {
+                data_slice[0]
+            } else {
+                let mut buf = [0u8; 1];
+                let _ = self.read_exact(&mut buf)?;
+                return Ok(buf[0]);
+            }
+        };
+        self.pos += 1;
+        Ok(one_byte)
+    }
+    /// Read small size bytes with a fast routine. The small size is less than chunk size.
+    pub fn read_exact_small(&mut self, buf: &mut [u8]) -> Result<()> {
+        debug_assert!(
+            buf.len() <= self.chunk_size,
+            "buf.len(): {} <= {}",
+            buf.len(),
+            self.chunk_size
+        );
+        let curr = self.pos;
+        let len = {
+            let chunk = self.fetch_chunk(curr)?;
+            let buf_len = buf.len();
+            let data_slice = &chunk.data[(curr - chunk.offset) as usize..];
+            if buf_len <= data_slice.len() {
+                buf.copy_from_slice(&data_slice[..buf_len]);
+                buf_len
+            } else {
+                self.read_exact(buf)?;
+                return Ok(());
+            }
+        };
+        self.pos += len as u64;
+        Ok(())
     }
 }
 
@@ -310,50 +392,6 @@ impl BufFile {
     }
 }
 
-#[cfg(feature = "vf_vu64")]
-use super::vu64_io::{ReadVu64, WriteVu64};
-
-#[cfg(feature = "vf_vu64")]
-impl ReadVu64 for BufFile {
-    fn read_one_byte(&mut self) -> Result<u8> {
-        let curr = self.pos;
-        let one_byte = {
-            let chunk = self.fetch_chunk(curr)?;
-            let data_slice = &chunk.data[(curr - chunk.offset) as usize..];
-            if !data_slice.is_empty() {
-                data_slice[0]
-            } else {
-                let mut buf = [0u8; 1];
-                let _ = self.read_exact(&mut buf)?;
-                return Ok(buf[0]);
-            }
-        };
-        self.pos += 1;
-        Ok(one_byte)
-    }
-    fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()> {
-        debug_assert!(buf.len() <= 8, "buf.len(): {} <= 8", buf.len());
-        let curr = self.pos;
-        let len = {
-            let chunk = self.fetch_chunk(curr)?;
-            let buf_len = buf.len();
-            let data_slice = &chunk.data[(curr - chunk.offset) as usize..];
-            if buf_len <= data_slice.len() {
-                buf.copy_from_slice(&data_slice[..buf_len]);
-                buf_len
-            } else {
-                self.read_exact(buf)?;
-                return Ok(());
-            }
-        };
-        self.pos += len as u64;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "vf_vu64")]
-impl WriteVu64 for BufFile {}
-
 impl Read for BufFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let curr = self.pos;
@@ -416,19 +454,12 @@ impl Seek for BufFile {
                 }
             }
         };
-        if new_pos <= self.end {
-            //let _ = self.fetch_chunk(new_pos)?;
-            self.pos = new_pos;
-            Ok(new_pos)
-        } else {
-            Err(Error::new(
-                ErrorKind::UnexpectedEof,
-                format!(
-                    "You tried to seek over the end of the file: {} < {}",
-                    self.end, new_pos
-                ),
-            ))
+        if new_pos > self.end {
+            // makes a sparse file.
+            self.set_len(new_pos)?;
         }
+        self.pos = new_pos;
+        Ok(new_pos)
     }
 }
 
@@ -442,29 +473,30 @@ impl Drop for BufFile {
 //--
 #[cfg(test)]
 mod debug {
+    use super::{BufFile, Chunk};
+    //
     #[test]
     fn test_size_of() {
-        use super::{BufFile, Chunk};
-        //
         #[cfg(target_pointer_width = "64")]
         {
             #[cfg(not(feature = "buf_stats"))]
             assert_eq!(std::mem::size_of::<BufFile>(), 120);
             #[cfg(feature = "buf_stats")]
             assert_eq!(std::mem::size_of::<BufFile>(), 128);
-            #[cfg(not(feature = "buf_stats"))]
-            assert_eq!(std::mem::size_of::<Chunk>(), 40);
-            #[cfg(feature = "buf_stats")]
-            assert_eq!(std::mem::size_of::<Chunk>(), 40);
             //
+            assert_eq!(std::mem::size_of::<Chunk>(), 40);
             assert_eq!(std::mem::size_of::<(u64, usize)>(), 16);
             assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 24);
             assert_eq!(std::mem::size_of::<Vec<u8>>(), 24);
         }
         #[cfg(target_pointer_width = "32")]
         {
+            #[cfg(not(feature = "buf_stats"))]
             assert_eq!(std::mem::size_of::<BufFile>(), 76);
-            assert_eq!(std::mem::size_of::<Chunk>(), 32);
+            #[cfg(feature = "buf_stats")]
+            assert_eq!(std::mem::size_of::<BufFile>(), 84);
+            //
+            assert_eq!(std::mem::size_of::<Chunk>(), 28);
             assert_eq!(std::mem::size_of::<(u64, usize)>(), 12);
             assert_eq!(std::mem::size_of::<Vec<Chunk>>(), 12);
             assert_eq!(std::mem::size_of::<Vec<u8>>(), 12);

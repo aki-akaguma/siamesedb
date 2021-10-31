@@ -1,25 +1,24 @@
+use super::super::{DbList, DbMap};
+use super::{FileDbList, FileDbMap, FileDbNode};
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::path::{Path, PathBuf};
 
-use super::super::{DbList, DbMap};
-use super::{FileDbList, FileDbMap, FileDbNode};
-
 pub(crate) mod dbxxx;
 pub(crate) mod semtype;
 
+mod buf;
 mod dat;
 mod idx;
-
-mod buf;
+mod kc;
 mod vfile;
 
 #[cfg(feature = "vf_vu64")]
 pub mod vu64;
 #[cfg(feature = "vf_vu64")]
+pub mod vu64_buf;
+#[cfg(feature = "vf_vu64")]
 pub mod vu64_io;
-
-mod kc;
 
 #[derive(Debug)]
 pub struct FileDbInner {

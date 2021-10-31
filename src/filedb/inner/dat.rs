@@ -421,7 +421,14 @@ fn dat_write_record(
             RecordOffset::new(file.stream_position()?)
         };
         file.write_record_size(new_record_size)?;
-        file.write_all(buf_ref)?;
+        match file.write_all(buf_ref) {
+            Ok(()) => (),
+            Err(err) => {
+                // recover on error
+                let _ = file.set_len(new_record_offset);
+                return Err(err);
+            }
+        }
         Ok(new_record_offset)
     }
 }

@@ -1,10 +1,9 @@
-#![allow(dead_code)]
 /**
 Semantic Type
 
 defines several semantic types. They are written in the New Type pattern.
 */
-use std::cmp::{Ordering, PartialOrd};
+use std::cmp::PartialOrd;
 use std::convert::{Infallible, TryFrom, TryInto};
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -21,16 +20,16 @@ pub type ValueLength = Length<Value>;
 
 pub type KeysCount = Count<Key>;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Record();
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Node();
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Key();
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Value();
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct Offset<T> {
     val: u64,
     _phantom: PhantomData<T>,
@@ -57,7 +56,7 @@ impl<T> Display for Offset<T> {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Size<T> {
     val: u32,
     _phantom: PhantomData<T>,
@@ -84,26 +83,6 @@ impl<T> Display for Size<T> {
     }
 }
 
-impl<T> PartialEq<Self> for Size<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.val.eq(&other.val)
-    }
-}
-
-impl<T> PartialOrd<Self> for Size<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.val.partial_cmp(&other.val)
-    }
-}
-
-impl<T> Eq for Size<T> {}
-
-impl<T> Ord for Size<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.val.cmp(&other.val)
-    }
-}
-
 impl<T> TryFrom<Size<T>> for usize {
     type Error = TryFromIntError;
     fn try_from(value: Size<T>) -> Result<Self, Self::Error> {
@@ -111,7 +90,7 @@ impl<T> TryFrom<Size<T>> for usize {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Length<T> {
     val: u32,
     _phantom: PhantomData<T>,
@@ -145,7 +124,7 @@ impl<T> TryFrom<Length<T>> for usize {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Count<T> {
     val: u16,
     _phantom: PhantomData<T>,
