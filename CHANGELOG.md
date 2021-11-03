@@ -1,8 +1,12 @@
 TBD
 ===
 Unreleased changes. Release notes have not yet been written.
-* TODO: read& write node cache
 
+0.1.2 (2021-11-04)
+=====
+
+* adds node cache for read and write
+* changes file header signature: `siamdb`
 * removes unused enum KeyType from src/filedb/mod.rs
 * adds RecordSizeStats into src/filedb/mod.rs
 * adds read_one_byte() and read_exact_small() into BufFile for the fast.

@@ -13,6 +13,9 @@ mod idx;
 mod kc;
 mod vfile;
 
+#[cfg(feature = "node_cache")]
+mod nc;
+
 #[cfg(feature = "vf_vu64")]
 pub mod vu64;
 #[cfg(feature = "vf_vu64")]

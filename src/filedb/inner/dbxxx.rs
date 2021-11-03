@@ -4,7 +4,6 @@ use super::kc::KeyCacheTrait;
 use super::semtype::*;
 use super::{dat, idx, kc};
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::io::Result;
 use std::rc::Rc;
 
@@ -20,7 +19,6 @@ pub trait FileDbXxxInnerKT {
 #[derive(Debug)]
 pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
     parent: FileDbNode,
-    mem: BTreeMap<String, (u64, Vec<u8>)>,
     dirty: bool,
     //
     dat_file: dat::DatFile,
@@ -45,7 +43,6 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             parent,
             dat_file,
             idx_file,
-            mem: BTreeMap::new(),
             dirty: false,
             key_cache: kc::KeyCache::new(),
             _phantom: std::marker::PhantomData,
@@ -120,6 +117,12 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             size = right - left;
         }
         Ok(Err(left))
+    }
+    fn write_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
+        self.idx_file.write_node(node)
+    }
+    fn write_new_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
+        self.idx_file.write_new_node(node)
     }
 }
 
@@ -206,7 +209,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                 if record_offset != new_record_offset {
                     node.keys[k] = new_record_offset;
                     self.dirty = true;
-                    return self.idx_file.write_node(node);
+                    return self.write_node(node);
                 }
                 Ok(node)
             }
@@ -223,10 +226,10 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                     self.balance_on_insert(node, k, &node2)
                 } else {
                     debug_assert!(!node2.offset.is_zero());
-                    let node2 = self.idx_file.write_node(node2)?;
+                    let node2 = self.write_node(node2)?;
                     node.downs[k] = node2.offset;
                     self.dirty = true;
-                    self.idx_file.write_node(node)
+                    self.write_node(node)
                 }
             }
         }
@@ -260,7 +263,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         if node.is_over_len() {
             self.split_on_insert(node)
         } else {
-            let node = self.idx_file.write_node(node)?;
+            let node = self.write_node(node)?;
             Ok(node)
         }
     }
@@ -278,8 +281,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             .resize(idx::NODE_SLOTS_MAX_HALF as usize, NodeOffset::new(0));
         //
         let key_offset1 = node.keys.remove(idx::NODE_SLOTS_MAX_HALF as usize - 1);
-        let node1 = self.idx_file.write_new_node(node1)?;
-        let node = self.idx_file.write_node(node)?;
+        let node1 = self.write_new_node(node1)?;
+        let node = self.write_node(node)?;
         Ok(idx::IdxNode::new_active(
             key_offset1,
             node.offset,
@@ -306,7 +309,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     let node1 = self.delete_from_node_tree(node1, key)?;
                     node.downs[k] = node1.offset;
-                    let node = self.idx_file.write_node(node)?;
+                    let node = self.write_node(node)?;
                     if k == node.downs.len() - 1 {
                         let node = self.balance_right(node, k)?;
                         return Ok(node);
@@ -334,14 +337,14 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         if node_offset1.is_zero() {
             let _key_offset = node.keys.remove(i);
             let _node_offset = node.downs.remove(i);
-            let new_node = self.idx_file.write_node(node)?;
+            let new_node = self.write_node(node)?;
             Ok(new_node)
         } else {
             let node1 = self.idx_file.read_node(node_offset1)?;
             let (record_offset, node1) = self.delete_max(node1)?;
             node.keys[i] = record_offset;
             node.downs[i] = node1.offset;
-            let node = self.idx_file.write_node(node)?;
+            let node = self.write_node(node)?;
             self.balance_left(node, i)
         }
     }
@@ -352,13 +355,13 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         if node_offset1.is_zero() {
             node.downs.remove(j);
             let key_offset2 = node.keys.remove(i);
-            let new_node = self.idx_file.write_node(node)?;
+            let new_node = self.write_node(node)?;
             Ok((key_offset2, new_node))
         } else {
             let node1 = self.idx_file.read_node(node_offset1)?;
             let (key_offset2, node1) = self.delete_max(node1)?;
             node.downs[j] = node1.offset;
-            let node = self.idx_file.write_node(node)?;
+            let node = self.write_node(node)?;
             let new_node = self.balance_right(node, j)?;
             Ok((key_offset2, new_node))
         }
@@ -389,18 +392,18 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                 node.keys.remove(i);
                 node.downs.remove(j);
                 //
-                let node1 = self.idx_file.write_node(node1)?;
+                let node1 = self.write_node(node1)?;
                 node.downs[i] = node1.offset;
             } else {
                 let key_offset3 =
                     self.move_a_node_from_right_to_left(key_offset2, &mut node1, &mut node2);
                 node.keys[i] = key_offset3;
-                let node2 = self.idx_file.write_node(node2)?;
-                let node1 = self.idx_file.write_node(node1)?;
+                let node2 = self.write_node(node2)?;
+                let node1 = self.write_node(node1)?;
                 node.downs[j] = node2.offset;
                 node.downs[i] = node1.offset;
             }
-            let new_node = self.idx_file.write_node(node)?;
+            let new_node = self.write_node(node)?;
             return Ok(new_node);
         }
         Ok(node)
@@ -431,17 +434,17 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                 node.keys.remove(i);
                 node.downs.remove(j);
                 //
-                let node2 = self.idx_file.write_node(node2)?;
+                let node2 = self.write_node(node2)?;
                 node.downs[i] = node2.offset;
             } else {
                 let key_offset3 = self.move_left_right(key_offset2, &mut node2, &mut node1);
                 node.keys[i] = key_offset3;
-                let node1 = self.idx_file.write_node(node1)?;
-                let node2 = self.idx_file.write_node(node2)?;
+                let node1 = self.write_node(node1)?;
+                let node2 = self.write_node(node2)?;
                 node.downs[j] = node1.offset;
                 node.downs[i] = node2.offset;
             }
-            let new_node = self.idx_file.write_node(node)?;
+            let new_node = self.write_node(node)?;
             return Ok(new_node);
         }
         Ok(node)

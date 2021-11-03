@@ -289,6 +289,56 @@ impl BufFile {
         self.pos += len as u64;
         Ok(())
     }
+    /// Write small size bytes with a fast routine. The small size is less than chunk size.
+    pub fn write_all_small(&mut self, buf: &mut [u8]) -> Result<()> {
+        debug_assert!(
+            buf.len() <= self.chunk_size,
+            "buf.len(): {} <= {}",
+            buf.len(),
+            self.chunk_size
+        );
+        let curr = self.pos;
+        let len = {
+            let chunk = self.fetch_chunk(curr)?;
+            let buf_len = buf.len();
+            chunk.dirty = true;
+            let data_slice = &mut chunk.data[(curr - chunk.offset) as usize..];
+            if buf_len <= data_slice.len() {
+                let dest = &mut data_slice[..buf_len];
+                dest.copy_from_slice(buf);
+                buf_len
+            } else {
+                return self.write_all(buf);
+            }
+        };
+        self.pos += len as u64;
+        if self.end < self.pos {
+            self.end = self.pos;
+        }
+        Ok(())
+    }
+    /// Write zero of length `size` with a fast routine.
+    pub fn write_zero(&mut self, size: usize) -> Result<()> {
+        let curr = self.pos;
+        let len = {
+            let chunk = self.fetch_chunk(curr)?;
+            chunk.dirty = true;
+            let data_slice = &mut chunk.data[(curr - chunk.offset) as usize..];
+            if size <= data_slice.len() {
+                let dest = &mut data_slice[..size];
+                dest.fill(0u8);
+                size
+            } else {
+                let buf = vec![0u8; size];
+                return self.write_all(&buf);
+            }
+        };
+        self.pos += len as u64;
+        if self.end < self.pos {
+            self.end = self.pos;
+        }
+        Ok(())
+    }
 }
 
 impl BufFile {

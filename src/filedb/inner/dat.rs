@@ -10,7 +10,7 @@ use std::rc::Rc;
 type HeaderSignature = [u8; 8];
 
 const _DAT_HEADER_SZ: u64 = 128;
-const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'h', b'a', b'm', b'd', b'b', b'0', 0u8];
+const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'0', 0u8];
 
 #[derive(Debug, Clone)]
 pub struct DatFile(Rc<RefCell<VarFile>>);

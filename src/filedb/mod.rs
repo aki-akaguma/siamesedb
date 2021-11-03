@@ -1,15 +1,17 @@
-use super::{DbList, DbMap};
+use super::{DbList, DbMap, DbXxx};
 use std::cell::RefCell;
 use std::io::Result;
 use std::path::Path;
 use std::rc::{Rc, Weak};
+
 mod inner;
-use super::DbXxx;
+
 use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use inner::semtype::*;
+use inner::FileDbInner;
+
 #[cfg(feature = "vf_vu64")]
 use inner::vu64;
-use inner::FileDbInner;
 
 type CountOfPerSize = Vec<(u32, u64)>;
 
@@ -366,8 +368,8 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbList>(), 8);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 80);
-            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 80);
-            assert_eq!(std::mem::size_of::<FileDbListInner>(), 80);
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 56);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 56);
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 24);
         }
@@ -379,8 +381,8 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbList>(), 4);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 40);
-            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 40);
-            assert_eq!(std::mem::size_of::<FileDbListInner>(), 40);
+            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 28);
+            assert_eq!(std::mem::size_of::<FileDbListInner>(), 28);
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 12);
         }

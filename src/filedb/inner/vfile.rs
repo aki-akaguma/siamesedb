@@ -1,5 +1,6 @@
 use super::buf::BufFile;
 use super::semtype::*;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Cursor, Read, Result, Seek, SeekFrom, Write};
 
@@ -57,6 +58,22 @@ impl VarFile {
     ///
     pub fn set_len<T>(&mut self, size: Offset<T>) -> Result<()> {
         self.buf_file.set_len(size.as_value())
+    }
+    ///
+    pub fn write_all_small(&mut self, buf: &mut [u8]) -> Result<()> {
+        self.buf_file.write_all_small(buf)
+    }
+    ///
+    pub fn write_zero(&mut self, size: usize) -> Result<()> {
+        self.buf_file.write_zero(size)
+    }
+    ///
+    pub fn write_node_clear(&mut self, node_offset: NodeOffset, node_size: NodeSize) -> Result<()> {
+        let _ = self.seek_from_start(node_offset)?;
+        self.write_zero(node_size.try_into().unwrap())?;
+        let _ = self.seek_from_start(node_offset)?;
+        self.write_node_size(node_size)?;
+        Ok(())
     }
 }
 

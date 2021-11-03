@@ -14,11 +14,22 @@ use super::super::RecordSizeStats;
 type HeaderSignature = [u8; 8];
 
 const IDX_HEADER_SZ: u64 = 128;
-const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'h', b'a', b'm', b'd', b'b', b'1', 0u8];
+const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'1', 0u8];
 const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
 
+#[cfg(not(feature = "node_cache"))]
+use std::marker::PhantomData;
+
+#[cfg(feature = "node_cache")]
+use super::nc::NodeCache;
+
+#[cfg(not(feature = "node_cache"))]
+type VarFileNodeCache = (VarFile, PhantomData<i32>);
+#[cfg(feature = "node_cache")]
+type VarFileNodeCache = (VarFile, NodeCache);
+
 #[derive(Debug, Clone)]
-pub struct IdxFile(Rc<RefCell<VarFile>>);
+pub struct IdxFile(Rc<RefCell<VarFileNodeCache>>);
 
 impl IdxFile {
     pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, sig2: HeaderSignature) -> Result<Self> {
@@ -33,36 +44,46 @@ impl IdxFile {
         let mut file = VarFile::new(std_file)?;
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
+        //
+        #[cfg(not(feature = "node_cache"))]
+        let mut file_nc = (file, PhantomData);
+        #[cfg(feature = "node_cache")]
+        let mut file_nc = (file, NodeCache::new());
+        //
         if len == 0 {
-            idx_file_write_init_header(&mut file, sig2)?;
+            idx_file_write_init_header(&mut file_nc.0, sig2)?;
             // writing top node
             let top_node = IdxNode::new(NodeOffset::new(IDX_HEADER_SZ));
-            let _new_node = idx_write_node(&mut file, top_node, true)?;
+            let _new_node = idx_write_node(&mut file_nc, top_node, true)?;
             debug_assert!(_new_node.offset == NodeOffset::new(IDX_HEADER_SZ));
         } else {
-            idx_file_check_header(&mut file, sig2)?;
+            idx_file_check_header(&mut file_nc.0, sig2)?;
         }
         //
-        Ok(Self(Rc::new(RefCell::new(file))))
+        Ok(Self(Rc::new(RefCell::new(file_nc))))
     }
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        locked.sync_all()
+        #[cfg(feature = "node_cache")]
+        idx_cache_flush_clear(&mut locked)?;
+        locked.0.sync_all()
     }
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        locked.sync_data()
+        #[cfg(feature = "node_cache")]
+        idx_cache_flush_clear(&mut locked)?;
+        locked.0.sync_data()
     }
     #[cfg(feature = "buf_stats")]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = self.0.borrow();
-        locked.buf_stats()
+        locked.0.buf_stats()
     }
     //
     pub fn read_top_node(&self) -> Result<IdxNode> {
         let offset = {
             let mut locked = self.0.borrow_mut();
-            idx_file_read_top_node_offset(&mut locked)?
+            idx_file_read_top_node_offset(&mut locked.0)?
         };
         self.read_node(offset)
     }
@@ -71,18 +92,18 @@ impl IdxFile {
             let new_top_node = self.write_new_node(node)?;
             {
                 let mut locked = self.0.borrow_mut();
-                idx_file_write_top_node_offset(&mut locked, new_top_node.offset)?;
+                idx_file_write_top_node_offset(&mut locked.0, new_top_node.offset)?;
             }
             Ok(new_top_node)
         } else {
             let top_node_offset = {
                 let mut locked = self.0.borrow_mut();
-                idx_file_read_top_node_offset(&mut locked)?
+                idx_file_read_top_node_offset(&mut locked.0)?
             };
             let new_top_node = self.write_node(node)?;
             if new_top_node.offset != top_node_offset {
                 let mut locked = self.0.borrow_mut();
-                idx_file_write_top_node_offset(&mut locked, new_top_node.offset)?;
+                idx_file_write_top_node_offset(&mut locked.0, new_top_node.offset)?;
             }
             Ok(new_top_node)
         }
@@ -99,8 +120,8 @@ impl IdxFile {
     pub fn write_new_node(&self, mut node: IdxNode) -> Result<IdxNode> {
         node.offset = {
             let mut locked = self.0.borrow_mut();
-            let _ = locked.seek(SeekFrom::End(0));
-            NodeOffset::new(locked.stream_position()?)
+            let _ = locked.0.seek(SeekFrom::End(0));
+            NodeOffset::new(locked.0.stream_position()?)
         };
         let mut locked = self.0.borrow_mut();
         idx_write_node(&mut locked, node, true)
@@ -422,7 +443,7 @@ impl IdxFile {
         let mut vec = Vec::new();
         let mut locked = self.0.borrow_mut();
         for node_size in sz_ary {
-            let cnt = idx_file_count_of_free_list(&mut locked, NodeSize::new(node_size))?;
+            let cnt = idx_file_count_of_free_list(&mut locked.0, NodeSize::new(node_size))?;
             vec.push((node_size, cnt));
         }
         Ok(vec)
@@ -641,19 +662,17 @@ fn idx_file_pop_free_list(file: &mut VarFile, new_node_size: NodeSize) -> Result
     if !is_large_node_size(new_node_size) {
         if !free_1st.is_zero() {
             let free_next = {
-                let _ = file.seek_from_start(free_1st)?;
                 let (free_next, node_size) = {
+                    let _ = file.seek_from_start(free_1st)?;
                     let node_size = file.read_node_size()?;
+                    debug_assert!(!node_size.is_zero());
                     let _keys_count = file.read_keys_count()?;
                     debug_assert!(_keys_count.is_zero());
                     let node_offset = file.read_free_node_offset()?;
                     (node_offset, node_size)
                 };
                 //
-                let _ = file.seek_from_start(free_1st)?;
-                file.write_node_size(node_size)?;
-                let buff = vec![0; node_size.try_into().unwrap()];
-                file.write_all(&buff)?;
+                file.write_node_clear(free_1st, node_size)?;
                 //
                 free_next
             };
@@ -673,18 +692,20 @@ fn idx_file_pop_free_list_large(
     let mut free_prev = NodeOffset::new(0);
     let mut free_curr = free_1st;
     while !free_curr.is_zero() {
-        let _ = file.seek_from_start(free_curr)?;
         let (free_next, node_size) = {
+            let _ = file.seek_from_start(free_curr)?;
             let node_size = file.read_node_size()?;
+            debug_assert!(!node_size.is_zero());
             let _keys_count = file.read_keys_count()?;
             debug_assert!(_keys_count.is_zero());
             let node_offset = file.read_free_node_offset()?;
             (node_offset, node_size)
         };
-        if new_node_size >= node_size {
+        if new_node_size <= node_size {
             if !free_prev.is_zero() {
                 let _ = file.seek_from_start(free_prev)?;
                 let _node_size = file.read_node_size()?;
+                debug_assert!(!_node_size.is_zero());
                 let _keys_count = file.read_keys_count()?;
                 debug_assert!(_keys_count.is_zero());
                 file.write_free_node_offset(free_next)?;
@@ -692,10 +713,7 @@ fn idx_file_pop_free_list_large(
                 idx_file_write_free_node_offset(file, new_node_size, free_next)?;
             }
             //
-            let _ = file.seek_from_start(free_curr)?;
-            file.write_node_size(node_size)?;
-            let buff = vec![0; node_size.try_into().unwrap()];
-            file.write_all(&buff)?;
+            file.write_node_clear(free_curr, node_size)?;
             return Ok(free_curr);
         }
         free_prev = free_curr;
@@ -804,10 +822,30 @@ impl IdxNode {
     }
 }
 
-fn idx_delete_node(file: &mut VarFile, node: IdxNode) -> Result<NodeSize> {
-    let _ = file.seek_from_start(node.offset)?;
-    let old_node_size = file.read_node_size()?;
-    idx_file_push_free_list(file, node.offset, old_node_size)?;
+#[cfg(feature = "node_cache")]
+fn idx_cache_flush_clear(file_nc: &mut VarFileNodeCache) -> Result<()> {
+    file_nc.1.clear(&mut file_nc.0)?;
+    Ok(())
+}
+
+fn idx_delete_node(file_nc: &mut VarFileNodeCache, node: IdxNode) -> Result<NodeSize> {
+    #[cfg(not(feature = "node_cache"))]
+    let old_node_size = {
+        let _ = file_nc.0.seek_from_start(node.offset)?;
+        file_nc.0.read_node_size()?
+    };
+    #[cfg(feature = "node_cache")]
+    let old_node_size = {
+        match file_nc.1.delete(&node.offset) {
+            Some(node_size) => node_size,
+            None => {
+                let _ = file_nc.0.seek_from_start(node.offset)?;
+                file_nc.0.read_node_size()?
+            }
+        }
+    };
+    //
+    idx_file_push_free_list(&mut file_nc.0, node.offset, old_node_size)?;
     Ok(old_node_size)
 }
 
@@ -834,74 +872,107 @@ fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
     Ok(buff_cursor.into_inner())
 }
 
-fn idx_write_node(file: &mut VarFile, mut node: IdxNode, is_new: bool) -> Result<IdxNode> {
+fn idx_write_node(
+    file_nc: &mut VarFileNodeCache,
+    mut node: IdxNode,
+    is_new: bool,
+) -> Result<IdxNode> {
     debug_assert!(!node.offset.is_zero());
     //
     let mut buf_vec = idx_serialize_to_buf(&node)?;
     let buf_ref = &mut buf_vec;
     let buf_len = buf_ref.len();
+    //
     #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
     let encoded_len = 4;
     #[cfg(feature = "vf_vu64")]
     let encoded_len = super::vu64::encoded_len(buf_len as u64);
-    let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32);
     //
+    let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32);
     let new_node_size = node_size_roudup(new_node_size);
-    if buf_len < new_node_size.try_into().unwrap() {
-        buf_ref.resize(new_node_size.try_into().unwrap(), 0u8);
-    }
     //
     if !is_new {
-        let _ = file.seek_from_start(node.offset)?;
-        let old_node_size = file.read_node_size()?;
+        #[cfg(not(feature = "node_cache"))]
+        let old_node_size = {
+            let _ = file_nc.0.seek_from_start(node.offset)?;
+            file_nc.0.read_node_size()?
+        };
+        #[cfg(feature = "node_cache")]
+        let old_node_size = {
+            if let Some(node_size) = file_nc.1.get_node_size(&node.offset) {
+                node_size
+            } else {
+                let _ = file_nc.0.seek_from_start(node.offset)?;
+                file_nc.0.read_node_size()?
+            }
+        };
         if new_node_size <= old_node_size {
             // over writes.
-            let _ = file.seek_from_start(node.offset)?;
-            file.write_node_size(old_node_size)?;
-            file.write_all(buf_ref)?;
-            return Ok(node);
+            #[cfg(not(feature = "node_cache"))]
+            {
+                let _ = file_nc.0.seek_from_start(node.offset)?;
+                file_nc.0.write_node_size(old_node_size)?;
+                file_nc.0.write_all(buf_ref)?;
+                return Ok(node);
+            }
+            #[cfg(feature = "node_cache")]
+            {
+                let node =
+                    file_nc
+                        .1
+                        .put(&mut file_nc.0, node, old_node_size, buf_ref.clone(), true)?;
+                return Ok(node);
+            }
         } else {
             // delete old and add new
+            #[cfg(feature = "node_cache")]
+            file_nc.1.delete(&node.offset);
             // old
-            idx_file_push_free_list(file, node.offset, old_node_size)?;
+            idx_file_push_free_list(&mut file_nc.0, node.offset, old_node_size)?;
         }
     }
     // add new.
     {
-        let free_node_offset = idx_file_pop_free_list(file, new_node_size)?;
+        let free_node_offset = idx_file_pop_free_list(&mut file_nc.0, new_node_size)?;
         let new_node_offset = if !free_node_offset.is_zero() {
-            let _ = file.seek_from_start(free_node_offset)?;
+            let _ = file_nc.0.seek_from_start(free_node_offset)?;
+            let node_size = file_nc.0.read_node_size()?;
+            file_nc.0.write_node_clear(free_node_offset, node_size)?;
             free_node_offset
         } else {
-            let _ = file.seek(SeekFrom::End(0))?;
-            NodeOffset::new(file.stream_position()?)
+            let _ = file_nc.0.seek(SeekFrom::End(0))?;
+            let node_offset = NodeOffset::new(file_nc.0.stream_position()?);
+            file_nc.0.write_node_clear(node_offset, new_node_size)?;
+            node_offset
         };
-        file.write_node_size(new_node_size)?;
-        file.write_all(buf_ref)?;
+        file_nc.0.write_all_small(buf_ref)?;
         node.offset = new_node_offset;
     }
     //
     Ok(node)
 }
 
-fn idx_read_node(file: &mut VarFile, offset: NodeOffset) -> Result<IdxNode> {
+#[cfg(not(feature = "node_cache"))]
+fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<IdxNode> {
     debug_assert!(!offset.is_zero());
     //
-    let _ = file.seek_from_start(offset)?;
-    let node_size = file.read_node_size()?;
-    let keys_count = file.read_keys_count()?;
+    let _ = file_nc.0.seek_from_start(offset)?;
+    let node_size = file_nc.0.read_node_size()?;
+    let keys_count = file_nc.0.read_keys_count()?;
     let keys_count: usize = keys_count.try_into().unwrap();
     //
     let mut node = IdxNode::with_node_size(offset, node_size);
     for _i in 0..keys_count {
-        let record_offset = file
+        let record_offset = file_nc
+            .0
             .read_record_offset()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
         debug_assert!(!record_offset.is_zero());
         node.keys.push(record_offset);
     }
     for _i in 0..(keys_count + 1) {
-        let node_offset = file
+        let node_offset = file_nc
+            .0
             .read_node_offset()
             .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
         node.downs.push(node_offset);
@@ -910,15 +981,70 @@ fn idx_read_node(file: &mut VarFile, offset: NodeOffset) -> Result<IdxNode> {
     Ok(node)
 }
 
+#[cfg(feature = "node_cache")]
+fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<IdxNode> {
+    debug_assert!(!offset.is_zero());
+    //
+    if let Some(rc) = file_nc.1.get(&offset) {
+        return Ok(rc.as_ref().clone());
+    }
+    //
+    let _ = file_nc.0.seek_from_start(offset)?;
+    let node_size = file_nc.0.read_node_size()?;
+    debug_assert!(!node_size.is_zero());
+    let node_size_usize: usize = node_size.try_into().unwrap();
+    //
+    #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
+    let encoded_len = 4 as usize;
+    #[cfg(feature = "vf_vu64")]
+    let encoded_len = super::vu64::encoded_len(node_size_usize as u64) as usize;
+    //
+    let buf = {
+        let mut vec = vec![0u8; node_size_usize - encoded_len];
+        file_nc.0.read_exact(&mut vec)?;
+        vec
+    };
+    //
+    let _ = file_nc.0.seek_from_start(offset)?;
+    let node_size = file_nc.0.read_node_size()?;
+    let keys_count = file_nc.0.read_keys_count()?;
+    let keys_count: usize = keys_count.try_into().unwrap();
+    //
+    let mut node = IdxNode::with_node_size(offset, node_size);
+    for _i in 0..keys_count {
+        let record_offset = file_nc
+            .0
+            .read_record_offset()
+            .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+        debug_assert!(!record_offset.is_zero());
+        node.keys.push(record_offset);
+    }
+    for _i in 0..(keys_count + 1) {
+        let node_offset = file_nc
+            .0
+            .read_node_offset()
+            .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+        node.downs.push(node_offset);
+    }
+    //
+    let node = file_nc.1.put(&mut file_nc.0, node, node_size, buf, false)?;
+    //
+    Ok(node)
+}
+
 // for debug
-fn idx_to_graph_string(file: &mut VarFile, head: &str, node: &IdxNode) -> Result<String> {
+fn idx_to_graph_string(
+    file_nc: &mut VarFileNodeCache,
+    head: &str,
+    node: &IdxNode,
+) -> Result<String> {
     let mut gs = format!("{}{}:{:04x}\n", head, GRAPH_NODE_ST, node.offset.as_value());
     let mut i = node.downs.len() - 1;
     let node_offset = node.downs[i];
     if !node_offset.is_zero() {
-        let node = idx_read_node(file, node_offset)
+        let node = idx_read_node(file_nc, node_offset)
             .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-        let gs0 = idx_to_graph_string(file, &format!("{}    ", head), &node)?;
+        let gs0 = idx_to_graph_string(file_nc, &format!("{}    ", head), &node)?;
         gs += &gs0;
     }
     while i > 0 {
@@ -927,9 +1053,9 @@ fn idx_to_graph_string(file: &mut VarFile, head: &str, node: &IdxNode) -> Result
         gs += &format!("{}{:04x}\n", head, record_offset.as_value());
         let node_offset = node.downs[i];
         if !node_offset.is_zero() {
-            let node = idx_read_node(file, node_offset)
+            let node = idx_read_node(file_nc, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-            let gs0 = idx_to_graph_string(file, &format!("{}    ", head), &node)?;
+            let gs0 = idx_to_graph_string(file_nc, &format!("{}    ", head), &node)?;
             gs += &gs0;
         }
     }
@@ -949,7 +1075,7 @@ use super::dbxxx::FileDbXxxInner;
 use super::dbxxx::FileDbXxxInnerKT;
 
 fn idx_to_graph_string_with_key_string<KT>(
-    file: &mut VarFile,
+    file_nc: &mut VarFileNodeCache,
     head: &str,
     node: &IdxNode,
     dbxxx: &FileDbXxxInner<KT>,
@@ -967,10 +1093,10 @@ where
     let mut i = node.downs.len() - 1;
     let node_offset = node.downs[i];
     if !node_offset.is_zero() {
-        let node = idx_read_node(file, node_offset)
+        let node = idx_read_node(file_nc, node_offset)
             .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
         let gs0 =
-            idx_to_graph_string_with_key_string(file, &format!("{}    ", head), &node, dbxxx)?;
+            idx_to_graph_string_with_key_string(file_nc, &format!("{}    ", head), &node, dbxxx)?;
         gs += &gs0;
     }
     while i > 0 {
@@ -993,10 +1119,14 @@ where
         }
         let node_offset = node.downs[i];
         if !node_offset.is_zero() {
-            let node = idx_read_node(file, node_offset)
+            let node = idx_read_node(file_nc, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-            let gs0 =
-                idx_to_graph_string_with_key_string(file, &format!("{}    ", head), &node, dbxxx)?;
+            let gs0 = idx_to_graph_string_with_key_string(
+                file_nc,
+                &format!("{}    ", head),
+                &node,
+                dbxxx,
+            )?;
             gs += &gs0;
         }
     }
@@ -1006,7 +1136,7 @@ where
 }
 
 fn idx_count_of_used_node<F>(
-    file: &mut VarFile,
+    file_nc: &mut VarFileNodeCache,
     node: &IdxNode,
     node_vec: &mut Vec<(u32, u64)>,
     record_vec: &mut Vec<(u32, u64)>,
@@ -1028,9 +1158,9 @@ where
     let mut i = node.downs.len() - 1;
     let node_offset = node.downs[i];
     if !node_offset.is_zero() {
-        let node = idx_read_node(file, node_offset)
+        let node = idx_read_node(file_nc, node_offset)
             .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-        idx_count_of_used_node(file, &node, node_vec, record_vec, read_record_size_func)?;
+        idx_count_of_used_node(file_nc, &node, node_vec, record_vec, read_record_size_func)?;
     }
     while i > 0 {
         i -= 1;
@@ -1054,9 +1184,9 @@ where
         //
         let node_offset = node.downs[i];
         if !node_offset.is_zero() {
-            let node = idx_read_node(file, node_offset)
+            let node = idx_read_node(file_nc, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-            idx_count_of_used_node(file, &node, node_vec, record_vec, read_record_size_func)?;
+            idx_count_of_used_node(file_nc, &node, node_vec, record_vec, read_record_size_func)?;
         }
     }
     //
@@ -1064,7 +1194,7 @@ where
 }
 
 fn idx_record_size_stats<F>(
-    file: &mut VarFile,
+    file_nc: &mut VarFileNodeCache,
     node: &IdxNode,
     record_vec: &mut RecordSizeStats,
     read_record_size_func: F,
@@ -1075,9 +1205,9 @@ where
     let mut i = node.downs.len() - 1;
     let node_offset = node.downs[i];
     if !node_offset.is_zero() {
-        let node = idx_read_node(file, node_offset)
+        let node = idx_read_node(file_nc, node_offset)
             .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-        idx_record_size_stats(file, &node, record_vec, read_record_size_func)?;
+        idx_record_size_stats(file_nc, &node, record_vec, read_record_size_func)?;
     }
     while i > 0 {
         i -= 1;
@@ -1090,9 +1220,9 @@ where
         //
         let node_offset = node.downs[i];
         if !node_offset.is_zero() {
-            let node = idx_read_node(file, node_offset)
+            let node = idx_read_node(file_nc, node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-            idx_record_size_stats(file, &node, record_vec, read_record_size_func)?;
+            idx_record_size_stats(file_nc, &node, record_vec, read_record_size_func)?;
         }
     }
     //
