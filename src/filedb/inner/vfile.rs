@@ -60,7 +60,7 @@ impl VarFile {
         self.buf_file.set_len(size.as_value())
     }
     ///
-    pub fn write_all_small(&mut self, buf: &mut [u8]) -> Result<()> {
+    pub fn write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         self.buf_file.write_all_small(buf)
     }
     ///

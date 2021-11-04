@@ -2,6 +2,10 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* adds read_inplace() into buf.rs for the fast.
+* fix some bugs.
+* adds minimum support rustc version into README.
+
 0.1.2 (2021-11-04)
 =====
 

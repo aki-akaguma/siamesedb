@@ -42,6 +42,32 @@ impl Chunk {
         })
     }
     //
+    fn read_inplace(&mut self, offset: u64, end_pos: u64, file: &mut File) -> Result<()> {
+        let chunk_size = self.data.len();
+        //
+        file.seek(SeekFrom::Start(offset))?;
+        let data = &mut self.data;
+        data.fill(0u8);
+        if offset != end_pos {
+            let end_off = (end_pos - offset) as usize;
+            let buf = if end_off >= chunk_size {
+                &mut data[0..]
+            } else {
+                &mut data[0..end_off]
+            };
+            if let Err(err) = file.read_exact(buf) {
+                let _ = std::marker::PhantomData::<i32>;
+                return Err(err);
+            }
+        }
+        //
+        self.dirty = false;
+        self.uses = 0;
+        self.offset = offset;
+        //
+        Ok(())
+    }
+    //
     fn write(&mut self, end_pos: u64, file: &mut File) -> Result<()> {
         if !self.dirty {
             return Ok(());
@@ -73,10 +99,10 @@ impl Chunk {
 /// the key is the offset from start the file.
 /// the value is the index of BufFile::data.
 #[derive(Debug)]
-struct OffIdx {
+struct OffsetIndex {
     vec: Vec<(u64, usize)>,
 }
-impl OffIdx {
+impl OffsetIndex {
     fn with_capacity(cap: usize) -> Self {
         Self {
             vec: Vec::with_capacity(cap),
@@ -122,7 +148,7 @@ pub struct BufFile {
     /// Contains the actual chunks
     chunks: Vec<Chunk>,
     /// Used to quickly map a file index to an array index (to index self.dat)
-    map: OffIdx,
+    map: OffsetIndex,
     /// The file to be written to and read from
     file: File,
     /// The current position of the file.
@@ -175,7 +201,7 @@ impl BufFile {
             chunk_size,
             chunk_mask,
             chunks: Vec::with_capacity(max_num_chunks),
-            map: OffIdx::with_capacity(max_num_chunks),
+            map: OffsetIndex::with_capacity(max_num_chunks),
             file,
             pos: 0,
             end,
@@ -290,7 +316,7 @@ impl BufFile {
         Ok(())
     }
     /// Write small size bytes with a fast routine. The small size is less than chunk size.
-    pub fn write_all_small(&mut self, buf: &mut [u8]) -> Result<()> {
+    pub fn write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         debug_assert!(
             buf.len() <= self.chunk_size,
             "buf.len(): {} <= {}",
@@ -427,17 +453,11 @@ impl BufFile {
                 min_idx
             };
             // Make a new chunk, write the old chunk to disk, replace old chunk
-            match Chunk::new(offset, self.end, self.chunk_size, &mut self.file) {
-                Ok(x) => {
-                    self.chunks[min_idx].write(self.end, &mut self.file)?;
-                    self.file.seek(SeekFrom::Start(self.pos))?;
-                    self.map.remove(&self.chunks[min_idx].offset);
-                    self.map.insert(offset, min_idx);
-                    self.chunks[min_idx] = x;
-                    Ok(min_idx)
-                }
-                Err(err) => Err(err),
-            }
+            self.chunks[min_idx].write(self.end, &mut self.file)?;
+            self.map.remove(&self.chunks[min_idx].offset);
+            self.map.insert(offset, min_idx);
+            self.chunks[min_idx].read_inplace(offset, self.end, &mut self.file)?;
+            Ok(min_idx)
         }
     }
 }

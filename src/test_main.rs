@@ -120,6 +120,7 @@ fn _test_a2() {
     // finish get: 4.021µs/op
     // finish delete: 11.396µs/op
     // 3.11user 0.07system 0:03.23elapsed 98%CPU (0avgtext+0avgdata 2272maxresident)k
+    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 100_000, f_get: true, f_delete: true, ..Default::default() },
@@ -127,7 +128,6 @@ fn _test_a2() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
-    /*
      */
     //
     // 1m
@@ -139,7 +139,6 @@ fn _test_a2() {
     // finish get: 4.714µs/op
     // finish delete: 12.943µs/op
     // 36.39user 0.78system 0:37.60elapsed 98%CPU (0avgtext+0avgdata 2336maxresident)k
-    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -147,6 +146,7 @@ fn _test_a2() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
+    /*
      */
     //
     // 10m
