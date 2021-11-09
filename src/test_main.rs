@@ -4,8 +4,8 @@ use siamesedb::DbList;
 use siamesedb::DbMap;
 
 fn main() {
-    _test_a1();
-    //_test_a2();
+    //_test_a1();
+    _test_a2();
 }
 fn _test_a1() {
     //_test00_map();
@@ -49,29 +49,32 @@ fn _test_a1() {
     );
     */
     /*
-    start put
-    finish put: 24.892µs/op
-    record free: [(15, 0), (23, 0), (31, 0), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node free: [(31, 524), (71, 0), (103, 0), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-    record used: [(15, 100), (23, 999900), (31, 0), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node used: [(31, 0), (71, 138135), (103, 20984), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
+    finish put: 9.634µs/op
+    record free: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    record used: [(16, 100), (24, 999900), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    node free: [(32, 524), (72, 0), (104, 0), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
+    node used: [(32, 0), (72, 138135), (104, 20984), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     db_map.is_balanced(): true
     db_map.is_dense(): true
     db_map.depth_of_node_tree(): 7
+    record_size_stats(): [(16, 100), (24, 999900)]
     start get
-    finish get: 9.305µs/op
+    finish get: 4.097µs/op
     start delete
-    finish delete: 22.545µs/op
-    record free: [(15, 100), (23, 999900), (31, 0), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node free: [(31, 524), (71, 138134), (103, 20984), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
-    record used: [(15, 0), (23, 0), (31, 0), (47, 0), (63, 0), (255, 0), (511, 0), (2047, 0)]
-    node used: [(31, 0), (71, 1), (103, 0), (143, 0), (175, 0), (215, 0), (231, 0), (256, 0)]
+    finish delete: 7.555µs/op
+    record free: [(16, 100), (24, 999900), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    record used: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    node free: [(32, 524), (72, 138134), (104, 20984), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
+    node used: [(32, 0), (72, 1), (104, 0), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     db_map.is_balanced(): true
     db_map.is_dense(): true
     db_map.depth_of_node_tree(): 1
-    56.70user 0.97system 0:58.23elapsed 99%CPU (0avgtext+0avgdata 2304maxresident)k
-    0inputs+141216outputs (0major+213minor)pagefaults 0swaps
+    record_size_stats(): []
+    21.65user 0.82system 0:23.24elapsed 96%CPU (0avgtext+0avgdata 2792maxresident)k
+    672inputs+141216outputs (4major+353minor)pagefaults 0swaps
+    0
     */
+    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -79,7 +82,6 @@ fn _test_a1() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
-    /*
     #[rustfmt::skip]
     _test_db_list(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -87,20 +89,20 @@ fn _test_a1() {
         |i: usize| { i as u64 },
         |i: usize| { format!("value{:01}", i) },
     );
-     */
+    */
 }
 
 fn _test_a2() {
     //
     // 10k
     //
-    // 0.35user 0.01system 0:00.38elapsed 93%CPU (0avgtext+0avgdata 2208maxresident)k
-    //
-    // finish put: 14.096µs/op
-    // db_map.depth_of_node_tree(): 5
-    // finish get: 3.341µs/op
-    // finish delete: 9.314µs/op
-    // 0.26user 0.00system 0:00.27elapsed 96%CPU (0avgtext+0avgdata 2396maxresident)k
+    /*
+    finish put: 7.264µs/op
+    db_map.depth_of_node_tree(): 5
+    finish get: 3.181µs/op
+    finish delete: 5.513µs/op
+    0.15user 0.00system 0:00.17elapsed 93%CPU (0avgtext+0avgdata 2508maxresident)k
+    */
     /*
     #[rustfmt::skip]
     _test_db_map(
@@ -113,13 +115,13 @@ fn _test_a2() {
     //
     // 100k
     //
-    // 4.57user 0.09system 0:04.78elapsed 97%CPU (0avgtext+0avgdata 2332maxresident)k
-    //
-    // finish put: 16.62µs/op
-    // db_map.depth_of_node_tree(): 6
-    // finish get: 4.021µs/op
-    // finish delete: 11.396µs/op
-    // 3.11user 0.07system 0:03.23elapsed 98%CPU (0avgtext+0avgdata 2272maxresident)k
+    /*
+    finish put: 8.305µs/op
+    db_map.depth_of_node_tree(): 6
+    finish get: 3.481µs/op
+    finish delete: 6.592µs/op
+    1.76user 0.06system 0:01.90elapsed 96%CPU (0avgtext+0avgdata 2900maxresident)k
+    */
     /*
     #[rustfmt::skip]
     _test_db_map(
@@ -134,12 +136,13 @@ fn _test_a2() {
     //
     // 54.47user 0.99system 0:56.10elapsed 98%CPU (0avgtext+0avgdata 2264maxresident)k
     //
-    // finish put: 19.782µs/op
-    // db_map.depth_of_node_tree(): 7
-    // finish get: 4.714µs/op
-    // finish delete: 12.943µs/op
-    // 36.39user 0.78system 0:37.60elapsed 98%CPU (0avgtext+0avgdata 2336maxresident)k
     /*
+    finish put: 9.627µs/op
+    db_map.depth_of_node_tree(): 7
+    finish get: 4.082µs/op
+    finish delete: 7.704µs/op
+    20.52user 0.62system 0:21.76elapsed 97%CPU (0avgtext+0avgdata 3016maxresident)k
+    */
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -147,17 +150,18 @@ fn _test_a2() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
+    /*
      */
     //
     // 10m
     //
-    // 627.91user 12.64system 10:51.87elapsed 98%CPU (0avgtext+0avgdata 2344maxresident)k
-    //
-    // finish put: 22.899µs/op
-    // db_map.depth_of_node_tree(): 8
-    // finish get: 4.981µs/op
-    // finish delete: 15.317µs/op
-    // 415.67user 11.13system 7:14.21elapsed 98%CPU (0avgtext+0avgdata 2444maxresident)k
+    /*
+    finish put: 10.951µs/op
+    db_map.depth_of_node_tree(): 8
+    finish get: 4.497µs/op
+    finish delete: 9.281µs/op
+    237.03user 7.59system 4:07.71elapsed 98%CPU (0avgtext+0avgdata 2856maxresident)k
+    */
     /*
     #[rustfmt::skip]
     _test_db_map(
@@ -171,16 +175,6 @@ fn _test_a2() {
     //
     // 100m
     //
-    // 7466.42user 229.81system 2:15:24elapsed 94%CPU (0avgtext+0avgdata 2224maxresident)k
-    //
-    // finish put: 27.208µs/op
-    // db_map.depth_of_node_tree(): 9
-    // finish get: 7.15µs/op
-    // finish delete: 22.514µs/op
-    // 4875.26user 231.29system 1:34:47elapsed 89%CPU (0avgtext+0avgdata 2448maxresident)k
-    //
-    // node cache size: 64
-    //
     // record free: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
     // record used: [(16, 100), (24, 999900), (32, 99000000), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
     // node free: [(32, 503), (72, 1), (104, 0), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
@@ -189,11 +183,13 @@ fn _test_a2() {
     // db_map.is_dense(): true
     // record_size_stats(): [(16, 100), (24, 999900), (32, 99000000)]
     //
-    // finish put: 27.041µs/op
-    // db_map.depth_of_node_tree(): 9
-    // finish get: 5.424µs/op
-    // finish delete: 17.437µs/op
-    // 5050.66user 153.20system 1:27:33elapsed 99%CPU (0avgtext+0avgdata 2556maxresident)k
+    /*
+    finish put: 12.99µs/op
+    db_map.depth_of_node_tree(): 9
+    finish get: 8.188µs/op
+    finish delete: 18.575µs/op
+    2706.34user 186.77system 1:06:16elapsed 72%CPU (0avgtext+0avgdata 2880maxresident)k
+    */
     /*
     #[rustfmt::skip]
     _test_db_map(
