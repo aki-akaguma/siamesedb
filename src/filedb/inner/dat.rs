@@ -1,5 +1,6 @@
+use super::super::FileDbParams;
 use super::semtype::*;
-use super::vfile::{VarCursor, VarFile};
+use super::vfile::VarFile;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::fs::OpenOptions;
@@ -16,7 +17,12 @@ const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b
 pub struct DatFile(Rc<RefCell<VarFile>>);
 
 impl DatFile {
-    pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, sig2: HeaderSignature) -> Result<Self> {
+    pub fn open_with_params<P: AsRef<Path>>(
+        path: P,
+        ks_name: &str,
+        sig2: HeaderSignature,
+        params: &FileDbParams,
+    ) -> Result<Self> {
         let mut pb = path.as_ref().to_path_buf();
         pb.push(format!("{}.dat", ks_name));
         let std_file = OpenOptions::new()
@@ -24,7 +30,11 @@ impl DatFile {
             .write(true)
             .create(true)
             .open(pb)?;
-        let mut file = VarFile::new(std_file)?;
+        let mut file = VarFile::with_capacity(
+            std_file,
+            params.dat_buf_num_chunks,
+            params.dat_buf_chunk_size,
+        )?;
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
         if len == 0 {
@@ -358,20 +368,6 @@ fn dat_file_push_free_list(
     Ok(())
 }
 
-fn dat_serialize_to_buf(key: &[u8], value: &[u8]) -> Result<Vec<u8>> {
-    let mut buff_cursor = VarCursor::with_capacity(128);
-    //
-    let key_len = KeyLength::new(key.len() as u32);
-    let value_len = ValueLength::new(value.len() as u32);
-    //
-    buff_cursor.write_key_len(key_len)?;
-    let _ = buff_cursor.write_all(key)?;
-    buff_cursor.write_value_len(value_len)?;
-    let _ = buff_cursor.write_all(value)?;
-    //
-    Ok(buff_cursor.into_inner())
-}
-
 fn dat_write_record(
     file: &mut VarFile,
     offset: RecordOffset,
@@ -381,19 +377,30 @@ fn dat_write_record(
 ) -> Result<RecordOffset> {
     debug_assert!(is_new || !offset.is_zero());
     //
-    let mut buf_vec = dat_serialize_to_buf(key, value)?;
-    let buf_ref = &mut buf_vec;
-    let buf_len = buf_ref.len();
+    let key_len = KeyLength::new(key.len() as u32);
+    let value_len = ValueLength::new(value.len() as u32);
+    //
     #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-    let encoded_len = 4;
+    let (enc_record_len, record_len) = {
+        let enc_key_len = 4;
+        let enc_val_len = 4;
+        let record_len: u32 = enc_key_len + key_len.as_value() + enc_val_len + value_len.as_value();
+        let enc_record_len = 4;
+        (enc_record_len, record_len)
+    };
     #[cfg(feature = "vf_vu64")]
-    let encoded_len = super::vu64::encoded_len(buf_len as u64);
-    let new_record_size = RecordSize::new(buf_len as u32 + encoded_len as u32);
+    let (enc_record_len, record_len) = {
+        let enc_key_len = super::vu64::encoded_len(key_len.as_value() as u64) as u32;
+        let enc_val_len = super::vu64::encoded_len(value_len.as_value() as u64) as u32;
+        let record_len: u32 = enc_key_len + key_len.as_value() + enc_val_len + value_len.as_value();
+        let enc_record_len = super::vu64::encoded_len(record_len as u64) as u32;
+        (enc_record_len, record_len)
+    };
+    let new_record_size = RecordSize::new(record_len + enc_record_len);
     //
     let new_record_size = record_size_roudup(new_record_size);
-    if buf_len < new_record_size.try_into().unwrap() {
-        buf_ref.resize(new_record_size.try_into().unwrap(), 0u8);
-    }
+    let padding_len = new_record_size.as_value() - (record_len + enc_record_len);
+    let padding = vec![0u8; padding_len.try_into().unwrap()];
     //
     if !is_new {
         let _ = file.seek_from_start(offset)?;
@@ -401,8 +408,15 @@ fn dat_write_record(
         if new_record_size <= old_record_size {
             // over writes.
             let _ = file.seek_from_start(offset)?;
-            file.write_record_size(old_record_size)?;
-            file.write_all(buf_ref)?;
+            dat_write_record_one(
+                file,
+                old_record_size,
+                key_len,
+                key,
+                value_len,
+                value,
+                &padding,
+            )?;
             return Ok(offset);
         } else {
             // delete old and add new
@@ -420,8 +434,15 @@ fn dat_write_record(
             let _ = file.seek(SeekFrom::End(0))?;
             RecordOffset::new(file.stream_position()?)
         };
-        file.write_record_size(new_record_size)?;
-        match file.write_all(buf_ref) {
+        match dat_write_record_one(
+            file,
+            new_record_size,
+            key_len,
+            key,
+            value_len,
+            value,
+            &padding,
+        ) {
             Ok(()) => (),
             Err(err) => {
                 // recover on error
@@ -431,6 +452,24 @@ fn dat_write_record(
         }
         Ok(new_record_offset)
     }
+}
+
+fn dat_write_record_one(
+    file: &mut VarFile,
+    record_size: RecordSize,
+    key_len: KeyLength,
+    key: &[u8],
+    value_len: ValueLength,
+    value: &[u8],
+    padding: &[u8],
+) -> Result<()> {
+    file.write_record_size(record_size)?;
+    file.write_key_len(key_len)?;
+    let _ = file.write_all(key)?;
+    file.write_value_len(value_len)?;
+    let _ = file.write_all(value)?;
+    let _ = file.write_all(padding)?;
+    Ok(())
 }
 
 fn dat_read_record(file: &mut VarFile, offset: RecordOffset) -> Result<Option<(Vec<u8>, Vec<u8>)>> {

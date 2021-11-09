@@ -170,7 +170,10 @@ pub struct BufFile {
 }
 
 // ref.) http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-fn roundup_powerof2(mut v: u32) -> u32 {
+
+/// Round up power of 2.
+#[inline]
+pub fn roundup_powerof2(mut v: u32) -> u32 {
     v -= 1;
     v |= v >> 1;
     v |= v >> 2;
@@ -184,11 +187,11 @@ fn roundup_powerof2(mut v: u32) -> u32 {
 impl BufFile {
     /// Creates a new BufFile.
     pub fn new(file: File) -> Result<BufFile> {
-        Self::with_capacity(DEFAULT_NUM_CHUNKS, CHUNK_SIZE, file)
+        Self::with_capacity(file, DEFAULT_NUM_CHUNKS, CHUNK_SIZE)
     }
     /// Creates a new BufFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
-    pub fn with_capacity(max_num_chunks: u16, chunk_size: u32, mut file: File) -> Result<BufFile> {
+    pub fn with_capacity(mut file: File, max_num_chunks: u16, chunk_size: u32) -> Result<BufFile> {
         debug_assert!(chunk_size == roundup_powerof2(chunk_size));
         let max_num_chunks = max_num_chunks as usize;
         let chunk_mask = !(chunk_size as u64 - 1);

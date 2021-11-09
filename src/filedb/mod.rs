@@ -82,6 +82,32 @@ pub struct FileDbMap(Rc<RefCell<FileDbMapInner>>);
 #[derive(Debug, Clone)]
 pub struct FileDbList(Rc<RefCell<FileDbListInner>>);
 
+/// Parameters of filedb.
+///
+/// chunk_size is MUST power of 2.
+#[derive(Debug, Clone)]
+pub struct FileDbParams {
+    /// number of chunks at dat file buffer.
+    pub dat_buf_num_chunks: u16,
+    /// chunk size of dat file buffer.
+    pub dat_buf_chunk_size: u32,
+    /// number of chunks at idx file buffer.
+    pub idx_buf_num_chunks: u16,
+    /// chunk size of idx file buffer.
+    pub idx_buf_chunk_size: u32,
+}
+
+impl std::default::Default for FileDbParams {
+    fn default() -> Self {
+        Self {
+            dat_buf_num_chunks: 32,
+            dat_buf_chunk_size: 16 * 1024,
+            idx_buf_num_chunks: 16,
+            idx_buf_chunk_size: 4 * 1024,
+        }
+    }
+}
+
 impl FileDb {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         Ok(Self(Rc::new(RefCell::new(FileDbInner::open(path)?))))
@@ -90,12 +116,15 @@ impl FileDb {
         FileDbNode(Rc::downgrade(&self.0))
     }
     pub fn db_map(&self, name: &str) -> Result<FileDbMap> {
+        self.db_map_with_params(name, FileDbParams::default())
+    }
+    pub fn db_map_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMap> {
         if let Some(m) = self.0.borrow().db_map(name) {
             return Ok(m);
         }
         //
         let x = self.to_node();
-        x.create_db_map(name)?;
+        x.create_db_map(name, params)?;
         //
         match self.0.borrow().db_map(name) {
             Some(m) => Ok(m),
@@ -103,12 +132,15 @@ impl FileDb {
         }
     }
     pub fn db_list(&self, name: &str) -> Result<FileDbList> {
+        self.db_list_with_params(name, FileDbParams::default())
+    }
+    pub fn db_list_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbList> {
         if let Some(m) = self.0.borrow().db_list(name) {
             return Ok(m);
         }
         //
         let x = self.to_node();
-        x.create_db_list(name)?;
+        x.create_db_list(name, params)?;
         //
         match self.0.borrow().db_list(name) {
             Some(m) => Ok(m),
@@ -129,16 +161,16 @@ impl FileDbNode {
         let locked = rc.borrow();
         locked._parent()
     }
-    fn create_db_map(&self, name: &str) -> Result<()> {
+    fn create_db_map(&self, name: &str, params: FileDbParams) -> Result<()> {
         let rc = self.0.upgrade().expect("FileDbNode is already disposed");
-        let child: FileDbMap = FileDbMap::open(self.clone(), name)?;
+        let child: FileDbMap = FileDbMap::open(self.clone(), name, params)?;
         let mut locked = rc.borrow_mut();
         let _ = locked.db_map_insert(name, child);
         Ok(())
     }
-    fn create_db_list(&self, name: &str) -> Result<()> {
+    fn create_db_list(&self, name: &str, params: FileDbParams) -> Result<()> {
         let rc = self.0.upgrade().expect("FileDbNode is already disposed");
-        let child: FileDbList = FileDbList::open(self.clone(), name)?;
+        let child: FileDbList = FileDbList::open(self.clone(), name, params)?;
         let mut locked = rc.borrow_mut();
         let _ = locked.db_list_insert(name, child);
         Ok(())
@@ -156,10 +188,14 @@ impl FileDbNode {
 }
 
 impl FileDbMap {
-    pub(crate) fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbMap> {
-        Ok(Self(Rc::new(RefCell::new(FileDbMapInner::open(
-            parent, ks_name,
-        )?))))
+    pub(crate) fn open(
+        parent: FileDbNode,
+        ks_name: &str,
+        params: FileDbParams,
+    ) -> Result<FileDbMap> {
+        Ok(Self(Rc::new(RefCell::new(
+            FileDbMapInner::open_with_params(parent, ks_name, params)?,
+        ))))
     }
     pub fn is_dirty(&self) -> bool {
         self.0.borrow().is_dirty()
@@ -237,10 +273,14 @@ impl DbMap for FileDbMap {
 }
 
 impl FileDbList {
-    pub(crate) fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbList> {
-        Ok(Self(Rc::new(RefCell::new(FileDbListInner::open(
-            parent, ks_name,
-        )?))))
+    pub(crate) fn open(
+        parent: FileDbNode,
+        ks_name: &str,
+        params: FileDbParams,
+    ) -> Result<FileDbList> {
+        Ok(Self(Rc::new(RefCell::new(
+            FileDbListInner::open_with_params(parent, ks_name, params)?,
+        ))))
     }
     pub fn is_dirty(&self) -> bool {
         self.0.borrow().is_dirty()

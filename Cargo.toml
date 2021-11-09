@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -31,6 +31,9 @@ buf_lru = []
 buf_stats = []
 
 node_cache = []
+
+# for test
+test_large_data = []
 
 [dependencies]
 

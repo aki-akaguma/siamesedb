@@ -1,4 +1,4 @@
-/*
+#[cfg(feature = "test_large_data")]
 mod test {
     use siamesedb::DbMap;
     ////
@@ -13,9 +13,8 @@ mod test {
     fn maximum_test_map(db_map: &mut dyn DbMap) {
         let key = "The Adventure of the Missing Three-Quarter";
         let val = "We were fairly accustomed to receive weird telegrams at Baker Street, but I have a particular recollection of one which reached us on a gloomy February morning some seven or eight years";
-        let val2 = "ab".repeat(1024*1024*1024);
-        //assert!(val2.len() >= 4*1024*1024*1024);
-        assert!(val2.len() >= 2*1024*1024*1024);
+        let val2 = "abc".repeat(256 * 1024 * 1024);
+        assert!(val2.len() >= 768 * 1024 * 1024);
         // put
         db_map.put_string(key, val).unwrap();
         // get hits
@@ -31,4 +30,3 @@ mod test {
         assert_eq!(r, None);
     }
 }
-*/

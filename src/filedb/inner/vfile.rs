@@ -2,7 +2,7 @@ use super::buf::BufFile;
 use super::semtype::*;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{Cursor, Read, Result, Seek, SeekFrom, Write};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 
 #[cfg(feature = "vf_vu64")]
 use super::vu64_io::{ReadVu64, WriteVu64};
@@ -13,24 +13,14 @@ pub struct VarFile {
     buf_file: BufFile,
 }
 
-#[derive(Debug)]
-pub struct VarCursor {
-    buf_cursor: Cursor<Vec<u8>>,
-}
-
 impl VarFile {
-    /// Creates a new VarFile.
-    pub fn new(file: File) -> Result<VarFile> {
-        Ok(Self {
-            buf_file: BufFile::new(file)?,
-        })
-    }
     /// Creates a new VarFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
     #[allow(dead_code)]
-    pub fn with_capacity(max_num_chunks: u16, chunk_size: u32, file: File) -> Result<VarFile> {
+    pub fn with_capacity(file: File, max_num_chunks: u16, chunk_size: u32) -> Result<VarFile> {
+        debug_assert!(chunk_size == super::buf::roundup_powerof2(chunk_size));
         Ok(Self {
-            buf_file: BufFile::with_capacity(max_num_chunks, chunk_size, file)?,
+            buf_file: BufFile::with_capacity(file, max_num_chunks, chunk_size)?,
         })
     }
     ///
@@ -60,7 +50,7 @@ impl VarFile {
         self.buf_file.set_len(size.as_value())
     }
     ///
-    pub fn write_all_small(&mut self, buf: &[u8]) -> Result<()> {
+    pub fn _write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         self.buf_file.write_all_small(buf)
     }
     ///
@@ -98,27 +88,6 @@ impl Seek for VarFile {
     }
 }
 
-impl VarCursor {
-    /// Creates a new VarCursor with a capacity size.
-    pub fn with_capacity(capacity_size: usize) -> VarCursor {
-        Self {
-            buf_cursor: Cursor::new(Vec::with_capacity(capacity_size)),
-        }
-    }
-    pub fn into_inner(self) -> Vec<u8> {
-        self.buf_cursor.into_inner()
-    }
-}
-
-impl Write for VarCursor {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.buf_cursor.write(buf)
-    }
-    fn flush(&mut self) -> Result<()> {
-        self.buf_cursor.flush()
-    }
-}
-
 impl VarFile {
     #[inline]
     pub fn read_u64_le(&mut self) -> Result<u64> {
@@ -126,16 +95,6 @@ impl VarFile {
         self.read_exact(&mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
-    #[inline]
-    pub fn write_u64_le(&mut self, value: u64) -> Result<()> {
-        let mut buf = [0; 8];
-        buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
-    }
-}
-
-#[cfg(feature = "vf_u64u64")]
-impl VarCursor {
     #[inline]
     pub fn write_u64_le(&mut self, value: u64) -> Result<()> {
         let mut buf = [0; 8];
@@ -182,26 +141,6 @@ impl VarFile {
     }
 }
 
-#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-impl VarCursor {
-    #[inline]
-    pub fn _write_u8(&mut self, value: u8) -> Result<()> {
-        self.write_all(&[value])
-    }
-    #[inline]
-    pub fn write_u16_le(&mut self, value: u16) -> Result<()> {
-        let mut buf = [0; 2];
-        buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
-    }
-    #[inline]
-    pub fn write_u32_le(&mut self, value: u32) -> Result<()> {
-        let mut buf = [0; 4];
-        buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
-    }
-}
-
 #[cfg(feature = "vf_u32u32")]
 impl VarFile {
     #[inline]
@@ -215,6 +154,10 @@ impl VarFile {
     #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
         self.read_u32_le().map(ValueLength::new)
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
+        self.write_u32_le(value_len.as_value())
     }
     //
     #[inline]
@@ -237,6 +180,11 @@ impl VarFile {
     #[inline]
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
         self.read_u32_le().map(|o| RecordOffset::new(o as u64))
+    }
+    #[inline]
+    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+        debug_assert!(record_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(record_offset.as_value() as u32)
     }
     //
     #[inline]
@@ -253,6 +201,11 @@ impl VarFile {
         self.read_u32_le().map(|n| NodeOffset::new(n as u64))
     }
     #[inline]
+    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
+        debug_assert!(node_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(node_offset.as_value() as u32)
+    }
+    #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
         self.read_u32_le().map(NodeSize::new)
     }
@@ -263,32 +216,6 @@ impl VarFile {
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
         self.read_u16_le().map(KeysCount::new)
-    }
-    #[inline]
-    pub fn write_keys_count(&mut self, keys_len: KeysCount) -> Result<()> {
-        self.write_u16_le(keys_len.as_value())
-    }
-}
-
-#[cfg(feature = "vf_u32u32")]
-impl VarCursor {
-    #[inline]
-    pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
-        self.write_u32_le(key_len.as_value())
-    }
-    #[inline]
-    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_u32_le(value_len.as_value())
-    }
-    #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        debug_assert!(record_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(record_offset.as_value() as u32)
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        debug_assert!(node_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(node_offset.as_value() as u32)
     }
     #[inline]
     pub fn write_keys_count(&mut self, keys_len: KeysCount) -> Result<()> {
@@ -309,6 +236,10 @@ impl VarFile {
     #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
         self.read_u32_le().map(ValueLength::new)
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
+        self.write_u32_le(value_len.as_value())
     }
     //
     #[inline]
@@ -331,6 +262,10 @@ impl VarFile {
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
         self.read_u64_le().map(RecordOffset::new)
     }
+    #[inline]
+    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+        self.write_u64_le(record_offset.as_value())
+    }
     //
     #[inline]
     pub fn read_free_node_offset(&mut self) -> Result<NodeOffset> {
@@ -345,6 +280,10 @@ impl VarFile {
         self.read_u64_le().map(NodeOffset::new)
     }
     #[inline]
+    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
+        self.write_u64_le(node_offset.as_value())
+    }
+    #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
         self.read_u32_le().map(NodeSize::new)
     }
@@ -355,30 +294,6 @@ impl VarFile {
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
         self.read_u16_le().map(KeysCount::new)
-    }
-    #[inline]
-    pub fn write_keys_count(&mut self, keys_len: KeysCount) -> Result<()> {
-        self.write_u16_le(keys_len.as_value())
-    }
-}
-
-#[cfg(feature = "vf_u64u64")]
-impl VarCursor {
-    #[inline]
-    pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
-        self.write_u32_le(key_len.as_value())
-    }
-    #[inline]
-    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_u32_le(value_len.as_value())
-    }
-    #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        self.write_u64_le(record_offset.as_value())
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        self.write_u64_le(node_offset.as_value())
     }
     #[inline]
     pub fn write_keys_count(&mut self, keys_len: KeysCount) -> Result<()> {
@@ -409,29 +324,10 @@ impl VarFile {
         self.buf_file.encode_and_write_vu64(value as u64)
     }
     #[inline]
-    pub fn _write_vu64_u64(&mut self, value: u64) -> Result<()> {
+    pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
         self.buf_file.encode_and_write_vu64(value)
     }
 }
-
-#[cfg(feature = "vf_vu64")]
-impl VarCursor {
-    #[inline]
-    pub fn write_vu64_u16(&mut self, value: u16) -> Result<()> {
-        self.encode_and_write_vu64(value as u64)
-    }
-    #[inline]
-    pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
-        self.encode_and_write_vu64(value as u64)
-    }
-    #[inline]
-    pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
-        self.encode_and_write_vu64(value)
-    }
-}
-
-#[cfg(feature = "vf_vu64")]
-impl WriteVu64 for VarCursor {}
 
 #[cfg(feature = "vf_vu64")]
 impl VarFile {
@@ -442,6 +338,10 @@ impl VarFile {
     #[inline]
     pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
         self.write_vu64_u32(key_len.as_value())
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
+        self.write_vu64_u32(value_len.as_value())
     }
     #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
@@ -468,6 +368,10 @@ impl VarFile {
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
         self.read_vu64_u64().map(RecordOffset::new)
     }
+    #[inline]
+    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+        self.write_vu64_u64(record_offset.as_value())
+    }
     //
     #[inline]
     pub fn read_free_node_offset(&mut self) -> Result<NodeOffset> {
@@ -482,6 +386,10 @@ impl VarFile {
         self.read_vu64_u64().map(NodeOffset::new)
     }
     #[inline]
+    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
+        self.write_vu64_u64(node_offset.as_value())
+    }
+    #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
         self.read_vu64_u32().map(NodeSize::new)
     }
@@ -492,30 +400,6 @@ impl VarFile {
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
         self.read_vu64_u16().map(KeysCount::new)
-    }
-    #[inline]
-    pub fn write_keys_count(&mut self, keys_count: KeysCount) -> Result<()> {
-        self.write_vu64_u16(keys_count.as_value())
-    }
-}
-
-#[cfg(feature = "vf_vu64")]
-impl VarCursor {
-    #[inline]
-    pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
-        self.write_vu64_u32(key_len.as_value())
-    }
-    #[inline]
-    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_vu64_u32(value_len.as_value())
-    }
-    #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        self.write_vu64_u64(record_offset.as_value())
-    }
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        self.write_vu64_u64(node_offset.as_value())
     }
     #[inline]
     pub fn write_keys_count(&mut self, keys_count: KeysCount) -> Result<()> {

@@ -13,6 +13,7 @@ The simple local key-value store.
 - Small db file size.
 - Separated files. (data record file and index file)
 - One database has some db-maps and some db-lists.
+- minimum support rustc 1.54.0 (a178d0322 2021-07-26)
 
 ## Compatibility
 

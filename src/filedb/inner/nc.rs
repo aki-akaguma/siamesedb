@@ -1,4 +1,4 @@
-use super::idx::IdxNode;
+use super::idx::{idx_write_node_one, IdxNode};
 use super::semtype::*;
 use super::vfile::VarFile;
 use std::io::Result;
@@ -11,18 +11,16 @@ struct NodeCacheBean {
     node: Rc<IdxNode>,
     node_offset: NodeOffset,
     node_size: NodeSize,
-    buf: Vec<u8>,
     dirty: bool,
 }
 
 impl NodeCacheBean {
-    fn new(node: Rc<IdxNode>, node_size: NodeSize, buf: Vec<u8>, dirty: bool) -> Self {
+    fn new(node: Rc<IdxNode>, node_size: NodeSize, dirty: bool) -> Self {
         let node_offset = node.offset;
         Self {
             node,
             node_offset,
             node_size,
-            buf,
             dirty,
         }
     }
@@ -99,7 +97,6 @@ impl NodeCache {
         file: &mut VarFile,
         node: IdxNode,
         node_size: NodeSize,
-        buf: Vec<u8>,
         dirty: bool,
     ) -> Result<IdxNode> {
         match self
@@ -110,7 +107,6 @@ impl NodeCache {
                 let ncb = self.cache.get_mut(k).unwrap();
                 ncb.node = Rc::new(node);
                 ncb.node_size = node_size;
-                ncb.buf = buf;
                 if dirty {
                     ncb.dirty = true;
                 }
@@ -126,7 +122,7 @@ impl NodeCache {
                 };
                 let r = Rc::new(node.clone());
                 self.cache
-                    .insert(k, NodeCacheBean::new(r, node_size, buf, dirty));
+                    .insert(k, NodeCacheBean::new(r, node_size, dirty));
                 Ok(node)
             }
         }
@@ -148,7 +144,7 @@ impl NodeCache {
 fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
     if ncb.dirty {
         file.write_node_clear(ncb.node_offset, ncb.node_size)?;
-        file.write_all_small(&ncb.buf)?;
+        idx_write_node_one(file, &ncb.node)?;
         ncb.dirty = false;
     }
     Ok(())

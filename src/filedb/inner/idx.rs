@@ -1,7 +1,7 @@
-use super::super::CountOfPerSize;
+use super::super::{CountOfPerSize, FileDbParams};
 use super::dat;
 use super::semtype::*;
-use super::vfile::{VarCursor, VarFile};
+use super::vfile::VarFile;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::fs::OpenOptions;
@@ -32,7 +32,12 @@ type VarFileNodeCache = (VarFile, NodeCache);
 pub struct IdxFile(Rc<RefCell<VarFileNodeCache>>);
 
 impl IdxFile {
-    pub fn open<P: AsRef<Path>>(path: P, ks_name: &str, sig2: HeaderSignature) -> Result<Self> {
+    pub fn open_with_params<P: AsRef<Path>>(
+        path: P,
+        ks_name: &str,
+        sig2: HeaderSignature,
+        params: &FileDbParams,
+    ) -> Result<Self> {
         let mut pb = path.as_ref().to_path_buf();
         pb.push(format!("{}.idx", ks_name));
         let std_file = OpenOptions::new()
@@ -40,8 +45,11 @@ impl IdxFile {
             .write(true)
             .create(true)
             .open(pb)?;
-        //let mut file = VarFile::with_capacity(16, 1024, std_file)?;
-        let mut file = VarFile::new(std_file)?;
+        let mut file = VarFile::with_capacity(
+            std_file,
+            params.idx_buf_num_chunks,
+            params.idx_buf_chunk_size,
+        )?;
         let _ = file.seek(SeekFrom::End(0))?;
         let len = file.stream_position()?;
         //
@@ -849,6 +857,7 @@ fn idx_delete_node(file_nc: &mut VarFileNodeCache, node: IdxNode) -> Result<Node
     Ok(old_node_size)
 }
 
+/*
 fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
     let mut buff_cursor = VarCursor::with_capacity(9 * (2 * NODE_SLOTS_MAX as usize - 1));
     //
@@ -951,6 +960,155 @@ fn idx_write_node(
     //
     Ok(node)
 }
+*/
+
+fn idx_write_node(
+    file_nc: &mut VarFileNodeCache,
+    mut node: IdxNode,
+    is_new: bool,
+) -> Result<IdxNode> {
+    debug_assert!(!node.offset.is_zero());
+    //
+    let buf_len = idx_encoded_node_size(&node);
+    //
+    #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
+    let encoded_len = 4;
+    #[cfg(feature = "vf_vu64")]
+    let encoded_len = super::vu64::encoded_len(buf_len as u64);
+    //
+    let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32);
+    let new_node_size = node_size_roudup(new_node_size);
+    //
+    if !is_new {
+        #[cfg(not(feature = "node_cache"))]
+        let old_node_size = {
+            let _ = file_nc.0.seek_from_start(node.offset)?;
+            file_nc.0.read_node_size()?
+        };
+        #[cfg(feature = "node_cache")]
+        let old_node_size = {
+            if let Some(node_size) = file_nc.1.get_node_size(&node.offset) {
+                node_size
+            } else {
+                let _ = file_nc.0.seek_from_start(node.offset)?;
+                file_nc.0.read_node_size()?
+            }
+        };
+        if new_node_size <= old_node_size {
+            // over writes.
+            #[cfg(not(feature = "node_cache"))]
+            {
+                let _ = file_nc.0.seek_from_start(node.offset)?;
+                file_nc.0.write_node_size(old_node_size)?;
+                idx_write_node_one(&mut file_nc.0, &node)?;
+                return Ok(node);
+            }
+            #[cfg(feature = "node_cache")]
+            {
+                let node = file_nc.1.put(&mut file_nc.0, node, old_node_size, true)?;
+                return Ok(node);
+            }
+        } else {
+            // delete old and add new
+            #[cfg(feature = "node_cache")]
+            file_nc.1.delete(&node.offset);
+            // old
+            idx_file_push_free_list(&mut file_nc.0, node.offset, old_node_size)?;
+        }
+    }
+    // add new.
+    {
+        let free_node_offset = idx_file_pop_free_list(&mut file_nc.0, new_node_size)?;
+        let new_node_offset = if !free_node_offset.is_zero() {
+            let _ = file_nc.0.seek_from_start(free_node_offset)?;
+            let node_size = file_nc.0.read_node_size()?;
+            file_nc.0.write_node_clear(free_node_offset, node_size)?;
+            free_node_offset
+        } else {
+            let _ = file_nc.0.seek(SeekFrom::End(0))?;
+            let node_offset = NodeOffset::new(file_nc.0.stream_position()?);
+            file_nc.0.write_node_clear(node_offset, new_node_size)?;
+            node_offset
+        };
+        idx_write_node_one(&mut file_nc.0, &node)?;
+        node.offset = new_node_offset;
+    }
+    //
+    Ok(node)
+}
+
+fn idx_encoded_node_size(node: &IdxNode) -> usize {
+    let mut sum_size = 0usize;
+    //
+    let keys_count = node.keys.len() as u16;
+    #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
+    {
+        sum_size += 2;
+    }
+    #[cfg(feature = "vf_vu64")]
+    {
+        sum_size += super::vu64::encoded_len(keys_count as u64) as usize;
+    }
+    //
+    for i in 0..(keys_count as usize) {
+        debug_assert!(!node.keys[i].is_zero());
+        let _offset = node.keys[i];
+        #[cfg(feature = "vf_u32u32")]
+        {
+            sum_size += 4;
+        }
+        #[cfg(feature = "vf_u64u64")]
+        {
+            sum_size += 8;
+        }
+        #[cfg(feature = "vf_vu64")]
+        {
+            sum_size += super::vu64::encoded_len(_offset.as_value() as u64) as usize;
+        }
+    }
+    for i in 0..((keys_count as usize) + 1) {
+        let _offset = if i < node.downs.len() {
+            node.downs[i]
+        } else {
+            NodeOffset::new(0)
+        };
+        #[cfg(feature = "vf_u32u32")]
+        {
+            sum_size += 4;
+        }
+        #[cfg(feature = "vf_u64u64")]
+        {
+            sum_size += 8;
+        }
+        #[cfg(feature = "vf_vu64")]
+        {
+            sum_size += super::vu64::encoded_len(_offset.as_value() as u64) as usize;
+        }
+    }
+    //
+    sum_size
+}
+
+pub(crate) fn idx_write_node_one(file: &mut VarFile, node: &IdxNode) -> Result<()> {
+    let keys_count = node.keys.len() as u16;
+    file.write_keys_count(KeysCount::new(keys_count))?;
+    //
+    for i in 0..(keys_count as usize) {
+        debug_assert!(!node.keys[i].is_zero());
+        let offset = node.keys[i];
+        file.write_record_offset(offset)?;
+    }
+    for i in 0..((keys_count as usize) + 1) {
+        let offset = if i < node.downs.len() {
+            node.downs[i]
+        } else {
+            NodeOffset::new(0)
+        };
+        file.write_node_offset(offset)?;
+    }
+    //
+    Ok(())
+}
 
 #[cfg(not(feature = "node_cache"))]
 fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<IdxNode> {
@@ -992,6 +1150,7 @@ fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<I
     let _ = file_nc.0.seek_from_start(offset)?;
     let node_size = file_nc.0.read_node_size()?;
     debug_assert!(!node_size.is_zero());
+    /*
     let node_size_usize: usize = node_size.try_into().unwrap();
     //
     #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
@@ -1004,6 +1163,7 @@ fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<I
         file_nc.0.read_exact(&mut vec)?;
         vec
     };
+    */
     //
     let _ = file_nc.0.seek_from_start(offset)?;
     let node_size = file_nc.0.read_node_size()?;
@@ -1027,7 +1187,7 @@ fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<I
         node.downs.push(node_offset);
     }
     //
-    let node = file_nc.1.put(&mut file_nc.0, node, node_size, buf, false)?;
+    let node = file_nc.1.put(&mut file_nc.0, node, node_size, false)?;
     //
     Ok(node)
 }

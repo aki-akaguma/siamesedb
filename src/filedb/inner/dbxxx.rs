@@ -1,5 +1,5 @@
 use super::super::super::DbXxx;
-use super::super::{CountOfPerSize, FileDbNode};
+use super::super::{CountOfPerSize, FileDbNode, FileDbParams};
 use super::kc::KeyCacheTrait;
 use super::semtype::*;
 use super::{dat, idx, kc};
@@ -30,15 +30,19 @@ pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
 }
 
 impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
-    pub(crate) fn open(parent: FileDbNode, ks_name: &str) -> Result<FileDbXxxInner<KT>> {
+    pub(crate) fn open_with_params(
+        parent: FileDbNode,
+        ks_name: &str,
+        params: FileDbParams,
+    ) -> Result<FileDbXxxInner<KT>> {
         let path = {
             let rc = parent.0.upgrade().expect("FileDbNode is already disposed");
             let locked = rc.borrow();
             locked.path.clone()
         };
         //
-        let dat_file = dat::DatFile::open(&path, ks_name, KT::signature())?;
-        let idx_file = idx::IdxFile::open(&path, ks_name, KT::signature())?;
+        let dat_file = dat::DatFile::open_with_params(&path, ks_name, KT::signature(), &params)?;
+        let idx_file = idx::IdxFile::open_with_params(&path, ks_name, KT::signature(), &params)?;
         Ok(Self {
             parent,
             dat_file,

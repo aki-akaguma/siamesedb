@@ -4,8 +4,8 @@ use siamesedb::DbList;
 use siamesedb::DbMap;
 
 fn main() {
-    //_test_a1();
-    _test_a2();
+    _test_a1();
+    //_test_a2();
 }
 fn _test_a1() {
     //_test00_map();
@@ -72,7 +72,6 @@ fn _test_a1() {
     56.70user 0.97system 0:58.23elapsed 99%CPU (0avgtext+0avgdata 2304maxresident)k
     0inputs+141216outputs (0major+213minor)pagefaults 0swaps
     */
-    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -80,6 +79,7 @@ fn _test_a1() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
+    /*
     #[rustfmt::skip]
     _test_db_list(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -139,6 +139,7 @@ fn _test_a2() {
     // finish get: 4.714µs/op
     // finish delete: 12.943µs/op
     // 36.39user 0.78system 0:37.60elapsed 98%CPU (0avgtext+0avgdata 2336maxresident)k
+    /*
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000_000, f_get: true, f_delete: true, ..Default::default() },
@@ -146,7 +147,6 @@ fn _test_a2() {
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );
-    /*
      */
     //
     // 10m
