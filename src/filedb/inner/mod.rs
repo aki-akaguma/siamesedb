@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 pub(crate) mod dbxxx;
 pub(crate) mod semtype;
 
-mod buf;
 mod dat;
 mod idx;
 mod kc;
@@ -15,13 +14,6 @@ mod vfile;
 
 #[cfg(feature = "node_cache")]
 mod nc;
-
-#[cfg(feature = "vf_vu64")]
-pub mod vu64;
-#[cfg(feature = "vf_vu64")]
-pub mod vu64_buf;
-#[cfg(feature = "vf_vu64")]
-pub mod vu64_io;
 
 #[derive(Debug)]
 pub struct FileDbInner {

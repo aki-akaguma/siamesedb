@@ -390,10 +390,10 @@ fn dat_write_record(
     };
     #[cfg(feature = "vf_vu64")]
     let (enc_record_len, record_len) = {
-        let enc_key_len = super::vu64::encoded_len(key_len.as_value() as u64) as u32;
-        let enc_val_len = super::vu64::encoded_len(value_len.as_value() as u64) as u32;
+        let enc_key_len = vu64::encoded_len(key_len.as_value() as u64) as u32;
+        let enc_val_len = vu64::encoded_len(value_len.as_value() as u64) as u32;
         let record_len: u32 = enc_key_len + key_len.as_value() + enc_val_len + value_len.as_value();
-        let enc_record_len = super::vu64::encoded_len(record_len as u64) as u32;
+        let enc_record_len = vu64::encoded_len(record_len as u64) as u32;
         (enc_record_len, record_len)
     };
     let new_record_size = RecordSize::new(record_len + enc_record_len);

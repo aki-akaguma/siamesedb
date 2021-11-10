@@ -10,8 +10,8 @@ use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use inner::semtype::*;
 use inner::FileDbInner;
 
-#[cfg(feature = "vf_vu64")]
-use inner::vu64;
+//#[cfg(feature = "vf_vu64")]
+//use inner::vu64;
 
 type CountOfPerSize = Vec<(u32, u64)>;
 

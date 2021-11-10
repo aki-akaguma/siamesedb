@@ -2,6 +2,8 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* separates crates: vu64, rabuf
+
 0.1.3 (2021-11-09)
 =====
 

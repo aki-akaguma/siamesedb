@@ -895,7 +895,7 @@ fn idx_write_node(
     #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
     let encoded_len = 4;
     #[cfg(feature = "vf_vu64")]
-    let encoded_len = super::vu64::encoded_len(buf_len as u64);
+    let encoded_len = vu64::encoded_len(buf_len as u64);
     //
     let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32);
     let new_node_size = node_size_roudup(new_node_size);
@@ -974,7 +974,7 @@ fn idx_write_node(
     #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
     let encoded_len = 4;
     #[cfg(feature = "vf_vu64")]
-    let encoded_len = super::vu64::encoded_len(buf_len as u64);
+    let encoded_len = vu64::encoded_len(buf_len as u64);
     //
     let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32);
     let new_node_size = node_size_roudup(new_node_size);
@@ -1047,7 +1047,7 @@ fn idx_encoded_node_size(node: &IdxNode) -> usize {
     }
     #[cfg(feature = "vf_vu64")]
     {
-        sum_size += super::vu64::encoded_len(keys_count as u64) as usize;
+        sum_size += vu64::encoded_len(keys_count as u64) as usize;
     }
     //
     for i in 0..(keys_count as usize) {
@@ -1063,7 +1063,7 @@ fn idx_encoded_node_size(node: &IdxNode) -> usize {
         }
         #[cfg(feature = "vf_vu64")]
         {
-            sum_size += super::vu64::encoded_len(_offset.as_value() as u64) as usize;
+            sum_size += vu64::encoded_len(_offset.as_value() as u64) as usize;
         }
     }
     for i in 0..((keys_count as usize) + 1) {
@@ -1082,7 +1082,7 @@ fn idx_encoded_node_size(node: &IdxNode) -> usize {
         }
         #[cfg(feature = "vf_vu64")]
         {
-            sum_size += super::vu64::encoded_len(_offset.as_value() as u64) as usize;
+            sum_size += vu64::encoded_len(_offset.as_value() as u64) as usize;
         }
     }
     //
@@ -1156,7 +1156,7 @@ fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<I
     #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
     let encoded_len = 4 as usize;
     #[cfg(feature = "vf_vu64")]
-    let encoded_len = super::vu64::encoded_len(node_size_usize as u64) as usize;
+    let encoded_len = vu64::encoded_len(node_size_usize as u64) as usize;
     //
     let buf = {
         let mut vec = vec![0u8; node_size_usize - encoded_len];

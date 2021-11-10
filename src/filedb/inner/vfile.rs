@@ -1,11 +1,11 @@
-use super::buf::BufFile;
+use rabuf::BufFile;
 use super::semtype::*;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 
 #[cfg(feature = "vf_vu64")]
-use super::vu64_io::{ReadVu64, WriteVu64};
+use vu64::io::{ReadVu64, WriteVu64};
 
 /// Variable length integer access for a random access file.
 #[derive(Debug)]
@@ -18,7 +18,7 @@ impl VarFile {
     /// chunk_size is MUST power of 2.
     #[allow(dead_code)]
     pub fn with_capacity(file: File, max_num_chunks: u16, chunk_size: u32) -> Result<VarFile> {
-        debug_assert!(chunk_size == super::buf::roundup_powerof2(chunk_size));
+        debug_assert!(chunk_size == rabuf::roundup_powerof2(chunk_size));
         Ok(Self {
             buf_file: BufFile::with_capacity(file, max_num_chunks, chunk_size)?,
         })
@@ -33,7 +33,7 @@ impl VarFile {
     }
     ///
     pub fn _clear_buf(&mut self) -> Result<()> {
-        self.buf_file._clear_buf()
+        self.buf_file.clear_buf()
     }
     ///
     #[cfg(feature = "buf_stats")]
@@ -302,30 +302,46 @@ impl VarFile {
 }
 
 #[cfg(feature = "vf_vu64")]
+impl ReadVu64 for VarFile {
+    fn read_one_byte(&mut self) -> Result<u8> {
+        self.buf_file.read_one_byte()
+        //self.read_one_byte_vfile()
+    }
+    fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()> {
+        debug_assert!(buf.len() <= 8, "buf.len(): {} <= 8", buf.len());
+        self.buf_file.read_exact_small(buf)
+        //self.read_exact_small(buf)
+    }
+}
+
+#[cfg(feature = "vf_vu64")]
+impl WriteVu64 for VarFile {}
+
+#[cfg(feature = "vf_vu64")]
 impl VarFile {
     #[inline]
     pub fn read_vu64_u16(&mut self) -> Result<u16> {
-        self.buf_file.read_and_decode_vu64().map(|n| n as u16)
+        self.read_and_decode_vu64().map(|n| n as u16)
     }
     #[inline]
     pub fn read_vu64_u32(&mut self) -> Result<u32> {
-        self.buf_file.read_and_decode_vu64().map(|n| n as u32)
+        self.read_and_decode_vu64().map(|n| n as u32)
     }
     #[inline]
     pub fn read_vu64_u64(&mut self) -> Result<u64> {
-        self.buf_file.read_and_decode_vu64()
+        self.read_and_decode_vu64()
     }
     #[inline]
     pub fn write_vu64_u16(&mut self, value: u16) -> Result<()> {
-        self.buf_file.encode_and_write_vu64(value as u64)
+        self.encode_and_write_vu64(value as u64)
     }
     #[inline]
     pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
-        self.buf_file.encode_and_write_vu64(value as u64)
+        self.encode_and_write_vu64(value as u64)
     }
     #[inline]
     pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
-        self.buf_file.encode_and_write_vu64(value)
+        self.encode_and_write_vu64(value)
     }
 }
 

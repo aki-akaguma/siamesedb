@@ -36,6 +36,8 @@ node_cache = []
 test_large_data = []
 
 [dependencies]
+rabuf = { git = "https://github.com/aki-akaguma/rabuf" }
+vu64 = { git = "https://github.com/aki-akaguma/vu64" }
 
 [dev-dependencies]
 #criterion = "0.3"
