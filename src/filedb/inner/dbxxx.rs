@@ -96,11 +96,10 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         node: &mut idx::IdxNode,
         key: &KT,
     ) -> Result<std::result::Result<usize, usize>> {
-        let mut size = node.keys.len();
         let mut left = 0;
-        let mut right = size;
+        let mut right = node.keys.len();
         while left < right {
-            let mid = left + size / 2;
+            let mid = left + (right - left) / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
             let key_offset = unsafe { *node.keys.get_unchecked(mid) };
@@ -109,16 +108,13 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             debug_assert!(key_offset != RecordOffset::new(0));
             let key_string = self.load_key_string(key_offset)?;
             //
-            let cmp = key.cmp(&key_string);
-            match cmp {
-                Ordering::Less => right = mid,
+            match key.cmp(&key_string) {
                 Ordering::Greater => left = mid + 1,
+                Ordering::Less => right = mid,
                 Ordering::Equal => {
                     return Ok(Ok(mid));
                 }
             }
-            //
-            size = right - left;
         }
         Ok(Err(left))
     }

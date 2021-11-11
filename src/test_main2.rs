@@ -1,5 +1,5 @@
-use siamesedb::filedb::FileDbMap;
-use siamesedb::DbMap;
+use siamesedb::filedb::FileDbMapString;
+use siamesedb::DbMapString;
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -10,7 +10,7 @@ fn main() -> std::io::Result<()> {
 fn test01(db_name: &str) -> std::io::Result<()> {
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_map = db.db_map("some_map1").unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     let val = "ab".repeat(1024 * 1024 * 1024);
     //
@@ -36,7 +36,7 @@ struct CheckC {
     f_graph: bool,
 }
 
-fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
+fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.to_graph_string_with_key_string().unwrap());
     }

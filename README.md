@@ -6,13 +6,13 @@ The simple local key-value store.
 
 - key-value store.
 - in-memory and file store.
-- DbMap has keys as utf-8 string.
-- DbList has keys as u64.
+- `DbMapString` has keys as utf-8 string.
+- `DbMapU64` has keys as u64.
 - The value is any bytes included utf-8 string.
 - The file store is implemented the basic B-Tree. (no hash and no leaf)
 - Small db file size.
 - Separated files. (data record file and index file)
-- One database has some db-maps and some db-lists.
+- One database has some db-map-string and some db-map-u64.
 - minimum support rustc 1.54.0 (a178d0322 2021-07-26)
 
 ## Compatibility
@@ -21,10 +21,10 @@ The simple local key-value store.
 
 ## Examples
 
-### Example DbMap:
+### Example DbMapString:
 
 ```rust
-use siamesedb::DbMap;
+use siamesedb::DbMapString;
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test1.shamdb";
@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
     // create or open database
     let db = siamesedb::open_file(db_name)?;
     // create or get db map
-    let mut db_map = db.db_map("some_map1")?;
+    let mut db_map = db.db_map_string("some_map1")?;
     //
     let r = db_map.get_string("key1")?;
     assert_eq!(r, None);
@@ -45,10 +45,10 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-### Example DbList:
+### Example DbMapU64:
 
 ```rust
-use siamesedb::DbList;
+use siamesedb::DbMapU64;
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test2.shamdb";
@@ -56,13 +56,13 @@ fn main() -> std::io::Result<()> {
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
     let db = siamesedb::open_file(db_name)?;
-    let mut db_list = db.db_list("some_list1")?;
-    let r = db_list.get_string(120)?;
+    let mut db_map = db.db_map_u64("some_list1")?;
+    let r = db_map.get_string(120)?;
     assert_eq!(r, None);
-    db_list.put_string(120, "value120")?;
-    let r = db_list.get_string(120)?;
+    db_map.put_string(120, "value120")?;
+    let r = db_map.get_string(120)?;
     assert_eq!(r, Some("value120".to_string()));
-    db_list.sync_data()?;
+    db_map.sync_data()?;
     Ok(())
 }
 ```

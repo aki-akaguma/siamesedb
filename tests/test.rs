@@ -1,7 +1,7 @@
 mod test {
-    use siamesedb::{DbList, DbMap};
+    use siamesedb::{DbMapString, DbMapU64};
     //
-    fn basic_test_map(db_map: &mut dyn DbMap) {
+    fn basic_test_map(db_map: &mut dyn DbMapString) {
         // get nothing
         let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, None);
@@ -52,7 +52,7 @@ mod test {
         //
         db_map.sync_data().unwrap();
     }
-    fn basic_test_list(db_list: &mut dyn DbList) {
+    fn basic_test_list(db_list: &mut dyn DbMapU64) {
         // get nothing
         let r = db_list.get_string(1023).unwrap();
         assert_eq!(r, None);
@@ -80,7 +80,7 @@ mod test {
         //
         db_list.sync_data().unwrap();
     }
-    fn medium_test_map(db_map: &mut dyn DbMap) {
+    fn medium_test_map(db_map: &mut dyn DbMapString) {
         let key = "The Adventure of the Missing Three-Quarter";
         let val = "We were fairly accustomed to receive weird telegrams at Baker Street,
      but I have a particular recollection of one which reached us on a
@@ -103,7 +103,7 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
     }
-    fn medium_test_list(db_list: &mut dyn DbList) {
+    fn medium_test_list(db_list: &mut dyn DbMapU64) {
         let key = 123456789;
         let val = "We were fairly accustomed to receive weird telegrams at Baker Street,
      but I have a particular recollection of one which reached us on a
@@ -140,22 +140,22 @@ mod test {
     }
     ////
     #[test]
-    fn test_file_map() {
+    fn test_file_map_string() {
         let db_name = "target/tmp/test1.shamdb";
         let _ = std::fs::remove_dir_all(db_name);
         let db = siamesedb::open_file(db_name).unwrap();
-        let mut db_map = db.db_map("some_map1").unwrap();
+        let mut db_map = db.db_map_string("some_map1").unwrap();
         basic_test_map(&mut db_map);
         medium_test_map(&mut db_map);
     }
     #[test]
-    fn test_file_list() {
+    fn test_file_map_u64() {
         let db_name = "target/tmp/test2.shamdb";
         let _ = std::fs::remove_dir_all(db_name);
         let db = siamesedb::open_file(db_name).unwrap();
-        let mut db_list = db.db_list("some_list1").unwrap();
-        basic_test_list(&mut db_list);
-        medium_test_list(&mut db_list);
+        let mut db_map = db.db_map_u64("some_list1").unwrap();
+        basic_test_list(&mut db_map);
+        medium_test_list(&mut db_map);
     }
     //
     /*

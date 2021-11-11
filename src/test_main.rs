@@ -1,7 +1,7 @@
-use siamesedb::filedb::FileDbList;
-use siamesedb::filedb::FileDbMap;
-use siamesedb::DbList;
-use siamesedb::DbMap;
+use siamesedb::filedb::FileDbMapU64;
+use siamesedb::filedb::FileDbMapString;
+use siamesedb::DbMapU64;
+use siamesedb::DbMapString;
 
 fn main() {
     //_test_a1();
@@ -207,7 +207,7 @@ fn _test00_map() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_map = db.db_map("some_map1").unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     {
         db_map.put_string("key1", "value1").unwrap();
@@ -271,7 +271,7 @@ fn _test00_list() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_list = db.db_list("some_list1").unwrap();
+    let mut db_list = db.db_map_u64("some_list1").unwrap();
     //
     {
         db_list.put_string(1, "value1").unwrap();
@@ -341,7 +341,7 @@ fn _test01() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_map = db.db_map("some_map1").unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, None);
@@ -385,7 +385,7 @@ fn _test02() {
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_map = db.db_map("some_map1").unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     for i in 1..20 {
         let key = format!("key{:02}", i);
@@ -485,7 +485,7 @@ where
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_map = db.db_map("some_map1").unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     for _ in 0..test_cnf.f_repeat.max(1) {
         println!("start put");
@@ -549,7 +549,7 @@ where
     let db_name = "target/tmp/testA.shamdb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_list = db.db_list("some_list1").unwrap();
+    let mut db_list = db.db_map_u64("some_list1").unwrap();
     //
     for _ in 0..test_cnf.f_repeat.max(1) {
         println!("start put");
@@ -607,7 +607,7 @@ where
     }
 }
 
-fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
+fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.to_graph_string_with_key_string().unwrap());
     }
@@ -633,7 +633,7 @@ fn _print_check_db_map(db_map: &FileDbMap, check_cnf: CheckC) {
     );
 }
 
-fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {
+fn _print_check_db_list(db_list: &FileDbMapU64, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_list.to_graph_string_with_key_string().unwrap());
     }
@@ -659,14 +659,14 @@ fn _print_check_db_list(db_list: &FileDbList, check_cnf: CheckC) {
     );
 }
 
-fn _print_depth_db_map(db_map: &FileDbMap) {
+fn _print_depth_db_map(db_map: &FileDbMapString) {
     println!(
         "db_map.depth_of_node_tree(): {}",
         db_map.depth_of_node_tree().unwrap()
     );
 }
 
-fn _print_depth_db_list(db_list: &FileDbList) {
+fn _print_depth_db_list(db_list: &FileDbMapU64) {
     println!(
         "db_list.depth_of_node_tree(): {}",
         db_list.depth_of_node_tree().unwrap()

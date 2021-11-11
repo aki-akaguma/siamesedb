@@ -1,8 +1,11 @@
 use rabuf::BufFile;
+use rabuf::{FileSync, FileSetLen, SmallWrite};
 use super::semtype::*;
-use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
+
+#[cfg(feature = "vf_vu64")]
+use rabuf::SmallRead;
 
 #[cfg(feature = "vf_vu64")]
 use vu64::io::{ReadVu64, WriteVu64};
@@ -32,8 +35,8 @@ impl VarFile {
         self.buf_file.sync_data()
     }
     ///
-    pub fn _clear_buf(&mut self) -> Result<()> {
-        self.buf_file.clear_buf()
+    pub fn _clear(&mut self) -> Result<()> {
+        self.buf_file.clear()
     }
     ///
     #[cfg(feature = "buf_stats")]
@@ -54,13 +57,13 @@ impl VarFile {
         self.buf_file.write_all_small(buf)
     }
     ///
-    pub fn write_zero(&mut self, size: usize) -> Result<()> {
+    pub fn write_zero(&mut self, size: u32) -> Result<()> {
         self.buf_file.write_zero(size)
     }
     ///
     pub fn write_node_clear(&mut self, node_offset: NodeOffset, node_size: NodeSize) -> Result<()> {
         let _ = self.seek_from_start(node_offset)?;
-        self.write_zero(node_size.try_into().unwrap())?;
+        self.write_zero(node_size.as_value())?;
         let _ = self.seek_from_start(node_offset)?;
         self.write_node_size(node_size)?;
         Ok(())

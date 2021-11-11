@@ -1,4 +1,4 @@
-use super::{DbList, DbMap, DbXxx};
+use super::{DbMapString, DbMapU64, DbXxx};
 use std::cell::RefCell;
 use std::io::Result;
 use std::path::Path;
@@ -10,13 +10,10 @@ use inner::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use inner::semtype::*;
 use inner::FileDbInner;
 
-//#[cfg(feature = "vf_vu64")]
-//use inner::vu64;
-
 type CountOfPerSize = Vec<(u32, u64)>;
 
-type FileDbMapInner = FileDbXxxInner<String>;
-type FileDbListInner = FileDbXxxInner<u64>;
+type FileDbMapStringInner = FileDbXxxInner<String>;
+type FileDbMapU64Inner = FileDbXxxInner<u64>;
 
 impl FileDbXxxInnerKT for String {
     fn signature() -> [u8; 8] {
@@ -70,17 +67,20 @@ impl FileDbXxxInnerKT for u64 {
     }
 }
 
+/// File Database.
 #[derive(Debug, Clone)]
 pub struct FileDb(Rc<RefCell<FileDbInner>>);
 
 #[derive(Debug, Clone)]
 pub(crate) struct FileDbNode(Weak<RefCell<FileDbInner>>);
 
+/// Map in a file database.
 #[derive(Debug, Clone)]
-pub struct FileDbMap(Rc<RefCell<FileDbMapInner>>);
+pub struct FileDbMapString(Rc<RefCell<FileDbMapStringInner>>);
 
+/// List in a file databse.
 #[derive(Debug, Clone)]
-pub struct FileDbList(Rc<RefCell<FileDbListInner>>);
+pub struct FileDbMapU64(Rc<RefCell<FileDbMapU64Inner>>);
 
 /// Parameters of filedb.
 ///
@@ -115,10 +115,10 @@ impl FileDb {
     fn to_node(&self) -> FileDbNode {
         FileDbNode(Rc::downgrade(&self.0))
     }
-    pub fn db_map(&self, name: &str) -> Result<FileDbMap> {
-        self.db_map_with_params(name, FileDbParams::default())
+    pub fn db_map_string(&self, name: &str) -> Result<FileDbMapString> {
+        self.db_map_string_with_params(name, FileDbParams::default())
     }
-    pub fn db_map_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMap> {
+    pub fn db_map_string_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMapString> {
         if let Some(m) = self.0.borrow().db_map(name) {
             return Ok(m);
         }
@@ -131,10 +131,10 @@ impl FileDb {
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
-    pub fn db_list(&self, name: &str) -> Result<FileDbList> {
-        self.db_list_with_params(name, FileDbParams::default())
+    pub fn db_map_u64(&self, name: &str) -> Result<FileDbMapU64> {
+        self.db_map_u64_with_params(name, FileDbParams::default())
     }
-    pub fn db_list_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbList> {
+    pub fn db_map_u64_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMapU64> {
         if let Some(m) = self.0.borrow().db_list(name) {
             return Ok(m);
         }
@@ -156,21 +156,16 @@ impl FileDb {
 }
 
 impl FileDbNode {
-    pub fn _parent(&self) -> Option<Self> {
-        let rc = self.0.upgrade().expect("FileDbNode is already dispose");
-        let locked = rc.borrow();
-        locked._parent()
-    }
     fn create_db_map(&self, name: &str, params: FileDbParams) -> Result<()> {
         let rc = self.0.upgrade().expect("FileDbNode is already disposed");
-        let child: FileDbMap = FileDbMap::open(self.clone(), name, params)?;
+        let child: FileDbMapString = FileDbMapString::open(self.clone(), name, params)?;
         let mut locked = rc.borrow_mut();
         let _ = locked.db_map_insert(name, child);
         Ok(())
     }
     fn create_db_list(&self, name: &str, params: FileDbParams) -> Result<()> {
         let rc = self.0.upgrade().expect("FileDbNode is already disposed");
-        let child: FileDbList = FileDbList::open(self.clone(), name, params)?;
+        let child: FileDbMapU64 = FileDbMapU64::open(self.clone(), name, params)?;
         let mut locked = rc.borrow_mut();
         let _ = locked.db_list_insert(name, child);
         Ok(())
@@ -187,14 +182,14 @@ impl FileDbNode {
     }
 }
 
-impl FileDbMap {
+impl FileDbMapString {
     pub(crate) fn open(
         parent: FileDbNode,
         ks_name: &str,
         params: FileDbParams,
-    ) -> Result<FileDbMap> {
+    ) -> Result<FileDbMapString> {
         Ok(Self(Rc::new(RefCell::new(
-            FileDbMapInner::open_with_params(parent, ks_name, params)?,
+            FileDbMapStringInner::open_with_params(parent, ks_name, params)?,
         ))))
     }
     pub fn is_dirty(&self) -> bool {
@@ -203,7 +198,7 @@ impl FileDbMap {
 }
 
 /// for debug
-impl FileDbMap {
+impl FileDbMapString {
     /// convert index to graph string for debug.
     pub fn to_graph_string(&self) -> Result<String> {
         self.0.borrow().to_graph_string()
@@ -251,7 +246,7 @@ impl FileDbMap {
     }
 }
 
-impl DbMap for FileDbMap {
+impl DbMapString for FileDbMapString {
     fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
         self.0.borrow_mut().get(&(key.to_string()))
     }
@@ -272,14 +267,14 @@ impl DbMap for FileDbMap {
     }
 }
 
-impl FileDbList {
+impl FileDbMapU64 {
     pub(crate) fn open(
         parent: FileDbNode,
         ks_name: &str,
         params: FileDbParams,
-    ) -> Result<FileDbList> {
+    ) -> Result<FileDbMapU64> {
         Ok(Self(Rc::new(RefCell::new(
-            FileDbListInner::open_with_params(parent, ks_name, params)?,
+            FileDbMapU64Inner::open_with_params(parent, ks_name, params)?,
         ))))
     }
     pub fn is_dirty(&self) -> bool {
@@ -288,7 +283,7 @@ impl FileDbList {
 }
 
 /// for debug
-impl FileDbList {
+impl FileDbMapU64 {
     /// convert index to graph string for debug.
     pub fn to_graph_string(&self) -> Result<String> {
         self.0.borrow().to_graph_string()
@@ -336,7 +331,7 @@ impl FileDbList {
     }
 }
 
-impl DbList for FileDbList {
+impl DbMapU64 for FileDbMapU64 {
     fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
         self.0.borrow_mut().get(&key)
     }
@@ -396,20 +391,20 @@ impl std::fmt::Display for RecordSizeStats {
 #[cfg(test)]
 mod debug {
     use super::RecordSizeStats;
-    use super::{FileDb, FileDbList, FileDbMap};
-    use super::{FileDbInner, FileDbListInner, FileDbMapInner};
+    use super::{FileDb, FileDbMapU64, FileDbMapString};
+    use super::{FileDbInner, FileDbMapU64Inner, FileDbMapStringInner};
     //
     #[test]
     fn test_size_of() {
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 8);
-            assert_eq!(std::mem::size_of::<FileDbMap>(), 8);
-            assert_eq!(std::mem::size_of::<FileDbList>(), 8);
+            assert_eq!(std::mem::size_of::<FileDbMapString>(), 8);
+            assert_eq!(std::mem::size_of::<FileDbMapU64>(), 8);
             //
-            assert_eq!(std::mem::size_of::<FileDbInner>(), 80);
-            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 56);
-            assert_eq!(std::mem::size_of::<FileDbListInner>(), 56);
+            assert_eq!(std::mem::size_of::<FileDbInner>(), 72);
+            assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 56);
+            assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 56);
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 24);
         }
@@ -417,12 +412,12 @@ mod debug {
         #[cfg(target_pointer_width = "32")]
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 4);
-            assert_eq!(std::mem::size_of::<FileDbMap>(), 4);
-            assert_eq!(std::mem::size_of::<FileDbList>(), 4);
+            assert_eq!(std::mem::size_of::<FileDbMapString>(), 4);
+            assert_eq!(std::mem::size_of::<FileDbMapU64>(), 4);
             //
-            assert_eq!(std::mem::size_of::<FileDbInner>(), 40);
-            assert_eq!(std::mem::size_of::<FileDbMapInner>(), 28);
-            assert_eq!(std::mem::size_of::<FileDbListInner>(), 28);
+            assert_eq!(std::mem::size_of::<FileDbInner>(), 36);
+            assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 28);
+            assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 28);
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 12);
         }

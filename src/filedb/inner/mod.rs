@@ -1,5 +1,5 @@
-use super::super::{DbList, DbMap};
-use super::{FileDbList, FileDbMap, FileDbNode};
+use super::super::{DbMapString, DbMapU64};
+use super::{FileDbMapU64, FileDbMapString};
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::path::{Path, PathBuf};
@@ -17,10 +17,8 @@ mod nc;
 
 #[derive(Debug)]
 pub struct FileDbInner {
-    parent: Option<FileDbNode>,
-    //
-    db_maps: BTreeMap<String, FileDbMap>,
-    db_lists: BTreeMap<String, FileDbList>,
+    db_maps: BTreeMap<String, FileDbMapString>,
+    db_lists: BTreeMap<String, FileDbMapU64>,
     //
     path: PathBuf,
 }
@@ -31,7 +29,6 @@ impl FileDbInner {
             std::fs::create_dir_all(&path)?;
         }
         Ok(FileDbInner {
-            parent: None,
             db_maps: BTreeMap::new(),
             db_lists: BTreeMap::new(),
             path: path.as_ref().to_path_buf(),
@@ -71,19 +68,16 @@ impl FileDbInner {
 }
 
 impl FileDbInner {
-    pub(crate) fn _parent(&self) -> Option<FileDbNode> {
-        self.parent.clone()
-    }
-    pub fn db_map(&self, name: &str) -> Option<FileDbMap> {
+    pub fn db_map(&self, name: &str) -> Option<FileDbMapString> {
         self.db_maps.get(name).cloned()
     }
-    pub fn db_list(&self, name: &str) -> Option<FileDbList> {
+    pub fn db_list(&self, name: &str) -> Option<FileDbMapU64> {
         self.db_lists.get(name).cloned()
     }
-    pub fn db_map_insert(&mut self, name: &str, child: FileDbMap) -> Option<FileDbMap> {
+    pub fn db_map_insert(&mut self, name: &str, child: FileDbMapString) -> Option<FileDbMapString> {
         self.db_maps.insert(name.to_string(), child)
     }
-    pub fn db_list_insert(&mut self, name: &str, child: FileDbList) -> Option<FileDbList> {
+    pub fn db_list_insert(&mut self, name: &str, child: FileDbMapU64) -> Option<FileDbMapU64> {
         self.db_lists.insert(name.to_string(), child)
     }
 }

@@ -1,4 +1,4 @@
-use super::{DbList, DbMap};
+use super::{DbMapString, DbMapU64};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io::Result;
@@ -13,10 +13,10 @@ pub struct MemoryDb<'a>(Rc<RefCell<MemoryDbInner<'a>>>);
 pub(crate) struct MemoryDbNode<'a>(Weak<RefCell<MemoryDbInner<'a>>>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryDbMap<'a>(Rc<RefCell<MemoryDbMapInner<'a>>>);
+pub struct MemoryDbMapString<'a>(Rc<RefCell<MemoryDbMapStringInner<'a>>>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryDbList<'a>(Rc<RefCell<MemoryDbListInner<'a>>>);
+pub struct MemoryDbMapU64<'a>(Rc<RefCell<MemoryDbMapU64Inner<'a>>>);
 
 impl<'a> MemoryDb<'a> {
     pub fn open() -> Self {
@@ -25,7 +25,7 @@ impl<'a> MemoryDb<'a> {
     fn to_node(&self) -> MemoryDbNode<'a> {
         MemoryDbNode(Rc::downgrade(&self.0))
     }
-    pub fn db_map(&'a self, name: &str) -> MemoryDbMap<'a> {
+    pub fn db_map(&'a self, name: &str) -> MemoryDbMapString<'a> {
         if let Some(m) = self.0.borrow().db_maps.get(name) {
             return m.clone();
         }
@@ -38,7 +38,7 @@ impl<'a> MemoryDb<'a> {
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
-    pub fn db_list(&'a self, name: &str) -> MemoryDbList<'a> {
+    pub fn db_list(&'a self, name: &str) -> MemoryDbMapU64<'a> {
         if let Some(m) = self.0.borrow().db_lists.get(name) {
             return m.clone();
         }
@@ -54,13 +54,8 @@ impl<'a> MemoryDb<'a> {
 }
 
 impl<'a> MemoryDbNode<'a> {
-    pub(crate) fn _parent(&self) -> Option<Self> {
-        let rc = self.0.upgrade().expect("MemoryDbNode is already dispose");
-        let locked = rc.borrow();
-        locked.parent.clone()
-    }
     fn create_db_map(&self, name: &str) {
-        let child: MemoryDbMap<'a> = MemoryDbMap::new();
+        let child: MemoryDbMapString<'a> = MemoryDbMapString::new();
         let rc = self.0.upgrade().expect("MemoryDbNode is already disposed");
         {
             let mut child_locked = child.0.borrow_mut();
@@ -74,7 +69,7 @@ impl<'a> MemoryDbNode<'a> {
         let _ = locked.db_maps.insert(name.to_string(), child);
     }
     fn create_db_list(&self, name: &str) {
-        let child: MemoryDbList<'a> = MemoryDbList::new();
+        let child: MemoryDbMapU64<'a> = MemoryDbMapU64::new();
         let rc = self.0.upgrade().expect("MemoryDbNode is already disposed");
         {
             let mut child_locked = child.0.borrow_mut();
@@ -91,13 +86,13 @@ impl<'a> MemoryDbNode<'a> {
     fn sync_data(&self) {}
 }
 
-impl<'a> MemoryDbMap<'a> {
+impl<'a> MemoryDbMapString<'a> {
     fn new() -> Self {
-        Self(Rc::new(RefCell::new(MemoryDbMapInner::new())))
+        Self(Rc::new(RefCell::new(MemoryDbMapStringInner::new())))
     }
 }
 
-impl<'a> DbMap for MemoryDbMap<'a> {
+impl<'a> DbMapString for MemoryDbMapString<'a> {
     fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
         self.0.borrow_mut().get(key)
     }
@@ -115,13 +110,13 @@ impl<'a> DbMap for MemoryDbMap<'a> {
     }
 }
 
-impl<'a> MemoryDbList<'a> {
+impl<'a> MemoryDbMapU64<'a> {
     fn new() -> Self {
-        Self(Rc::new(RefCell::new(MemoryDbListInner::new())))
+        Self(Rc::new(RefCell::new(MemoryDbMapU64Inner::new())))
     }
 }
 
-impl<'a> DbList for MemoryDbList<'a> {
+impl<'a> DbMapU64 for MemoryDbMapU64<'a> {
     fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
         self.0.borrow_mut().get(key)
     }
@@ -143,15 +138,13 @@ impl<'a> DbList for MemoryDbList<'a> {
 
 #[derive(Debug)]
 pub(crate) struct MemoryDbInner<'a> {
-    parent: Option<MemoryDbNode<'a>>,
-    db_maps: BTreeMap<String, MemoryDbMap<'a>>,
-    db_lists: BTreeMap<String, MemoryDbList<'a>>,
+    db_maps: BTreeMap<String, MemoryDbMapString<'a>>,
+    db_lists: BTreeMap<String, MemoryDbMapU64<'a>>,
 }
 
 impl<'a> MemoryDbInner<'a> {
     pub fn open() -> MemoryDbInner<'a> {
         MemoryDbInner {
-            parent: None,
             db_maps: BTreeMap::new(),
             db_lists: BTreeMap::new(),
         }
@@ -159,12 +152,12 @@ impl<'a> MemoryDbInner<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct MemoryDbMapInner<'a> {
+pub(crate) struct MemoryDbMapStringInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
     mem: BTreeMap<String, Vec<u8>>,
 }
 
-impl<'a> MemoryDbMapInner<'a> {
+impl<'a> MemoryDbMapStringInner<'a> {
     fn new() -> Self {
         Self {
             parent: None,
@@ -173,7 +166,7 @@ impl<'a> MemoryDbMapInner<'a> {
     }
 }
 
-impl<'a> DbMap for MemoryDbMapInner<'a> {
+impl<'a> DbMapString for MemoryDbMapStringInner<'a> {
     fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(key).map(|val| val.to_vec());
         Ok(r)
@@ -201,12 +194,12 @@ impl<'a> DbMap for MemoryDbMapInner<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct MemoryDbListInner<'a> {
+pub(crate) struct MemoryDbMapU64Inner<'a> {
     parent: Option<MemoryDbNode<'a>>,
     mem: BTreeMap<u64, Vec<u8>>,
 }
 
-impl<'a> MemoryDbListInner<'a> {
+impl<'a> MemoryDbMapU64Inner<'a> {
     fn new() -> Self {
         Self {
             parent: None,
@@ -215,7 +208,7 @@ impl<'a> MemoryDbListInner<'a> {
     }
 }
 
-impl<'a> DbList for MemoryDbListInner<'a> {
+impl<'a> DbMapU64 for MemoryDbMapU64Inner<'a> {
     fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(&key).map(|val| val.to_vec());
         Ok(r)
@@ -247,28 +240,28 @@ impl<'a> DbList for MemoryDbListInner<'a> {
 mod debug {
     #[test]
     fn test_size_of() {
-        use super::{MemoryDb, MemoryDbList, MemoryDbMap};
-        use super::{MemoryDbInner, MemoryDbListInner, MemoryDbMapInner};
+        use super::{MemoryDb, MemoryDbMapU64, MemoryDbMapString};
+        use super::{MemoryDbInner, MemoryDbMapU64Inner, MemoryDbMapStringInner};
         //
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<MemoryDb>(), 8);
-            assert_eq!(std::mem::size_of::<MemoryDbMap>(), 8);
-            assert_eq!(std::mem::size_of::<MemoryDbList>(), 8);
+            assert_eq!(std::mem::size_of::<MemoryDbMapString>(), 8);
+            assert_eq!(std::mem::size_of::<MemoryDbMapU64>(), 8);
             //
-            assert_eq!(std::mem::size_of::<MemoryDbInner>(), 56);
-            assert_eq!(std::mem::size_of::<MemoryDbMapInner>(), 32);
-            assert_eq!(std::mem::size_of::<MemoryDbListInner>(), 32);
+            assert_eq!(std::mem::size_of::<MemoryDbInner>(), 48);
+            assert_eq!(std::mem::size_of::<MemoryDbMapStringInner>(), 32);
+            assert_eq!(std::mem::size_of::<MemoryDbMapU64Inner>(), 32);
         }
         #[cfg(target_pointer_width = "32")]
         {
             assert_eq!(std::mem::size_of::<MemoryDb>(), 4);
-            assert_eq!(std::mem::size_of::<MemoryDbMap>(), 4);
-            assert_eq!(std::mem::size_of::<MemoryDbList>(), 4);
+            assert_eq!(std::mem::size_of::<MemoryDbMapString>(), 4);
+            assert_eq!(std::mem::size_of::<MemoryDbMapU64>(), 4);
             //
-            assert_eq!(std::mem::size_of::<MemoryDbInner>(), 28);
-            assert_eq!(std::mem::size_of::<MemoryDbMapInner>(), 16);
-            assert_eq!(std::mem::size_of::<MemoryDbListInner>(), 16);
+            assert_eq!(std::mem::size_of::<MemoryDbInner>(), 24);
+            assert_eq!(std::mem::size_of::<MemoryDbMapStringInner>(), 16);
+            assert_eq!(std::mem::size_of::<MemoryDbMapU64Inner>(), 16);
         }
     }
 }
