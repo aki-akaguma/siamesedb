@@ -2,6 +2,12 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.5 (2021-11-12)
+=====
+
+* fix bugs: If the key is empty, it will result in an error.
+* adds more test
+
 0.1.4 (2021-11-11)
 =====
 

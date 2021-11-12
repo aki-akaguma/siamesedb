@@ -1,6 +1,6 @@
-use rabuf::BufFile;
-use rabuf::{FileSync, FileSetLen, SmallWrite};
 use super::semtype::*;
+use rabuf::BufFile;
+use rabuf::{FileSetLen, FileSync, SmallWrite};
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 

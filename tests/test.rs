@@ -50,6 +50,16 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
         //
+        // special case
+        // get empty key
+        let r = db_map.get_string("").unwrap();
+        assert_eq!(r, None);
+        // insert empty key
+        db_map.put_string("", val2).unwrap();
+        // get empty key
+        let r = db_map.get_string("").unwrap();
+        assert_eq!(r, Some(val2.to_string()));
+        //
         db_map.sync_data().unwrap();
     }
     fn basic_test_list(db_list: &mut dyn DbMapU64) {
@@ -141,7 +151,7 @@ mod test {
     ////
     #[test]
     fn test_file_map_string() {
-        let db_name = "target/tmp/test1.shamdb";
+        let db_name = "target/tmp/test1.siamesedb";
         let _ = std::fs::remove_dir_all(db_name);
         let db = siamesedb::open_file(db_name).unwrap();
         let mut db_map = db.db_map_string("some_map1").unwrap();
@@ -150,7 +160,7 @@ mod test {
     }
     #[test]
     fn test_file_map_u64() {
-        let db_name = "target/tmp/test2.shamdb";
+        let db_name = "target/tmp/test2.siamesedb";
         let _ = std::fs::remove_dir_all(db_name);
         let db = siamesedb::open_file(db_name).unwrap();
         let mut db_map = db.db_map_u64("some_list1").unwrap();

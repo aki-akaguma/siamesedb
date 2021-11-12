@@ -118,7 +118,11 @@ impl FileDb {
     pub fn db_map_string(&self, name: &str) -> Result<FileDbMapString> {
         self.db_map_string_with_params(name, FileDbParams::default())
     }
-    pub fn db_map_string_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMapString> {
+    pub fn db_map_string_with_params(
+        &self,
+        name: &str,
+        params: FileDbParams,
+    ) -> Result<FileDbMapString> {
         if let Some(m) = self.0.borrow().db_map(name) {
             return Ok(m);
         }
@@ -391,8 +395,8 @@ impl std::fmt::Display for RecordSizeStats {
 #[cfg(test)]
 mod debug {
     use super::RecordSizeStats;
-    use super::{FileDb, FileDbMapU64, FileDbMapString};
-    use super::{FileDbInner, FileDbMapU64Inner, FileDbMapStringInner};
+    use super::{FileDb, FileDbMapString, FileDbMapU64};
+    use super::{FileDbInner, FileDbMapStringInner, FileDbMapU64Inner};
     //
     #[test]
     fn test_size_of() {

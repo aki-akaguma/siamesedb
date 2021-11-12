@@ -63,11 +63,11 @@ impl DatFile {
         let mut locked = self.0.borrow_mut();
         dat_read_record_size(&mut locked, offset)
     }
-    pub fn read_record_key(&self, offset: RecordOffset) -> Result<Option<Vec<u8>>> {
+    pub fn read_record_key(&self, offset: RecordOffset) -> Result<Vec<u8>> {
         let mut locked = self.0.borrow_mut();
         dat_read_record_key(&mut locked, offset)
     }
-    pub fn read_record(&self, offset: RecordOffset) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    pub fn read_record(&self, offset: RecordOffset) -> Result<(Vec<u8>, Vec<u8>)> {
         let mut locked = self.0.borrow_mut();
         dat_read_record(&mut locked, offset)
     }
@@ -472,39 +472,42 @@ fn dat_write_record_one(
     Ok(())
 }
 
-fn dat_read_record(file: &mut VarFile, offset: RecordOffset) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+fn dat_read_record(file: &mut VarFile, offset: RecordOffset) -> Result<(Vec<u8>, Vec<u8>)> {
     debug_assert!(!offset.is_zero());
     //
     let _ = file.seek_from_start(offset)?;
     let _record_size = file.read_record_size()?;
     let key_len = file.read_key_len()?;
-    if key_len.is_zero() {
-        return Ok(None);
-    }
-    let mut key = vec![0u8; key_len.try_into().unwrap()];
-    let _ = file.read_exact(&mut key)?;
+    let key = if key_len.is_zero() {
+        Vec::with_capacity(0)
+    } else {
+        let mut key = vec![0u8; key_len.try_into().unwrap()];
+        let _ = file.read_exact(&mut key)?;
+        key
+    };
     //
     let val_len = file.read_value_len()?;
     let mut value = vec![0u8; val_len.try_into().unwrap()];
     let _ = file.read_exact(&mut value)?;
     //
-    Ok(Some((key, value)))
+    Ok((key, value))
 }
 
-fn dat_read_record_key(file: &mut VarFile, offset: RecordOffset) -> Result<Option<Vec<u8>>> {
+fn dat_read_record_key(file: &mut VarFile, offset: RecordOffset) -> Result<Vec<u8>> {
     debug_assert!(!offset.is_zero());
     //
     let _ = file.seek_from_start(offset)?;
     let _record_size = file.read_record_size()?;
     let key_len = file.read_key_len()?;
-    if key_len.is_zero() {
-        return Ok(None);
-    }
+    let key = if key_len.is_zero() {
+        Vec::with_capacity(0)
+    } else {
+        let mut key = vec![0u8; key_len.try_into().unwrap()];
+        let _ = file.read_exact(&mut key)?;
+        key
+    };
     //
-    let mut key = vec![0u8; key_len.try_into().unwrap()];
-    let _ = file.read_exact(&mut key)?;
-    //
-    Ok(Some(key))
+    Ok(key)
 }
 
 fn dat_read_record_size(file: &mut VarFile, offset: RecordOffset) -> Result<RecordSize> {

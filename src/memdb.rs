@@ -240,8 +240,8 @@ impl<'a> DbMapU64 for MemoryDbMapU64Inner<'a> {
 mod debug {
     #[test]
     fn test_size_of() {
-        use super::{MemoryDb, MemoryDbMapU64, MemoryDbMapString};
-        use super::{MemoryDbInner, MemoryDbMapU64Inner, MemoryDbMapStringInner};
+        use super::{MemoryDb, MemoryDbMapString, MemoryDbMapU64};
+        use super::{MemoryDbInner, MemoryDbMapStringInner, MemoryDbMapU64Inner};
         //
         #[cfg(target_pointer_width = "64")]
         {

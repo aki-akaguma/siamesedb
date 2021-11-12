@@ -214,10 +214,7 @@ impl IdxFile {
         }
         let record_offset = node.keys[0];
         let key_string = if !record_offset.is_zero() {
-            dat_file
-                .read_record_key(record_offset)?
-                .map(|val| String::from_utf8_lossy(&val).to_string())
-                .unwrap()
+            String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string()
         } else {
             String::new()
         };
@@ -240,18 +237,12 @@ impl IdxFile {
                 break;
             }
             let key_string1 = if !key_offset1.is_zero() {
-                dat_file
-                    .read_record_key(key_offset1)?
-                    .map(|val| String::from_utf8_lossy(&val).to_string())
-                    .unwrap()
+                String::from_utf8_lossy(&dat_file.read_record_key(key_offset1)?).to_string()
             } else {
                 String::new()
             };
             let key_string2 = if !key_offset2.is_zero() {
-                dat_file
-                    .read_record_key(key_offset2)?
-                    .map(|val| String::from_utf8_lossy(&val).to_string())
-                    .unwrap()
+                String::from_utf8_lossy(&dat_file.read_record_key(key_offset2)?).to_string()
             } else {
                 String::new()
             };
@@ -274,10 +265,8 @@ impl IdxFile {
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !record_offset.is_zero() {
-                let key_string = dat_file
-                    .read_record_key(record_offset)?
-                    .map(|val| String::from_utf8_lossy(&val).to_string())
-                    .unwrap();
+                let key_string =
+                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string();
                 if !self.is_large(&key_string, &node1, dat_file.clone())? {
                     return Ok(false);
                 }
@@ -301,10 +290,8 @@ impl IdxFile {
             }
             let record_offset = node.keys[i];
             if !record_offset.is_zero() {
-                let ket_string1 = dat_file
-                    .read_record_key(record_offset)?
-                    .map(|val| String::from_utf8_lossy(&val).to_string())
-                    .unwrap();
+                let ket_string1 =
+                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string();
                 if key <= &ket_string1 {
                     return Ok(false);
                 }
@@ -338,10 +325,9 @@ impl IdxFile {
             }
             let record_offset11 = node.keys[i];
             if !record_offset11.is_zero() {
-                let ket_string11 = dat_file
-                    .read_record_key(record_offset11)?
-                    .map(|val| String::from_utf8_lossy(&val).to_string())
-                    .unwrap();
+                let ket_string11 =
+                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset11)?)
+                        .to_string();
                 if key1 >= &ket_string11 {
                     return Ok(false);
                 }
@@ -372,10 +358,8 @@ impl IdxFile {
             }
             let record_offset = node.keys[i];
             if !record_offset.is_zero() {
-                let ket_string1 = dat_file
-                    .read_record_key(record_offset)?
-                    .map(|val| String::from_utf8_lossy(&val).to_string())
-                    .unwrap();
+                let ket_string1 =
+                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string();
                 if key >= &ket_string1 {
                     return Ok(false);
                 }

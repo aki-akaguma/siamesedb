@@ -70,23 +70,20 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         let string = match self.key_cache.get(&record_offset) {
             Some(s) => s,
             None => {
-                let vec = self.dat_file.read_record_key(record_offset)?.unwrap();
-                self.key_cache.put(&record_offset, KT::from(&vec)).unwrap()
+                let vec = self.dat_file.read_record_key(record_offset)?;
+                self.key_cache.put(&record_offset, KT::from(&vec))
             }
         };
         Ok(string)
     }
     pub fn load_key_string_no_cache(&self, record_offset: RecordOffset) -> Result<KT> {
         debug_assert!(record_offset != RecordOffset::new(0));
-        let vec = self.dat_file.read_record_key(record_offset)?.unwrap();
+        let vec = self.dat_file.read_record_key(record_offset)?;
         Ok(KT::from(&vec))
     }
-    fn load_value(&self, record_offset: RecordOffset) -> Result<Option<Vec<u8>>> {
+    fn load_value(&self, record_offset: RecordOffset) -> Result<Vec<u8>> {
         debug_assert!(record_offset != RecordOffset::new(0));
-        Ok(self
-            .dat_file
-            .read_record(record_offset)?
-            .map(|(_key, val)| val))
+        Ok(self.dat_file.read_record(record_offset)?.1)
     }
     fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
         self.dat_file.read_record_size(record_offset)
@@ -240,12 +237,9 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         record_offset: RecordOffset,
         value: &[u8],
     ) -> Result<RecordOffset> {
-        if let Some(r_key) = self.dat_file.read_record_key(record_offset)? {
-            let new_key_offset = self.dat_file.write_record(record_offset, &r_key, value)?;
-            Ok(new_key_offset)
-        } else {
-            panic!("dat_file.read_record({})", record_offset);
-        }
+        let r_key = self.dat_file.read_record_key(record_offset)?;
+        let new_key_offset = self.dat_file.write_record(record_offset, &r_key, value)?;
+        Ok(new_key_offset)
     }
     #[inline]
     fn balance_on_insert(
@@ -495,7 +489,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             Ok(k) => {
                 let key_offset = node.keys[k];
                 debug_assert!(key_offset != RecordOffset::new(0));
-                self.load_value(key_offset)
+                self.load_value(key_offset).map(Some)
             }
             Err(k) => {
                 let node_offset1 = node.downs[k];

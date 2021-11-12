@@ -45,7 +45,7 @@ pub trait KeyCacheTrait<KT> {
     }
     fn len(&self) -> usize;
     fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>>;
-    fn put(&mut self, offset: &RecordOffset, key: KT) -> Option<Rc<KT>>;
+    fn put(&mut self, offset: &RecordOffset, key: KT) -> Rc<KT>;
     fn delete(&mut self, offset: &RecordOffset);
     fn clear(&mut self);
 }
@@ -67,7 +67,7 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
             Err(_k) => None,
         }
     }
-    fn put(&mut self, offset: &RecordOffset, key: KT) -> Option<Rc<KT>> {
+    fn put(&mut self, offset: &RecordOffset, key: KT) -> Rc<KT> {
         match self
             .cache
             .binary_search_by_key(&offset.as_value(), |a| a.record_offset.as_value())
@@ -76,7 +76,7 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
                 let a = self.cache.get_mut(k).unwrap();
                 a.uses += 1;
                 a.key_string = Rc::new(key);
-                Some(a.key_string.clone())
+                a.key_string.clone()
             }
             Err(k) => {
                 let k = if self.cache.len() > CACHE_SIZE {
@@ -88,7 +88,7 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
                 };
                 let r = Rc::new(key);
                 self.cache.insert(k, KeyCacheBean::new(*offset, r.clone()));
-                Some(r)
+                r
             }
         }
     }

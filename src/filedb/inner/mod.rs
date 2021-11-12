@@ -1,5 +1,5 @@
 use super::super::{DbMapString, DbMapU64};
-use super::{FileDbMapU64, FileDbMapString};
+use super::{FileDbMapString, FileDbMapU64};
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::path::{Path, PathBuf};

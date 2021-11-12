@@ -1,7 +1,7 @@
-use siamesedb::filedb::FileDbMapU64;
 use siamesedb::filedb::FileDbMapString;
-use siamesedb::DbMapU64;
+use siamesedb::filedb::FileDbMapU64;
 use siamesedb::DbMapString;
+use siamesedb::DbMapU64;
 
 fn main() {
     //_test_a1();
