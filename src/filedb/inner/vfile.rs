@@ -68,6 +68,14 @@ impl VarFile {
         self.write_node_size(node_size)?;
         Ok(())
     }
+    ///
+    pub fn write_record_clear(&mut self, record_offset: RecordOffset, record_size: RecordSize) -> Result<()> {
+        let _ = self.seek_from_start(record_offset)?;
+        self.write_zero(record_size.as_value())?;
+        let _ = self.seek_from_start(record_offset)?;
+        self.write_record_size(record_size)?;
+        Ok(())
+    }
 }
 
 impl Read for VarFile {

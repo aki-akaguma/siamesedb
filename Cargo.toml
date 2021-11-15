@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -21,6 +21,14 @@ path = "src/test_main2.rs"
 [[bin]]
 name = "test_main3"
 path = "src/test_main3.rs"
+
+[[bin]]
+name = "test_main4"
+path = "src/test_main4.rs"
+
+[[bin]]
+name = "check_main"
+path = "src/check_main.rs"
 
 [features]
 default = ["vf_vu64", "node_cache"]

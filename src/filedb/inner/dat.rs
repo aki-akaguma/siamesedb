@@ -292,10 +292,7 @@ fn dat_file_pop_free_list(file: &mut VarFile, new_record_size: RecordSize) -> Re
                     (record_offset, record_size)
                 };
                 //
-                let _ = file.seek_from_start(free_1st)?;
-                file.write_record_size(record_size)?;
-                let buff = vec![0; record_size.try_into().unwrap()];
-                file.write_all(&buff)?;
+                file.write_record_clear(free_1st, record_size)?;
                 //
                 free_next
             };
@@ -334,10 +331,7 @@ fn dat_file_pop_free_list_large(
                 dat_file_write_free_record_offset(file, new_record_size, free_next)?;
             }
             //
-            let _ = file.seek_from_start(free_curr)?;
-            file.write_record_size(record_size)?;
-            let buff = vec![0; record_size.try_into().unwrap()];
-            file.write_all(&buff)?;
+            file.write_record_clear(free_curr, record_size)?;
             return Ok(free_curr);
         }
         free_prev = free_curr;

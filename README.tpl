@@ -4,7 +4,7 @@
 
 # Changelogs
 
-[This crate's changelog here.](https://github.com/aki-akaguma/shamdb/blob/main/CHANGELOG.md)
+[This crate's changelog here.](https://github.com/aki-akaguma/siamesedb/blob/main/CHANGELOG.md)
 
 # License
 
