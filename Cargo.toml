@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.6"
+version = "0.1.7"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."

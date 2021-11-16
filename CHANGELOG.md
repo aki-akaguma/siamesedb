@@ -2,6 +2,11 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.7 (2021-11-16)
+=====
+
+* fix bugs: node_cache and write_node()
+
 0.1.6 (2021-11-16)
 =====
 

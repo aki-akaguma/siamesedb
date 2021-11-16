@@ -1,5 +1,4 @@
 use super::super::{CountOfPerSize, FileDbParams};
-use super::dat;
 use super::semtype::*;
 use super::vfile::VarFile;
 use std::cell::RefCell;
@@ -73,13 +72,13 @@ impl IdxFile {
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         #[cfg(feature = "node_cache")]
-        idx_cache_flush_clear(&mut locked)?;
+        idx_node_cache_flush_clear(&mut locked)?;
         locked.0.sync_all()
     }
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         #[cfg(feature = "node_cache")]
-        idx_cache_flush_clear(&mut locked)?;
+        idx_node_cache_flush_clear(&mut locked)?;
         locked.0.sync_data()
     }
     #[cfg(feature = "buf_stats")]
@@ -208,23 +207,26 @@ impl IdxFile {
         Ok(1 + mx)
     }
     //
-    pub fn is_mst_valid(&self, node: &IdxNode, dat_file: dat::DatFile) -> Result<bool> {
+    pub fn is_mst_valid<KT>(&self, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
+    where
+        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+    {
         if node.keys.is_empty() {
             return Ok(true);
         }
         let record_offset = node.keys[0];
         let key_string = if !record_offset.is_zero() {
-            String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string()
+            dbxxx.load_key_string_no_cache(record_offset)?
         } else {
-            String::new()
+            Default::default()
         };
         let node_offset = node.downs[0];
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
-            if !self.is_small(&key_string, &node1, dat_file.clone())? {
+            if !self.is_small(&key_string, &node1, dbxxx)? {
                 return Ok(false);
             }
-            if !self.is_mst_valid(&node1, dat_file.clone())? {
+            if !self.is_mst_valid(&node1, dbxxx)? {
                 return Ok(false);
             }
         }
@@ -237,24 +239,24 @@ impl IdxFile {
                 break;
             }
             let key_string1 = if !key_offset1.is_zero() {
-                String::from_utf8_lossy(&dat_file.read_record_key(key_offset1)?).to_string()
+                dbxxx.load_key_string_no_cache(key_offset1)?
             } else {
-                String::new()
+                Default::default()
             };
             let key_string2 = if !key_offset2.is_zero() {
-                String::from_utf8_lossy(&dat_file.read_record_key(key_offset2)?).to_string()
+                dbxxx.load_key_string_no_cache(key_offset2)?
             } else {
-                String::new()
+                Default::default()
             };
             if key_string1 >= key_string2 {
                 return Ok(false);
             }
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
-                if !self.is_between(&key_string1, &key_string2, &node1, dat_file.clone())? {
+                if !self.is_between(&key_string1, &key_string2, &node1, dbxxx)? {
                     return Ok(false);
                 }
-                if !self.is_mst_valid(&node1, dat_file.clone())? {
+                if !self.is_mst_valid(&node1, dbxxx)? {
                     return Ok(false);
                 }
             }
@@ -265,13 +267,12 @@ impl IdxFile {
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !record_offset.is_zero() {
-                let key_string =
-                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string();
-                if !self.is_large(&key_string, &node1, dat_file.clone())? {
+                let key_string = dbxxx.load_key_string_no_cache(record_offset)?;
+                if !self.is_large(&key_string, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
-            if !self.is_mst_valid(&node1, dat_file)? {
+            if !self.is_mst_valid(&node1, dbxxx)? {
                 return Ok(false);
             }
         }
@@ -279,20 +280,22 @@ impl IdxFile {
         Ok(true)
     }
     //
-    fn is_small(&self, key: &str, node: &IdxNode, dat_file: dat::DatFile) -> Result<bool> {
+    fn is_small<KT>(&self, key: &KT, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
+    where
+        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+    {
         for i in 0..node.keys.len() {
             let node_offset = node.downs[i];
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
-                if !self.is_small(key, &node1, dat_file.clone())? {
+                if !self.is_small(key, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
             let record_offset = node.keys[i];
             if !record_offset.is_zero() {
-                let ket_string1 =
-                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string();
-                if key <= &ket_string1 {
+                let key_string1 = dbxxx.load_key_string_no_cache(record_offset)?;
+                if key <= &key_string1 {
                     return Ok(false);
                 }
             }
@@ -301,33 +304,34 @@ impl IdxFile {
         let node_offset = node.downs[node.keys.len()];
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
-            if !self.is_small(key, &node1, dat_file)? {
+            if !self.is_small(key, &node1, dbxxx)? {
                 return Ok(false);
             }
         }
         //
         Ok(true)
     }
-    fn is_between(
+    fn is_between<KT>(
         &self,
-        key1: &str,
-        key2: &str,
+        key1: &KT,
+        key2: &KT,
         node: &IdxNode,
-        dat_file: dat::DatFile,
-    ) -> Result<bool> {
+        dbxxx: &FileDbXxxInner<KT>,
+    ) -> Result<bool>
+    where
+        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+    {
         for i in 0..node.keys.len() {
             let node_offset = node.downs[i];
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
-                if !self.is_between(key1, key2, &node1, dat_file.clone())? {
+                if !self.is_between(key1, key2, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
             let record_offset11 = node.keys[i];
             if !record_offset11.is_zero() {
-                let ket_string11 =
-                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset11)?)
-                        .to_string();
+                let ket_string11 = dbxxx.load_key_string_no_cache(record_offset11)?;
                 if key1 >= &ket_string11 {
                     return Ok(false);
                 }
@@ -340,26 +344,28 @@ impl IdxFile {
         let node_offset = node.downs[node.keys.len()];
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
-            if !self.is_between(key1, key2, &node1, dat_file)? {
+            if !self.is_between(key1, key2, &node1, dbxxx)? {
                 return Ok(false);
             }
         }
         //
         Ok(true)
     }
-    fn is_large(&self, key: &str, node: &IdxNode, dat_file: dat::DatFile) -> Result<bool> {
+    fn is_large<KT>(&self, key: &KT, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
+    where
+        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+    {
         for i in 0..node.keys.len() {
             let node_offset = node.downs[i];
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
-                if !self.is_large(key, &node1, dat_file.clone())? {
+                if !self.is_large(key, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
             let record_offset = node.keys[i];
             if !record_offset.is_zero() {
-                let ket_string1 =
-                    String::from_utf8_lossy(&dat_file.read_record_key(record_offset)?).to_string();
+                let ket_string1 = dbxxx.load_key_string_no_cache(record_offset)?;
                 if key >= &ket_string1 {
                     return Ok(false);
                 }
@@ -369,7 +375,7 @@ impl IdxFile {
         let node_offset = node.downs[node.keys.len()];
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
-            if !self.is_large(key, &node1, dat_file)? {
+            if !self.is_large(key, &node1, dbxxx)? {
                 return Ok(false);
             }
         }
@@ -815,7 +821,7 @@ impl IdxNode {
 }
 
 #[cfg(feature = "node_cache")]
-fn idx_cache_flush_clear(file_nc: &mut VarFileNodeCache) -> Result<()> {
+fn idx_node_cache_flush_clear(file_nc: &mut VarFileNodeCache) -> Result<()> {
     file_nc.1.clear(&mut file_nc.0)?;
     Ok(())
 }
@@ -1134,20 +1140,6 @@ fn idx_read_node(file_nc: &mut VarFileNodeCache, offset: NodeOffset) -> Result<I
     let _ = file_nc.0.seek_from_start(offset)?;
     let node_size = file_nc.0.read_node_size()?;
     debug_assert!(!node_size.is_zero());
-    /*
-    let node_size_usize: usize = node_size.try_into().unwrap();
-    //
-    #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-    let encoded_len = 4 as usize;
-    #[cfg(feature = "vf_vu64")]
-    let encoded_len = vu64::encoded_len(node_size_usize as u64) as usize;
-    //
-    let buf = {
-        let mut vec = vec![0u8; node_size_usize - encoded_len];
-        file_nc.0.read_exact(&mut vec)?;
-        vec
-    };
-    */
     //
     let _ = file_nc.0.seek_from_start(offset)?;
     let node_size = file_nc.0.read_node_size()?;

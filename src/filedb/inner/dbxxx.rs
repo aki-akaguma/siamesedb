@@ -116,15 +116,17 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         Ok(Err(left))
     }
     fn write_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
+        self.dirty = true;
         self.idx_file.write_node(node)
     }
     fn write_new_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
+        self.dirty = true;
         self.idx_file.write_new_node(node)
     }
 }
 
 // for debug
-impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
+impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd> FileDbXxxInner<KT> {
     // convert index to graph string for debug.
     pub fn to_graph_string(&self) -> Result<String> {
         self.idx_file.to_graph_string()
@@ -141,7 +143,7 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display> FileDbXxxInner<KT> {
     // check it is multi search tree
     pub fn is_mst_valid(&self) -> Result<bool> {
         let top_node = self.idx_file.read_top_node()?;
-        self.idx_file.is_mst_valid(&top_node, self.dat_file.clone())
+        self.idx_file.is_mst_valid(&top_node, self)
     }
     // check the node except the root and leaves of the tree has branches of hm or more.
     pub fn is_dense(&self) -> Result<bool> {
@@ -205,7 +207,6 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                 let new_record_offset = self.store_value_on_insert(record_offset, value)?;
                 if record_offset != new_record_offset {
                     node.keys[k] = new_record_offset;
-                    self.dirty = true;
                     return self.write_node(node);
                 }
                 Ok(node)
@@ -225,7 +226,6 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                     debug_assert!(!node2.offset.is_zero());
                     let node2 = self.write_node(node2)?;
                     node.downs[k] = node2.offset;
-                    self.dirty = true;
                     self.write_node(node)
                 }
             }

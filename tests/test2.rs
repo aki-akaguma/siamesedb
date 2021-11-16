@@ -47,8 +47,9 @@ mod test2 {
     #[test]
     fn test_fixtures_fruits() {
         let data = load_fixtures("fixtures/test-fruits.txt");
-        let data = &data[..100];
+        let data = &data[..2000];
         let db_name = "target/tmp/test22.siamesedb";
+        let _ = std::fs::remove_dir_all(db_name);
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             for (k, v) in data {
@@ -58,12 +59,24 @@ mod test2 {
             db_map.sync_data().unwrap();
         });
         //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
+        });
+        //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             for (k, v) in data {
                 db_map.put(k.as_str(), v.as_bytes()).unwrap();
             }
             //
             db_map.sync_data().unwrap();
+        });
+        //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
         });
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
@@ -79,6 +92,12 @@ mod test2 {
             db_map.sync_data().unwrap();
         });
         //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
+        });
+        //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             assert_eq!(
                 db_map.get_string("9909909900").unwrap(),
@@ -92,6 +111,12 @@ mod test2 {
                 db_map.get_string("9909909902").unwrap(),
                 Some("TEST, v9909909902".to_string())
             );
+        });
+        //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
         });
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
@@ -101,6 +126,12 @@ mod test2 {
             db_map.sync_data().unwrap();
         });
         //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
+        });
+        //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             assert_eq!(
                 db_map.get_string("9909909900").unwrap(),
@@ -114,6 +145,12 @@ mod test2 {
                 db_map.get_string("9909909902").unwrap(),
                 None
             );
+        });
+        //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
         });
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
@@ -129,6 +166,12 @@ mod test2 {
             db_map.sync_data().unwrap();
         });
         //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
+        });
+        //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             assert_eq!(
                 db_map.get_string("9909909900").unwrap(),
@@ -142,6 +185,12 @@ mod test2 {
                 db_map.get_string("9909909902").unwrap(),
                 Some("TEST, v9909909902".to_string())
             );
+        });
+        //
+        do_file_map_string(db_name, |db_map: FileDbMapString| {
+            assert!(db_map.is_balanced().unwrap());
+            assert!(db_map.is_mst_valid().unwrap());
+            assert!(db_map.is_dense().unwrap());
         });
     }
 }

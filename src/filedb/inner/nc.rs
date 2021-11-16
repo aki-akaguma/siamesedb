@@ -120,10 +120,11 @@ impl NodeCache {
                 } else {
                     k
                 };
-                let r = Rc::new(node.clone());
+                let r = Rc::new(node);
                 self.cache
                     .insert(k, NodeCacheBean::new(r, node_size, dirty));
-                Ok(node)
+                let ncb = self.cache.get_mut(k).unwrap();
+                Ok(ncb.node.as_ref().clone())
             }
         }
     }

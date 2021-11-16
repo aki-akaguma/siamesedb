@@ -21,7 +21,7 @@ fn _test_a1() {
     #[rustfmt::skip]
     _test_db_map(
         TestC { max_cnt: 1_000, f_get: false, f_delete: false, f_repeat: 1 },
-        CheckC { check: true, ..Default::default() },
+        CheckC { check: true, f_mst: true, ..Default::default() },
         |i: usize| { format!("key{:01}", i) },
         |i: usize| { format!("value{:01}", i) },
     );

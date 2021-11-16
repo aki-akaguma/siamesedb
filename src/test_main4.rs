@@ -35,15 +35,28 @@ fn load_fixtures(path: &str) -> Vec<(String, String)> {
 }
 
 fn test_fixtures_fruits() {
-    let db_name = "target/tmp/testAA.siamesedb";
+    macro_rules! base_path {
+        () => 
+        ("")
+        //("/home/hcc/src/rust/MyJam/rel-github/lib/siamesedb/")
+    }
+    let db_name = concat!(base_path!(), "target/tmp/testAA.siamesedb");
     let _ = std::fs::remove_dir_all(db_name);
-    let data = load_fixtures("fixtures/test-fruits.txt");
-    let data = &data[..2000];
+    let data = load_fixtures(concat!(base_path!(), "fixtures/test-fruits.txt"));
+    let data = &data[..5000];
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         for (k, v) in data {
             db_map.put(k.as_str(), v.as_bytes()).unwrap();
         }
+        //
+        db_map.sync_data().unwrap();
+    });
+    //
+    do_file_map_string(db_name, |db_map: FileDbMapString| {
+        assert!(db_map.is_balanced().unwrap());
+        assert!(db_map.is_mst_valid().unwrap());
+        assert!(db_map.is_dense().unwrap());
     });
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
@@ -52,6 +65,12 @@ fn test_fixtures_fruits() {
         }
         //
         db_map.sync_data().unwrap();
+    });
+    //
+    do_file_map_string(db_name, |db_map: FileDbMapString| {
+        assert!(db_map.is_balanced().unwrap());
+        assert!(db_map.is_mst_valid().unwrap());
+        assert!(db_map.is_dense().unwrap());
     });
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
@@ -65,6 +84,12 @@ fn test_fixtures_fruits() {
             .put_string("9909909902", "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
+    });
+    //
+    do_file_map_string(db_name, |db_map: FileDbMapString| {
+        assert!(db_map.is_balanced().unwrap());
+        assert!(db_map.is_mst_valid().unwrap());
+        assert!(db_map.is_dense().unwrap());
     });
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
@@ -88,6 +113,18 @@ fn test_fixtures_fruits() {
         db_map.delete("9909909902").unwrap();
         db_map.sync_data().unwrap();
     });
+    /*
+    do_file_map_string(db_name, |db_map: FileDbMapString| {
+        println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    });
+    return;
+    */
+    //
+    do_file_map_string(db_name, |db_map: FileDbMapString| {
+        assert!(db_map.is_balanced().unwrap());
+        assert!(db_map.is_mst_valid().unwrap());
+        assert!(db_map.is_dense().unwrap());
+    });
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         assert_eq!(
@@ -131,6 +168,12 @@ fn test_fixtures_fruits() {
                 ..Default::default()
             },
         );
+    });
+    //
+    do_file_map_string(db_name, |db_map: FileDbMapString| {
+        assert!(db_map.is_balanced().unwrap());
+        assert!(db_map.is_mst_valid().unwrap());
+        assert!(db_map.is_dense().unwrap());
     });
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
