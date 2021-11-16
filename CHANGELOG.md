@@ -2,6 +2,12 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.8 (2021-11-17)
+=====
+
+* adds `flush()` method into `pub trait DbXxx<KT>`.
+* source code refactoring.
+
 0.1.7 (2021-11-16)
 =====
 

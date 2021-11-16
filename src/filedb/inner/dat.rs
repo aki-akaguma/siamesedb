@@ -45,6 +45,10 @@ impl DatFile {
         //
         Ok(Self(Rc::new(RefCell::new(file))))
     }
+    pub fn flush(&self) -> Result<()> {
+        let mut locked = self.0.borrow_mut();
+        locked.flush()
+    }
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         locked.sync_all()
@@ -103,23 +107,6 @@ impl DatFile {
         }
         Ok(vec)
     }
-    /*
-    pub fn count_of_used_record(&self) -> Result<Vec<(usize, u64)>> {
-        let sz_ary = NODE_SIZE_ARY;
-        //
-        let mut vec = Vec::new();
-        for node_size in sz_ary {
-            let cnt = 0;
-            vec.push((node_size, cnt));
-        }
-        //
-        let top_node = self.read_top_node()?;
-        let mut locked = self.0.borrow_mut();
-        idx_count_of_used_node(&mut locked.0, &top_node, &mut vec)?;
-        //
-        Ok(vec)
-    }
-    */
 }
 
 /**
@@ -394,7 +381,6 @@ fn dat_write_record(
     //
     let new_record_size = record_size_roudup(new_record_size);
     let padding_len = new_record_size.as_value() - (record_len + enc_record_len);
-    let padding = vec![0u8; padding_len.try_into().unwrap()];
     //
     if !is_new {
         let _ = file.seek_from_start(offset)?;
@@ -409,7 +395,7 @@ fn dat_write_record(
                 key,
                 value_len,
                 value,
-                &padding,
+                padding_len,
             )?;
             return Ok(offset);
         } else {
@@ -435,7 +421,7 @@ fn dat_write_record(
             key,
             value_len,
             value,
-            &padding,
+            padding_len,
         ) {
             Ok(()) => (),
             Err(err) => {
@@ -455,14 +441,14 @@ fn dat_write_record_one(
     key: &[u8],
     value_len: ValueLength,
     value: &[u8],
-    padding: &[u8],
+    padding_len: u32,
 ) -> Result<()> {
     file.write_record_size(record_size)?;
     file.write_key_len(key_len)?;
-    let _ = file.write_all(key)?;
+    file.write_all(key)?;
     file.write_value_len(value_len)?;
-    let _ = file.write_all(value)?;
-    let _ = file.write_all(padding)?;
+    file.write_all(value)?;
+    file.write_zero(padding_len)?;
     Ok(())
 }
 

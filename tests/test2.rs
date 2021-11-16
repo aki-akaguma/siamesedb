@@ -56,7 +56,7 @@ mod test2 {
                 db_map.put(k.as_str(), v.as_bytes()).unwrap();
             }
             //
-            db_map.sync_data().unwrap();
+            db_map.flush().unwrap();
         });
         //
         do_file_map_string(db_name, |db_map: FileDbMapString| {
@@ -70,7 +70,7 @@ mod test2 {
                 db_map.put(k.as_str(), v.as_bytes()).unwrap();
             }
             //
-            db_map.sync_data().unwrap();
+            db_map.flush().unwrap();
         });
         //
         do_file_map_string(db_name, |db_map: FileDbMapString| {
@@ -89,7 +89,7 @@ mod test2 {
             db_map
                 .put_string("9909909902", "TEST, v9909909902")
                 .unwrap();
-            db_map.sync_data().unwrap();
+            db_map.flush().unwrap();
         });
         //
         do_file_map_string(db_name, |db_map: FileDbMapString| {
@@ -123,7 +123,7 @@ mod test2 {
             db_map.delete("9909909900").unwrap();
             db_map.delete("9909909901").unwrap();
             db_map.delete("9909909902").unwrap();
-            db_map.sync_data().unwrap();
+            db_map.flush().unwrap();
         });
         //
         do_file_map_string(db_name, |db_map: FileDbMapString| {
@@ -133,18 +133,9 @@ mod test2 {
         });
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
-            assert_eq!(
-                db_map.get_string("9909909900").unwrap(),
-                None
-            );
-            assert_eq!(
-                db_map.get_string("9909909901").unwrap(),
-                None
-            );
-            assert_eq!(
-                db_map.get_string("9909909902").unwrap(),
-                None
-            );
+            assert_eq!(db_map.get_string("9909909900").unwrap(), None);
+            assert_eq!(db_map.get_string("9909909901").unwrap(), None);
+            assert_eq!(db_map.get_string("9909909902").unwrap(), None);
         });
         //
         do_file_map_string(db_name, |db_map: FileDbMapString| {
@@ -163,7 +154,7 @@ mod test2 {
             db_map
                 .put_string("9909909902", "TEST, v9909909902")
                 .unwrap();
-            db_map.sync_data().unwrap();
+            db_map.flush().unwrap();
         });
         //
         do_file_map_string(db_name, |db_map: FileDbMapString| {

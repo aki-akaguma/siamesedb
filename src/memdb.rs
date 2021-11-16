@@ -82,6 +82,7 @@ impl<'a> MemoryDbNode<'a> {
         let mut locked = rc.borrow_mut();
         let _ = locked.db_lists.insert(name.to_string(), child);
     }
+    fn flush(&self) {}
     fn sync_all(&self) {}
     fn sync_data(&self) {}
 }
@@ -101,6 +102,9 @@ impl<'a> DbMapString for MemoryDbMapString<'a> {
     }
     fn delete(&mut self, key: &str) -> Result<()> {
         self.0.borrow_mut().delete(key)
+    }
+    fn flush(&mut self) -> Result<()> {
+        self.0.borrow_mut().flush()
     }
     fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
@@ -125,6 +129,9 @@ impl<'a> DbMapU64 for MemoryDbMapU64<'a> {
     }
     fn delete(&mut self, key: u64) -> Result<()> {
         self.0.borrow_mut().delete(key)
+    }
+    fn flush(&mut self) -> Result<()> {
+        self.0.borrow_mut().flush()
     }
     fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
@@ -179,6 +186,12 @@ impl<'a> DbMapString for MemoryDbMapStringInner<'a> {
         self.mem.remove(key);
         Ok(())
     }
+    fn flush(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.flush()
+        }
+        Ok(())
+    }
     fn sync_all(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.sync_all()
@@ -219,6 +232,12 @@ impl<'a> DbMapU64 for MemoryDbMapU64Inner<'a> {
     }
     fn delete(&mut self, key: u64) -> Result<()> {
         let _ = self.mem.remove(&key);
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.flush()
+        }
         Ok(())
     }
     fn sync_all(&mut self) -> Result<()> {

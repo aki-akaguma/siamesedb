@@ -499,7 +499,7 @@ where
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
         println!("finish put: {:?}/op", instant_per_op);
         //
-        db_map.sync_data().unwrap();
+        db_map.flush().unwrap();
         //
         if check_cnf.check {
             _print_check_db_map(&db_map, check_cnf);
@@ -532,7 +532,7 @@ where
             let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
             println!("finish delete: {:?}/op", instant_per_op);
             //
-            db_map.sync_data().unwrap();
+            db_map.flush().unwrap();
             //
             if check_cnf.check {
                 _print_check_db_map(&db_map, check_cnf);

@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -39,8 +39,8 @@ vf_u32u32 = []
 vf_u64u64 = []
 vf_vu64 = []
 
-buf_lru = []
-buf_stats = []
+buf_lru = ["rabuf/buf_lru"]
+buf_stats = ["rabuf/buf_stats"]
 
 node_cache = []
 

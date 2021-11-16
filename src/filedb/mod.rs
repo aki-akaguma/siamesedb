@@ -260,6 +260,9 @@ impl DbMapString for FileDbMapString {
     fn delete(&mut self, key: &str) -> Result<()> {
         self.0.borrow_mut().delete(&(key.to_string()))
     }
+    fn flush(&mut self) -> Result<()> {
+        self.0.borrow_mut().flush()
+    }
     fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()
     }
@@ -344,6 +347,9 @@ impl DbMapU64 for FileDbMapU64 {
     }
     fn delete(&mut self, key: u64) -> Result<()> {
         self.0.borrow_mut().delete(&key)
+    }
+    fn flush(&mut self) -> Result<()> {
+        self.0.borrow_mut().flush()
     }
     fn sync_all(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_all()

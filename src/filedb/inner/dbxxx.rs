@@ -115,10 +115,12 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         }
         Ok(Err(left))
     }
+    #[inline]
     fn write_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
         self.dirty = true;
         self.idx_file.write_node(node)
     }
+    #[inline]
     fn write_new_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
         self.dirty = true;
         self.idx_file.write_new_node(node)
@@ -126,44 +128,46 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
 }
 
 // for debug
-impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd> FileDbXxxInner<KT> {
-    // convert index to graph string for debug.
+impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd>
+    FileDbXxxInner<KT>
+{
+    /// convert index to graph string for debug.
     pub fn to_graph_string(&self) -> Result<String> {
         self.idx_file.to_graph_string()
     }
+    /// convert index to graph string for debug.
     pub fn to_graph_string_with_key_string(&self) -> Result<String> {
         self.idx_file.to_graph_string_with_key_string(self)
-        //.to_graph_string_with_key_string(self.dat_file.clone())
     }
-    // check the index tree is balanced
+    /// check the index tree is balanced
     pub fn is_balanced(&self) -> Result<bool> {
         let top_node = self.idx_file.read_top_node()?;
         self.idx_file.is_balanced(&top_node)
     }
-    // check it is multi search tree
+    /// check it is multi search tree
     pub fn is_mst_valid(&self) -> Result<bool> {
         let top_node = self.idx_file.read_top_node()?;
         self.idx_file.is_mst_valid(&top_node, self)
     }
-    // check the node except the root and leaves of the tree has branches of hm or more.
+    /// check the node except the root and leaves of the tree has branches of hm or more.
     pub fn is_dense(&self) -> Result<bool> {
         let top_node = self.idx_file.read_top_node()?;
         self.idx_file.is_dense(&top_node)
     }
-    // get depth of node tree
+    /// get depth of node tree
     pub fn depth_of_node_tree(&self) -> Result<u64> {
         let top_node = self.idx_file.read_top_node()?;
         self.idx_file.depth_of_node_tree(&top_node)
     }
-    // count of free node
+    /// count of free node
     pub fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         self.idx_file.count_of_free_node()
     }
-    // count of free record
+    /// count of free record
     pub fn count_of_free_record(&self) -> Result<CountOfPerSize> {
         self.dat_file.count_of_free_record()
     }
-    // count of used record and used node
+    /// count of used record and used node
     pub fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
         self.idx_file
             .count_of_used_node(|off| self.load_record_size(off))
@@ -202,7 +206,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         let r = self.keys_binary_search(&mut node, key)?;
         match r {
             Ok(k) => {
-                let record_offset = node.keys[k];
+                let record_offset = unsafe { *node.keys.get_unchecked(k) };
+                //let record_offset = node.keys[k];
                 debug_assert!(record_offset != RecordOffset::new(0));
                 let new_record_offset = self.store_value_on_insert(record_offset, value)?;
                 if record_offset != new_record_offset {
@@ -212,7 +217,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                 Ok(node)
             }
             Err(k) => {
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 let node2 = if !node_offset1.is_zero() {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     self.insert_into_node_tree(node1, key, value)?
@@ -263,6 +269,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     #[inline]
     fn split_on_insert(&mut self, mut node: idx::IdxNode) -> Result<idx::IdxNode> {
+        debug_assert!(node.keys.len() >= idx::NODE_SLOTS_MAX_HALF as usize);
+        debug_assert!(node.downs.len() >= idx::NODE_SLOTS_MAX_HALF as usize);
         let mut node1 = idx::IdxNode::new(NodeOffset::new(0));
         let slice = &node.keys[idx::NODE_SLOTS_MAX_HALF as usize..node.keys.len()];
         node1.keys.extend_from_slice(slice);
@@ -298,7 +306,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
                 return Ok(node);
             }
             Err(k) => {
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     let node1 = self.delete_from_node_tree(node1, key)?;
@@ -465,6 +474,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         node_r.downs.insert(0, node_l.downs.remove(j));
         node_l.keys.remove(i)
     }
+    #[inline]
     fn trim(&self, node: idx::IdxNode) -> Result<idx::IdxNode> {
         if node.downs.len() == 1 {
             let node_offset1 = node.downs[0];
@@ -487,12 +497,14 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         let r = self.keys_binary_search(node, key)?;
         match r {
             Ok(k) => {
-                let key_offset = node.keys[k];
+                let key_offset = unsafe { *node.keys.get_unchecked(k) };
+                //let key_offset = node.keys[k];
                 debug_assert!(key_offset != RecordOffset::new(0));
                 self.load_value(key_offset).map(Some)
             }
             Err(k) => {
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let mut node1 = self.idx_file.read_node(node_offset1)?;
                     self.find_in_node_tree(&mut node1, key)
@@ -510,7 +522,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         match r {
             Ok(_k) => Ok(true),
             Err(k) => {
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let mut node1 = self.idx_file.read_node(node_offset1)?;
                     self.has_key_in_node_tree(&mut node1, key)
@@ -541,6 +554,15 @@ impl<KT: FileDbXxxInnerKT> DbXxx<KT> for FileDbXxxInner<KT> {
         let new_top_node = self.trim(top_node)?;
         if top_node_offset != new_top_node.offset {
             self.idx_file.write_top_node(new_top_node)?;
+        }
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<()> {
+        if self.is_dirty() {
+            // save all data
+            self.dat_file.flush()?;
+            self.idx_file.flush()?;
+            self.dirty = false;
         }
         Ok(())
     }

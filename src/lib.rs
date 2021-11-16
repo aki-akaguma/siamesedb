@@ -94,6 +94,9 @@ pub trait DbMapString {
     /// removes a key from the db-map.
     fn delete(&mut self, key: &str) -> Result<()>;
 
+    /// flush file buffer, the dirty intermediate buffered content is written
+    fn flush(&mut self) -> Result<()>;
+
     /// synchronize all OS-internal metadata to storage.
     fn sync_all(&mut self) -> Result<()>;
 
@@ -104,11 +107,13 @@ pub trait DbMapString {
     fn has_key(&mut self, key: &str) -> Result<bool> {
         self.get(key).map(|opt| opt.is_some())
     }
+
     /// returns the value corresponding to the key. the value is converted to `String`.
     fn get_string(&mut self, key: &str) -> Result<Option<String>> {
         self.get(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
     }
+
     /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
     fn put_string(&mut self, key: &str, value: &str) -> Result<()> {
         self.put(key, value.as_bytes())
@@ -126,6 +131,9 @@ pub trait DbMapU64 {
     /// removes a key from the db-list.
     fn delete(&mut self, key: u64) -> Result<()>;
 
+    /// flush file buffer, the dirty intermediate buffered content is written
+    fn flush(&mut self) -> Result<()>;
+
     /// synchronize all OS-internal metadata to storage.
     fn sync_all(&mut self) -> Result<()>;
 
@@ -136,11 +144,13 @@ pub trait DbMapU64 {
     fn has_key(&mut self, key: u64) -> Result<bool> {
         self.get(key).map(|opt| opt.is_some())
     }
+
     /// returns the value corresponding to the key. the value is converted to `String`.
     fn get_string(&mut self, key: u64) -> Result<Option<String>> {
         self.get(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
     }
+
     /// inserts a key-value pair into the db-list. the value is `&str` and it is converted to `&[u8]`
     fn put_string(&mut self, key: u64, value: &str) -> Result<()> {
         self.put(key, value.as_bytes())
@@ -158,6 +168,9 @@ pub trait DbXxx<KT> {
     /// removes a key from the db.
     fn delete(&mut self, key: &KT) -> Result<()>;
 
+    /// flush file buffer, the dirty intermediate buffered content is written
+    fn flush(&mut self) -> Result<()>;
+
     /// synchronize all OS-internal metadata to storage.
     fn sync_all(&mut self) -> Result<()>;
 
@@ -168,11 +181,13 @@ pub trait DbXxx<KT> {
     fn has_key(&mut self, key: &KT) -> Result<bool> {
         self.get(key).map(|opt| opt.is_some())
     }
+
     /// returns the value corresponding to the key. the value is converted to `String`.
     fn get_string(&mut self, key: &KT) -> Result<Option<String>> {
         self.get(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
     }
+
     /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
     fn put_string(&mut self, key: &KT, value: &str) -> Result<()> {
         self.put(key, value.as_bytes())

@@ -36,9 +36,9 @@ fn load_fixtures(path: &str) -> Vec<(String, String)> {
 
 fn test_fixtures_fruits() {
     macro_rules! base_path {
-        () => 
-        ("")
-        //("/home/hcc/src/rust/MyJam/rel-github/lib/siamesedb/")
+        () => {
+            ""
+        }; //("/home/hcc/src/rust/MyJam/rel-github/lib/siamesedb/")
     }
     let db_name = concat!(base_path!(), "target/tmp/testAA.siamesedb");
     let _ = std::fs::remove_dir_all(db_name);
@@ -127,18 +127,9 @@ fn test_fixtures_fruits() {
     });
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
-        assert_eq!(
-            db_map.get_string("9909909900").unwrap(),
-            None
-        );
-        assert_eq!(
-            db_map.get_string("9909909901").unwrap(),
-            None
-        );
-        assert_eq!(
-            db_map.get_string("9909909902").unwrap(),
-            None
-        );
+        assert_eq!(db_map.get_string("9909909900").unwrap(), None);
+        assert_eq!(db_map.get_string("9909909901").unwrap(), None);
+        assert_eq!(db_map.get_string("9909909902").unwrap(), None);
         //
         db_map.sync_data().unwrap();
         _print_check_db_map(

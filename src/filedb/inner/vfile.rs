@@ -69,7 +69,11 @@ impl VarFile {
         Ok(())
     }
     ///
-    pub fn write_record_clear(&mut self, record_offset: RecordOffset, record_size: RecordSize) -> Result<()> {
+    pub fn write_record_clear(
+        &mut self,
+        record_offset: RecordOffset,
+        record_size: RecordSize,
+    ) -> Result<()> {
         let _ = self.seek_from_start(record_offset)?;
         self.write_zero(record_size.as_value())?;
         let _ = self.seek_from_start(record_offset)?;
@@ -316,12 +320,10 @@ impl VarFile {
 impl ReadVu64 for VarFile {
     fn read_one_byte(&mut self) -> Result<u8> {
         self.buf_file.read_one_byte()
-        //self.read_one_byte_vfile()
     }
     fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()> {
         debug_assert!(buf.len() <= 8, "buf.len(): {} <= 8", buf.len());
         self.buf_file.read_exact_small(buf)
-        //self.read_exact_small(buf)
     }
 }
 
@@ -450,10 +452,34 @@ mod debug {
         }
         #[cfg(target_pointer_width = "32")]
         {
-            #[cfg(not(feature = "buf_stats"))]
-            assert_eq!(std::mem::size_of::<VarFile>(), 76);
-            #[cfg(feature = "buf_stats")]
-            assert_eq!(std::mem::size_of::<VarFile>(), 84);
+            #[cfg(not(any(feature = "buf_stats", feature = "buf_lru")))]
+            {
+                #[cfg(not(target_arch = "arm"))]
+                assert_eq!(std::mem::size_of::<VarFile>(), 76);
+                #[cfg(target_arch = "arm")]
+                assert_eq!(std::mem::size_of::<VarFile>(), 88);
+            }
+            #[cfg(all(feature = "buf_stats", feature = "buf_lru"))]
+            {
+                #[cfg(not(target_arch = "arm"))]
+                assert_eq!(std::mem::size_of::<VarFile>(), 88);
+                #[cfg(target_arch = "arm")]
+                assert_eq!(std::mem::size_of::<VarFile>(), 96);
+            }
+            #[cfg(all(feature = "buf_stats", not(feature = "buf_lru")))]
+            {
+                #[cfg(not(target_arch = "arm"))]
+                assert_eq!(std::mem::size_of::<VarFile>(), 84);
+                #[cfg(target_arch = "arm")]
+                assert_eq!(std::mem::size_of::<VarFile>(), 96);
+            }
+            #[cfg(all(not(feature = "buf_stats"), feature = "buf_lru"))]
+            {
+                #[cfg(not(target_arch = "arm"))]
+                assert_eq!(std::mem::size_of::<VarFile>(), 80);
+                #[cfg(target_arch = "arm")]
+                assert_eq!(std::mem::size_of::<VarFile>(), 88);
+            }
         }
     }
 }

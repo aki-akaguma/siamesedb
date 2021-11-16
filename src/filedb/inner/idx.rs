@@ -69,6 +69,12 @@ impl IdxFile {
         //
         Ok(Self(Rc::new(RefCell::new(file_nc))))
     }
+    pub fn flush(&self) -> Result<()> {
+        let mut locked = self.0.borrow_mut();
+        #[cfg(feature = "node_cache")]
+        idx_node_cache_flush(&mut locked)?;
+        locked.0.flush()
+    }
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         #[cfg(feature = "node_cache")]
@@ -747,7 +753,7 @@ pub const NODE_SLOTS_MAX: u16 = 15;
 #[cfg(feature = "vf_u64u64")]
 pub const NODE_SLOTS_MAX: u16 = 7;
 #[cfg(feature = "vf_vu64")]
-pub const NODE_SLOTS_MAX: u16 = 13;
+pub const NODE_SLOTS_MAX: u16 = 7 * 2 - 1;
 pub const NODE_SLOTS_MAX_HALF: u16 = (NODE_SLOTS_MAX + 1) / 2;
 
 #[derive(Debug, Default, Clone)]
@@ -821,6 +827,12 @@ impl IdxNode {
 }
 
 #[cfg(feature = "node_cache")]
+fn idx_node_cache_flush(file_nc: &mut VarFileNodeCache) -> Result<()> {
+    file_nc.1.flush(&mut file_nc.0)?;
+    Ok(())
+}
+
+#[cfg(feature = "node_cache")]
 fn idx_node_cache_flush_clear(file_nc: &mut VarFileNodeCache) -> Result<()> {
     file_nc.1.clear(&mut file_nc.0)?;
     Ok(())
@@ -846,111 +858,6 @@ fn idx_delete_node(file_nc: &mut VarFileNodeCache, node: IdxNode) -> Result<Node
     idx_file_push_free_list(&mut file_nc.0, node.offset, old_node_size)?;
     Ok(old_node_size)
 }
-
-/*
-fn idx_serialize_to_buf(node: &IdxNode) -> Result<Vec<u8>> {
-    let mut buff_cursor = VarCursor::with_capacity(9 * (2 * NODE_SLOTS_MAX as usize - 1));
-    //
-    let keys_count = node.keys.len() as u16;
-    buff_cursor.write_keys_count(KeysCount::new(keys_count))?;
-    //
-    for i in 0..(keys_count as usize) {
-        debug_assert!(!node.keys[i].is_zero());
-        let offset = node.keys[i];
-        buff_cursor.write_record_offset(offset)?;
-    }
-    for i in 0..((keys_count as usize) + 1) {
-        let offset = if i < node.downs.len() {
-            node.downs[i]
-        } else {
-            NodeOffset::new(0)
-        };
-        buff_cursor.write_node_offset(offset)?;
-    }
-    //
-    Ok(buff_cursor.into_inner())
-}
-
-fn idx_write_node(
-    file_nc: &mut VarFileNodeCache,
-    mut node: IdxNode,
-    is_new: bool,
-) -> Result<IdxNode> {
-    debug_assert!(!node.offset.is_zero());
-    //
-    let mut buf_vec = idx_serialize_to_buf(&node)?;
-    let buf_ref = &mut buf_vec;
-    let buf_len = buf_ref.len();
-    //
-    #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-    let encoded_len = 4;
-    #[cfg(feature = "vf_vu64")]
-    let encoded_len = vu64::encoded_len(buf_len as u64);
-    //
-    let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32);
-    let new_node_size = node_size_roudup(new_node_size);
-    //
-    if !is_new {
-        #[cfg(not(feature = "node_cache"))]
-        let old_node_size = {
-            let _ = file_nc.0.seek_from_start(node.offset)?;
-            file_nc.0.read_node_size()?
-        };
-        #[cfg(feature = "node_cache")]
-        let old_node_size = {
-            if let Some(node_size) = file_nc.1.get_node_size(&node.offset) {
-                node_size
-            } else {
-                let _ = file_nc.0.seek_from_start(node.offset)?;
-                file_nc.0.read_node_size()?
-            }
-        };
-        if new_node_size <= old_node_size {
-            // over writes.
-            #[cfg(not(feature = "node_cache"))]
-            {
-                let _ = file_nc.0.seek_from_start(node.offset)?;
-                file_nc.0.write_node_size(old_node_size)?;
-                file_nc.0.write_all(buf_ref)?;
-                return Ok(node);
-            }
-            #[cfg(feature = "node_cache")]
-            {
-                let node =
-                    file_nc
-                        .1
-                        .put(&mut file_nc.0, node, old_node_size, buf_ref.clone(), true)?;
-                return Ok(node);
-            }
-        } else {
-            // delete old and add new
-            #[cfg(feature = "node_cache")]
-            file_nc.1.delete(&node.offset);
-            // old
-            idx_file_push_free_list(&mut file_nc.0, node.offset, old_node_size)?;
-        }
-    }
-    // add new.
-    {
-        let free_node_offset = idx_file_pop_free_list(&mut file_nc.0, new_node_size)?;
-        let new_node_offset = if !free_node_offset.is_zero() {
-            let _ = file_nc.0.seek_from_start(free_node_offset)?;
-            let node_size = file_nc.0.read_node_size()?;
-            file_nc.0.write_node_clear(free_node_offset, node_size)?;
-            free_node_offset
-        } else {
-            let _ = file_nc.0.seek(SeekFrom::End(0))?;
-            let node_offset = NodeOffset::new(file_nc.0.stream_position()?);
-            file_nc.0.write_node_clear(node_offset, new_node_size)?;
-            node_offset
-        };
-        file_nc.0.write_all_small(buf_ref)?;
-        node.offset = new_node_offset;
-    }
-    //
-    Ok(node)
-}
-*/
 
 fn idx_write_node(
     file_nc: &mut VarFileNodeCache,
@@ -1080,15 +987,15 @@ fn idx_encoded_node_size(node: &IdxNode) -> usize {
 }
 
 pub(crate) fn idx_write_node_one(file: &mut VarFile, node: &IdxNode) -> Result<()> {
-    let keys_count = node.keys.len() as u16;
-    file.write_keys_count(KeysCount::new(keys_count))?;
+    let keys_count = node.keys.len();
+    file.write_keys_count(KeysCount::new(keys_count.try_into().unwrap()))?;
     //
-    for i in 0..(keys_count as usize) {
+    for i in 0..keys_count {
         debug_assert!(!node.keys[i].is_zero());
         let offset = node.keys[i];
         file.write_record_offset(offset)?;
     }
-    for i in 0..((keys_count as usize) + 1) {
+    for i in 0..(keys_count + 1) {
         let offset = if i < node.downs.len() {
             node.downs[i]
         } else {
@@ -1375,9 +1282,7 @@ used node:
 +--------+-------+-------------+-----------------------------------+
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
-| 0      | 1..5  | node size   | size in bytes of this node: u32   |
-| 0      | 1     | size        | size in bytes of this node        |
-|        |       |             | (must be <= 0x7F)                 |
+| 0      | 1..5  | node size   | size in bytes of this node: vu32  |
 | 1      | 1     | key-count   | count of keys                     |
 | 2      | 1..9  | key1        | offset of key-value               |
 |        |       | ...         |                                   |
@@ -1395,8 +1300,6 @@ free node:
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
 | 0      | 1..5  | node size   | size in bytes of this node: u32   |
-| 0      | 1     | size        | size in bytes of this node        |
-|        |       |             | (bit or 0x80)                     |
 | --     | 1     | keys-count  | always zero                       |
 | --     | 8     | next        | next free record offset           |
 | --     | --    | reserve     | reserved free space               |
