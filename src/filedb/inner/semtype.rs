@@ -36,15 +36,18 @@ pub struct Offset<T> {
 }
 
 impl<T> Offset<T> {
+    #[inline]
     pub fn new(val: u64) -> Self {
         Self {
             val,
             _phantom: PhantomData,
         }
     }
+    #[inline]
     pub fn as_value(&self) -> u64 {
         self.val
     }
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.val == 0
     }
@@ -56,6 +59,13 @@ impl<T> Display for Offset<T> {
     }
 }
 
+impl<T> std::ops::Add<Size<T>> for Offset<T> {
+    type Output = Offset<T>;
+    fn add(self, rhs: Size<T>) -> Self::Output {
+        Offset::new(self.as_value() + rhs.as_value() as u64)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Size<T> {
     val: u32,
@@ -63,15 +73,18 @@ pub struct Size<T> {
 }
 
 impl<T> Size<T> {
+    #[inline]
     pub fn new(val: u32) -> Self {
         Self {
             val,
             _phantom: PhantomData,
         }
     }
+    #[inline]
     pub fn as_value(&self) -> u32 {
         self.val
     }
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.val == 0
     }
@@ -97,15 +110,18 @@ pub struct Length<T> {
 }
 
 impl<T> Length<T> {
+    #[inline]
     pub fn new(val: u32) -> Self {
         Self {
             val,
             _phantom: PhantomData,
         }
     }
+    #[inline]
     pub fn as_value(&self) -> u32 {
         self.val
     }
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.val == 0
     }
@@ -131,15 +147,18 @@ pub struct Count<T> {
 }
 
 impl<T> Count<T> {
+    #[inline]
     pub fn new(val: u16) -> Self {
         Self {
             val,
             _phantom: PhantomData,
         }
     }
+    #[inline]
     pub fn as_value(&self) -> u16 {
         self.val
     }
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.val == 0
     }

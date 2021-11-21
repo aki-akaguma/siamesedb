@@ -1,5 +1,6 @@
+use siamesedb::filedb::CheckFileDbMap;
 use siamesedb::filedb::FileDbMapString;
-use siamesedb::DbMapString;
+use siamesedb::DbXxx;
 
 fn main() {
     test_fixtures_fruits();
@@ -47,7 +48,7 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         for (k, v) in data {
-            db_map.put(k.as_str(), v.as_bytes()).unwrap();
+            db_map.put(k.clone(), v.as_bytes()).unwrap();
         }
         //
         db_map.sync_data().unwrap();
@@ -61,7 +62,7 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         for (k, v) in data {
-            db_map.put(k.as_str(), v.as_bytes()).unwrap();
+            db_map.put(k.clone(), v.as_bytes()).unwrap();
         }
         //
         db_map.sync_data().unwrap();
@@ -75,13 +76,13 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         db_map
-            .put_string("9909909900", "TEST, v9909909900")
+            .put_string("9909909900".to_string(), "TEST, v9909909900")
             .unwrap();
         db_map
-            .put_string("9909909901", "TEST, v9909909901")
+            .put_string("9909909901".to_string(), "TEST, v9909909901")
             .unwrap();
         db_map
-            .put_string("9909909902", "TEST, v9909909902")
+            .put_string("9909909902".to_string(), "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
     });
@@ -143,13 +144,13 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         db_map
-            .put_string("9909909900", "TEST, v9909909900")
+            .put_string("9909909900".to_string(), "TEST, v9909909900")
             .unwrap();
         db_map
-            .put_string("9909909901", "TEST, v9909909901")
+            .put_string("9909909901".to_string(), "TEST, v9909909901")
             .unwrap();
         db_map
-            .put_string("9909909902", "TEST, v9909909902")
+            .put_string("9909909902".to_string(), "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
         _print_check_db_map(
@@ -193,7 +194,7 @@ struct CheckC {
 
 fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     if check_cnf.f_graph {
-        println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+        println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     println!("record free: {:?}", db_map.count_of_free_record().unwrap());
     let (rec_v, node_v) = db_map.count_of_used_node().unwrap();

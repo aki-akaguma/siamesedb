@@ -1,4 +1,5 @@
-use super::{DbMapString, DbMapU64};
+use super::{DbMapString, DbMapU64, DbXxx};
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io::Result;
@@ -26,27 +27,27 @@ impl<'a> MemoryDb<'a> {
         MemoryDbNode(Rc::downgrade(&self.0))
     }
     pub fn db_map(&'a self, name: &str) -> MemoryDbMapString<'a> {
-        if let Some(m) = self.0.borrow().db_maps.get(name) {
+        if let Some(m) = RefCell::borrow(&self.0).db_maps.get(name) {
             return m.clone();
         }
         //
         let x = self.to_node();
         x.create_db_map(name);
         //
-        match self.0.borrow().db_maps.get(name) {
+        match RefCell::borrow_mut(&self.0).db_maps.get(name) {
             Some(m) => m.clone(),
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
     pub fn db_list(&'a self, name: &str) -> MemoryDbMapU64<'a> {
-        if let Some(m) = self.0.borrow().db_lists.get(name) {
+        if let Some(m) = RefCell::borrow(&self.0).db_lists.get(name) {
             return m.clone();
         }
         //
         let x = self.to_node();
         x.create_db_list(name);
         //
-        match self.0.borrow().db_lists.get(name) {
+        match RefCell::borrow(&self.0).db_lists.get(name) {
             Some(m) => m.clone(),
             None => panic!("Cannot create db_maps: {}", name),
         }
@@ -93,26 +94,36 @@ impl<'a> MemoryDbMapString<'a> {
     }
 }
 
-impl<'a> DbMapString for MemoryDbMapString<'a> {
-    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.0.borrow_mut().get(key)
+impl<'a> DbXxx<String> for MemoryDbMapString<'a> {
+    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        RefCell::borrow_mut(&self.0).get(&(*key.borrow()))
     }
-    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        self.0.borrow_mut().put(key, value)
+    fn put(&mut self, key: String, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put(key, value)
     }
-    fn delete(&mut self, key: &str) -> Result<()> {
-        self.0.borrow_mut().delete(key)
+    fn delete<Q>(&mut self, key: &Q) -> Result<()>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        RefCell::borrow_mut(&self.0).delete(&(*key.borrow()))
     }
     fn flush(&mut self) -> Result<()> {
-        self.0.borrow_mut().flush()
+        RefCell::borrow_mut(&self.0).flush()
     }
     fn sync_all(&mut self) -> Result<()> {
-        self.0.borrow_mut().sync_all()
+        RefCell::borrow_mut(&self.0).sync_all()
     }
     fn sync_data(&mut self) -> Result<()> {
-        self.0.borrow_mut().sync_data()
+        RefCell::borrow_mut(&self.0).sync_data()
     }
 }
+
+impl<'a> DbMapString for MemoryDbMapString<'a> {}
 
 impl<'a> MemoryDbMapU64<'a> {
     fn new() -> Self {
@@ -120,15 +131,23 @@ impl<'a> MemoryDbMapU64<'a> {
     }
 }
 
-impl<'a> DbMapU64 for MemoryDbMapU64<'a> {
-    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
-        self.0.borrow_mut().get(key)
+impl<'a> DbXxx<u64> for MemoryDbMapU64<'a> {
+    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        u64: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.0.borrow_mut().get(&(*key.borrow()))
     }
     fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
         self.0.borrow_mut().put(key, value)
     }
-    fn delete(&mut self, key: u64) -> Result<()> {
-        self.0.borrow_mut().delete(key)
+    fn delete<Q>(&mut self, key: &Q) -> Result<()>
+    where
+        u64: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.0.borrow_mut().delete(&(*key.borrow()))
     }
     fn flush(&mut self) -> Result<()> {
         self.0.borrow_mut().flush()
@@ -140,6 +159,8 @@ impl<'a> DbMapU64 for MemoryDbMapU64<'a> {
         self.0.borrow_mut().sync_data()
     }
 }
+
+impl<'a> DbMapU64 for MemoryDbMapU64<'a> {}
 
 //--
 
@@ -173,6 +194,7 @@ impl<'a> MemoryDbMapStringInner<'a> {
     }
 }
 
+/*
 impl<'a> DbMapString for MemoryDbMapStringInner<'a> {
     fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(key).map(|val| val.to_vec());
@@ -205,6 +227,49 @@ impl<'a> DbMapString for MemoryDbMapStringInner<'a> {
         Ok(())
     }
 }
+*/
+
+impl<'a> DbXxx<String> for MemoryDbMapStringInner<'a> {
+    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        let r = self.mem.get(&(*key.borrow())).map(|val| val.to_vec());
+        Ok(r)
+    }
+    fn put(&mut self, key: String, value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key, value.to_vec());
+        Ok(())
+    }
+    fn delete<Q>(&mut self, key: &Q) -> Result<()>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.mem.remove(&(*key.borrow()));
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.flush()
+        }
+        Ok(())
+    }
+    fn sync_all(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.sync_all()
+        }
+        Ok(())
+    }
+    fn sync_data(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.sync_data()
+        }
+        Ok(())
+    }
+}
+impl<'a> DbMapString for MemoryDbMapStringInner<'a> {}
 
 #[derive(Debug)]
 pub(crate) struct MemoryDbMapU64Inner<'a> {
@@ -221,6 +286,7 @@ impl<'a> MemoryDbMapU64Inner<'a> {
     }
 }
 
+/*
 impl<'a> DbMapU64 for MemoryDbMapU64Inner<'a> {
     fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(&key).map(|val| val.to_vec());
@@ -232,6 +298,48 @@ impl<'a> DbMapU64 for MemoryDbMapU64Inner<'a> {
     }
     fn delete(&mut self, key: u64) -> Result<()> {
         let _ = self.mem.remove(&key);
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.flush()
+        }
+        Ok(())
+    }
+    fn sync_all(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.sync_all()
+        }
+        Ok(())
+    }
+    fn sync_data(&mut self) -> Result<()> {
+        if let Some(p) = self.parent.as_ref() {
+            p.sync_data()
+        }
+        Ok(())
+    }
+}
+*/
+
+impl<'a> DbXxx<u64> for MemoryDbMapU64Inner<'a> {
+    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        u64: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        let r = self.mem.get(&(*key.borrow())).map(|val| val.to_vec());
+        Ok(r)
+    }
+    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key, value.to_vec());
+        Ok(())
+    }
+    fn delete<Q>(&mut self, key: &Q) -> Result<()>
+    where
+        u64: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        let _ = self.mem.remove(&(*key.borrow()));
         Ok(())
     }
     fn flush(&mut self) -> Result<()> {

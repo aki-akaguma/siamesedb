@@ -1,4 +1,4 @@
-use super::idx::{idx_write_node_one, IdxNode};
+use super::idx::IdxNode;
 use super::semtype::*;
 use super::vfile::VarFile;
 use std::io::Result;
@@ -145,7 +145,7 @@ impl NodeCache {
 fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
     if ncb.dirty {
         file.write_node_clear(ncb.node_offset, ncb.node_size)?;
-        idx_write_node_one(file, &ncb.node)?;
+        ncb.node.idx_write_node_one(file)?;
         ncb.dirty = false;
     }
     Ok(())

@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -31,7 +31,7 @@ name = "check_main"
 path = "src/check_main.rs"
 
 [features]
-default = ["vf_vu64", "node_cache"]
+default = ["vf_vu64", "key_cache", "node_cache", "record_cache"]
 #default = ["vf_vu64", "buf_lru"]
 
 # for developping
@@ -42,7 +42,9 @@ vf_vu64 = []
 buf_lru = ["rabuf/buf_lru"]
 buf_stats = ["rabuf/buf_stats"]
 
+key_cache = []
 node_cache = []
+record_cache = []
 
 # for test
 test_large_data = []

@@ -1,5 +1,6 @@
+use siamesedb::filedb::CheckFileDbMap;
 use siamesedb::filedb::FileDbMapString;
-use siamesedb::DbMapString;
+use siamesedb::DbXxx;
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -14,8 +15,8 @@ fn test01(db_name: &str) -> std::io::Result<()> {
     //
     let val = "ab".repeat(1024 * 1024 * 1024);
     //
-    db_map.put_string("A", &val).unwrap();
-    db_map.put_string("B", &val).unwrap();
+    db_map.put_string("A".to_string(), &val).unwrap();
+    db_map.put_string("B".to_string(), &val).unwrap();
     //
     db_map.sync_data().unwrap();
     _print_check_db_map(
@@ -38,7 +39,7 @@ struct CheckC {
 
 fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     if check_cnf.f_graph {
-        println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+        println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     println!("record free: {:?}", db_map.count_of_free_record().unwrap());
     let (rec_v, node_v) = db_map.count_of_used_node().unwrap();

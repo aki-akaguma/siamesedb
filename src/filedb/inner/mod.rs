@@ -1,4 +1,4 @@
-use super::super::{DbMapString, DbMapU64};
+use super::super::DbXxx;
 use super::{FileDbMapString, FileDbMapU64};
 use std::collections::BTreeMap;
 use std::io::Result;
@@ -9,11 +9,16 @@ pub(crate) mod semtype;
 
 mod dat;
 mod idx;
-mod kc;
 mod vfile;
+
+#[cfg(feature = "key_cache")]
+mod kc;
 
 #[cfg(feature = "node_cache")]
 mod nc;
+
+#[cfg(feature = "record_cache")]
+mod rc;
 
 #[derive(Debug)]
 pub struct FileDbInner {

@@ -1,6 +1,7 @@
 use super::semtype::*;
 use rabuf::BufFile;
 use rabuf::{FileSetLen, FileSync, SmallWrite};
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 
@@ -59,6 +60,25 @@ impl VarFile {
     ///
     pub fn write_zero(&mut self, size: u32) -> Result<()> {
         self.buf_file.write_zero(size)
+    }
+    pub fn write_zero_to(&mut self, offset: u64) -> Result<()> {
+        let start_offset = self.stream_position()?;
+        if offset > start_offset {
+            self.buf_file
+                .write_zero((offset - start_offset).try_into().unwrap())
+        } else {
+            Ok(())
+        }
+    }
+    pub fn write_zero_to_offset<T>(&mut self, offset: Offset<T>) -> Result<()> {
+        let offset = offset.as_value();
+        let start_offset = self.stream_position()?;
+        if offset > start_offset {
+            self.buf_file
+                .write_zero((offset - start_offset).try_into().unwrap())
+        } else {
+            Ok(())
+        }
     }
     ///
     pub fn write_node_clear(&mut self, node_offset: NodeOffset, node_size: NodeSize) -> Result<()> {
@@ -454,30 +474,30 @@ mod debug {
         {
             #[cfg(not(any(feature = "buf_stats", feature = "buf_lru")))]
             {
-                #[cfg(not(target_arch = "arm"))]
+                #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 76);
-                #[cfg(target_arch = "arm")]
+                #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 88);
             }
             #[cfg(all(feature = "buf_stats", feature = "buf_lru"))]
             {
-                #[cfg(not(target_arch = "arm"))]
+                #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 88);
-                #[cfg(target_arch = "arm")]
+                #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 96);
             }
             #[cfg(all(feature = "buf_stats", not(feature = "buf_lru")))]
             {
-                #[cfg(not(target_arch = "arm"))]
+                #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 84);
-                #[cfg(target_arch = "arm")]
+                #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 96);
             }
             #[cfg(all(not(feature = "buf_stats"), feature = "buf_lru"))]
             {
-                #[cfg(not(target_arch = "arm"))]
+                #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 80);
-                #[cfg(target_arch = "arm")]
+                #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 88);
             }
         }

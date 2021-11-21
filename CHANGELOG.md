@@ -2,6 +2,15 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.9 (2021-11-21)
+=====
+
+* source code refatoring.
+* adds record_cache to features.
+* revives feature `"key_cache"`.
+* rewrites key parameter of put() and put_string().
+* rewrites trait DbMapU64 and DbMapString with trait DbXxx<KT>.
+
 0.1.8 (2021-11-17)
 =====
 

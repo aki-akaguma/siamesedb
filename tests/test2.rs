@@ -1,6 +1,7 @@
 mod test2 {
+    use siamesedb::filedb::CheckFileDbMap;
     use siamesedb::filedb::FileDbMapString;
-    use siamesedb::DbMapString;
+    use siamesedb::DbXxx;
     ////
     fn do_file_map_string<F>(db_name: &str, mut fun: F)
     where
@@ -34,10 +35,11 @@ mod test2 {
     fn test_fixtures_procs() {
         let data = load_fixtures("fixtures/test-procs.txt");
         let db_name = "target/tmp/test21.siamesedb";
+        let _ = std::fs::remove_dir_all(db_name);
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             for (k, v) in &data {
-                db_map.put(k.as_str(), v.as_bytes()).unwrap();
+                db_map.put(k.clone(), v.as_bytes()).unwrap();
             }
             //
             db_map.sync_data().unwrap();
@@ -53,7 +55,7 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             for (k, v) in data {
-                db_map.put(k.as_str(), v.as_bytes()).unwrap();
+                db_map.put(k.clone(), v.as_bytes()).unwrap();
             }
             //
             db_map.flush().unwrap();
@@ -67,7 +69,7 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             for (k, v) in data {
-                db_map.put(k.as_str(), v.as_bytes()).unwrap();
+                db_map.put(k.clone(), v.as_bytes()).unwrap();
             }
             //
             db_map.flush().unwrap();
@@ -81,13 +83,13 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             db_map
-                .put_string("9909909900", "TEST, v9909909900")
+                .put_string("9909909900".to_string(), "TEST, v9909909900")
                 .unwrap();
             db_map
-                .put_string("9909909901", "TEST, v9909909901")
+                .put_string("9909909901".to_string(), "TEST, v9909909901")
                 .unwrap();
             db_map
-                .put_string("9909909902", "TEST, v9909909902")
+                .put_string("9909909902".to_string(), "TEST, v9909909902")
                 .unwrap();
             db_map.flush().unwrap();
         });
@@ -146,13 +148,13 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapString| {
             db_map
-                .put_string("9909909900", "TEST, v9909909900")
+                .put_string("9909909900".to_string(), "TEST, v9909909900")
                 .unwrap();
             db_map
-                .put_string("9909909901", "TEST, v9909909901")
+                .put_string("9909909901".to_string(), "TEST, v9909909901")
                 .unwrap();
             db_map
-                .put_string("9909909902", "TEST, v9909909902")
+                .put_string("9909909902".to_string(), "TEST, v9909909902")
                 .unwrap();
             db_map.flush().unwrap();
         });

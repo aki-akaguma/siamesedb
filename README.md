@@ -13,7 +13,7 @@ The simple local key-value store.
 - Small db file size.
 - Separated files. (data record file and index file)
 - One database has some db-map-string and some db-map-u64.
-- minimum support rustc 1.54.0 (a178d0322 2021-07-26)
+- minimum support rustc rustc 1.53.0 (53cb7b09b 2021-06-17)
 
 ## Compatibility
 
@@ -24,10 +24,10 @@ The simple local key-value store.
 ### Example DbMapString:
 
 ```rust
-use siamesedb::DbMapString;
+use siamesedb::{DbMapString, DbXxx};
 
 fn main() -> std::io::Result<()> {
-    let db_name = "target/tmp/doc-test1.shamdb";
+    let db_name = "target/tmp/doc-test1.siamesedb";
     // remove database
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
@@ -37,7 +37,7 @@ fn main() -> std::io::Result<()> {
     //
     let r = db_map.get_string("key1")?;
     assert_eq!(r, None);
-    db_map.put_string("key1", "value1")?;
+    db_map.put_string("key1".to_string(), "value1")?;
     let r = db_map.get_string("key1")?;
     assert_eq!(r, Some("value1".to_string()));
     db_map.sync_data()?;
@@ -48,19 +48,19 @@ fn main() -> std::io::Result<()> {
 ### Example DbMapU64:
 
 ```rust
-use siamesedb::DbMapU64;
+use siamesedb::{DbMapU64, DbXxx};
 
 fn main() -> std::io::Result<()> {
-    let db_name = "target/tmp/doc-test2.shamdb";
+    let db_name = "target/tmp/doc-test2.siamesedb";
     // remove database
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
     let db = siamesedb::open_file(db_name)?;
     let mut db_map = db.db_map_u64("some_list1")?;
-    let r = db_map.get_string(120)?;
+    let r = db_map.get_string(&120)?;
     assert_eq!(r, None);
     db_map.put_string(120, "value120")?;
-    let r = db_map.get_string(120)?;
+    let r = db_map.get_string(&120)?;
     assert_eq!(r, Some("value120".to_string()));
     db_map.sync_data()?;
     Ok(())

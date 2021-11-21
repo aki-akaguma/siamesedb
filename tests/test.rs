@@ -1,16 +1,16 @@
 mod test {
-    use siamesedb::{DbMapString, DbMapU64};
+    use siamesedb::DbXxx;
     //
-    fn basic_test_map(db_map: &mut dyn DbMapString) {
+    fn basic_test_map<T: DbXxx<String>>(db_map: &mut T) {
         // get nothing
         let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string("key1", "value1").unwrap();
-        db_map.put_string("key2", "value2").unwrap();
-        db_map.put_string("key3", "value3").unwrap();
-        db_map.put_string("key4", "value4").unwrap();
-        db_map.put_string("key5", "value5").unwrap();
+        db_map.put_string("key1".to_string(), "value1").unwrap();
+        db_map.put_string("key2".to_string(), "value2").unwrap();
+        db_map.put_string("key3".to_string(), "value3").unwrap();
+        db_map.put_string("key4".to_string(), "value4").unwrap();
+        db_map.put_string("key5".to_string(), "value5").unwrap();
         // get hits
         let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, Some("value1".to_string()));
@@ -19,7 +19,9 @@ mod test {
         let r = db_map.get_string("key5").unwrap();
         assert_eq!(r, Some("value5".to_string()));
         // modify
-        db_map.put_string("key3", "VALUEVALUE3").unwrap();
+        db_map
+            .put_string("key3".to_string(), "VALUEVALUE3")
+            .unwrap();
         let r = db_map.get_string("key3").unwrap();
         assert_eq!(r, Some("VALUEVALUE3".to_string()));
         // delete
@@ -32,7 +34,7 @@ mod test {
         let val = &"value8".repeat(70);
         let val2 = &"value9".repeat(70);
         // insert
-        db_map.put_string(key, val).unwrap();
+        db_map.put_string(key.to_string(), val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
@@ -41,7 +43,7 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string(key, val2).unwrap();
+        db_map.put_string(key.to_string(), val2).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
@@ -55,16 +57,16 @@ mod test {
         let r = db_map.get_string("").unwrap();
         assert_eq!(r, None);
         // insert empty key
-        db_map.put_string("", val2).unwrap();
+        db_map.put_string("".to_string(), val2).unwrap();
         // get empty key
         let r = db_map.get_string("").unwrap();
         assert_eq!(r, Some(val2.to_string()));
         //
         db_map.sync_data().unwrap();
     }
-    fn basic_test_list(db_list: &mut dyn DbMapU64) {
+    fn basic_test_list<T: DbXxx<u64>>(db_list: &mut T) {
         // get nothing
-        let r = db_list.get_string(1023).unwrap();
+        let r = db_list.get_string(&1023).unwrap();
         assert_eq!(r, None);
         // insert
         db_list.put_string(1021, "value1").unwrap();
@@ -73,24 +75,24 @@ mod test {
         db_list.put_string(1024, "value4").unwrap();
         db_list.put_string(1025, "value5").unwrap();
         // get hits
-        let r = db_list.get_string(1021).unwrap();
+        let r = db_list.get_string(&1021).unwrap();
         assert_eq!(r, Some("value1".to_string()));
-        let r = db_list.get_string(1023).unwrap();
+        let r = db_list.get_string(&1023).unwrap();
         assert_eq!(r, Some("value3".to_string()));
-        let r = db_list.get_string(1025).unwrap();
+        let r = db_list.get_string(&1025).unwrap();
         assert_eq!(r, Some("value5".to_string()));
         // modify
         db_list.put_string(1023, "VALUEVALUE3").unwrap();
-        let r = db_list.get_string(1023).unwrap();
+        let r = db_list.get_string(&1023).unwrap();
         assert_eq!(r, Some("VALUEVALUE3".to_string()));
         // delete
-        db_list.delete(1023).unwrap();
-        let r = db_list.get_string(1023).unwrap();
+        db_list.delete(&1023).unwrap();
+        let r = db_list.get_string(&1023).unwrap();
         assert_eq!(r, None);
         //
         db_list.sync_data().unwrap();
     }
-    fn medium_test_map(db_map: &mut dyn DbMapString) {
+    fn medium_test_map<T: DbXxx<String>>(db_map: &mut T) {
         let key = "The Adventure of the Missing Three-Quarter";
         let val = "We were fairly accustomed to receive weird telegrams at Baker Street,
      but I have a particular recollection of one which reached us on a
@@ -100,12 +102,12 @@ mod test {
      gloomy February morning some seven or eight years ago and gave Mr.
      Sherlock Holmes a puzzled quarter of an hour.";
         // put
-        db_map.put_string(key, val).unwrap();
+        db_map.put_string(key.to_string(), val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
         // modify
-        db_map.put_string(key, val2).unwrap();
+        db_map.put_string(key.to_string(), val2).unwrap();
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
         // delete
@@ -113,7 +115,7 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
     }
-    fn medium_test_list(db_list: &mut dyn DbMapU64) {
+    fn medium_test_list<T: DbXxx<u64>>(db_list: &mut T) {
         let key = 123456789;
         let val = "We were fairly accustomed to receive weird telegrams at Baker Street,
      but I have a particular recollection of one which reached us on a
@@ -124,15 +126,15 @@ mod test {
      Sherlock Holmes a puzzled quarter of an hour.";
         db_list.put_string(key, val).unwrap();
         // get hits
-        let r = db_list.get_string(key).unwrap();
+        let r = db_list.get_string(&key).unwrap();
         assert_eq!(r, Some(val.to_string()));
         // modify
         db_list.put_string(key, val2).unwrap();
-        let r = db_list.get_string(key).unwrap();
+        let r = db_list.get_string(&key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
         // delete
-        db_list.delete(key).unwrap();
-        let r = db_list.get_string(key).unwrap();
+        db_list.delete(&key).unwrap();
+        let r = db_list.get_string(&key).unwrap();
         assert_eq!(r, None);
     }
     ////

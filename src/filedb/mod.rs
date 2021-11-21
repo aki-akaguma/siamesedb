@@ -1,4 +1,5 @@
 use super::{DbMapString, DbMapU64, DbXxx};
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::io::Result;
 use std::path::Path;
@@ -27,6 +28,9 @@ impl FileDbXxxInnerKT for String {
     }
     fn from(bytes: &[u8]) -> Self {
         String::from_utf8_lossy(bytes).to_string()
+    }
+    fn byte_len(&self) -> usize {
+        self.as_bytes().len()
     }
 }
 
@@ -123,14 +127,14 @@ impl FileDb {
         name: &str,
         params: FileDbParams,
     ) -> Result<FileDbMapString> {
-        if let Some(m) = self.0.borrow().db_map(name) {
+        if let Some(m) = RefCell::borrow(&self.0).db_map(name) {
             return Ok(m);
         }
         //
         let x = self.to_node();
         x.create_db_map(name, params)?;
         //
-        match self.0.borrow().db_map(name) {
+        match RefCell::borrow(&self.0).db_map(name) {
             Some(m) => Ok(m),
             None => panic!("Cannot create db_maps: {}", name),
         }
@@ -139,23 +143,23 @@ impl FileDb {
         self.db_map_u64_with_params(name, FileDbParams::default())
     }
     pub fn db_map_u64_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMapU64> {
-        if let Some(m) = self.0.borrow().db_list(name) {
+        if let Some(m) = RefCell::borrow(&self.0).db_list(name) {
             return Ok(m);
         }
         //
         let x = self.to_node();
         x.create_db_list(name, params)?;
         //
-        match self.0.borrow().db_list(name) {
+        match RefCell::borrow(&self.0).db_list(name) {
             Some(m) => Ok(m),
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
     pub fn sync_all(&self) -> Result<()> {
-        self.0.borrow_mut().sync_all()
+        RefCell::borrow_mut(&self.0).sync_all()
     }
     pub fn sync_data(&self) -> Result<()> {
-        self.0.borrow_mut().sync_data()
+        RefCell::borrow_mut(&self.0).sync_data()
     }
 }
 
@@ -197,82 +201,95 @@ impl FileDbMapString {
         ))))
     }
     pub fn is_dirty(&self) -> bool {
-        self.0.borrow().is_dirty()
+        RefCell::borrow(&self.0).is_dirty()
     }
 }
 
 /// for debug
-impl FileDbMapString {
-    /// convert index to graph string for debug.
-    pub fn to_graph_string(&self) -> Result<String> {
-        self.0.borrow().to_graph_string()
+impl CheckFileDbMap for FileDbMapString {
+    /// convert the index node tree to graph string for debug.
+    fn graph_string(&self) -> Result<String> {
+        RefCell::borrow(&self.0).graph_string()
     }
-    /// convert index to graph string with key string for debug.
-    pub fn to_graph_string_with_key_string(&self) -> Result<String> {
-        self.0.borrow_mut().to_graph_string_with_key_string()
+    /// convert the index node tree to graph string for debug.
+    fn graph_string_with_key_string(&self) -> Result<String> {
+        RefCell::borrow_mut(&self.0).graph_string_with_key_string()
     }
-    /// check the index tree is balanced
-    pub fn is_balanced(&self) -> Result<bool> {
-        self.0.borrow().is_balanced()
+    /// check the index node tree is balanced
+    fn is_balanced(&self) -> Result<bool> {
+        RefCell::borrow(&self.0).is_balanced()
     }
-    /// check it is multi search tree
-    pub fn is_mst_valid(&self) -> Result<bool> {
-        self.0.borrow().is_mst_valid()
+    /// check the index node tree is multi search tree
+    fn is_mst_valid(&self) -> Result<bool> {
+        RefCell::borrow(&self.0).is_mst_valid()
     }
-    /// check the node except the root and leaves of the tree has branches of half or more.
-    pub fn is_dense(&self) -> Result<bool> {
-        self.0.borrow().is_dense()
+    /// check the index node except the root and leaves of the tree has branches of hm or more.
+    fn is_dense(&self) -> Result<bool> {
+        RefCell::borrow(&self.0).is_dense()
     }
-    /// get a depth of the node tree.
-    pub fn depth_of_node_tree(&self) -> Result<u64> {
-        self.0.borrow().depth_of_node_tree()
+    /// get the depth of the index node.
+    fn depth_of_node_tree(&self) -> Result<u64> {
+        RefCell::borrow(&self.0).depth_of_node_tree()
     }
-    /// count of free node
-    pub fn count_of_free_node(&self) -> Result<CountOfPerSize> {
-        self.0.borrow().count_of_free_node()
+    /// count of the free node
+    fn count_of_free_node(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_node()
     }
-    /// count of free record
-    pub fn count_of_free_record(&self) -> Result<CountOfPerSize> {
-        self.0.borrow().count_of_free_record()
+    /// count of the free record
+    fn count_of_free_record(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_record()
     }
-    /// count of used record and used node
-    pub fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
-        self.0.borrow().count_of_used_node()
+    /// count of the used record and the used node
+    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
+        RefCell::borrow(&self.0).count_of_used_node()
     }
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
-    pub fn buf_stats(&self) -> Vec<(String, i64)> {
-        self.0.borrow().buf_stats()
+    fn buf_stats(&self) -> Vec<(String, i64)> {
+        RefCell::borrow(&self.0).buf_stats()
     }
     /// record size statistics
-    pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
-        self.0.borrow().record_size_stats()
+    fn record_size_stats(&self) -> Result<RecordSizeStats> {
+        RefCell::borrow(&self.0).record_size_stats()
     }
 }
 
-impl DbMapString for FileDbMapString {
-    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.0.borrow_mut().get(&(key.to_string()))
+impl DbXxx<String> for FileDbMapString {
+    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        RefCell::borrow_mut(&self.0).get(&(*key.borrow()))
     }
-    fn put(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        self.0.borrow_mut().put(&(key.to_string()), value)
+    fn put(&mut self, key: String, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put(key, value)
     }
-    fn delete(&mut self, key: &str) -> Result<()> {
-        self.0.borrow_mut().delete(&(key.to_string()))
+    fn delete<Q>(&mut self, key: &Q) -> Result<()>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        RefCell::borrow_mut(&self.0).delete(&(*key.borrow()))
     }
     fn flush(&mut self) -> Result<()> {
-        self.0.borrow_mut().flush()
+        RefCell::borrow_mut(&self.0).flush()
     }
     fn sync_all(&mut self) -> Result<()> {
-        self.0.borrow_mut().sync_all()
+        RefCell::borrow_mut(&self.0).sync_all()
     }
     fn sync_data(&mut self) -> Result<()> {
-        self.0.borrow_mut().sync_data()
+        RefCell::borrow_mut(&self.0).sync_data()
     }
-    fn has_key(&mut self, key: &str) -> Result<bool> {
-        self.0.borrow_mut().has_key(&(key.to_string()))
+    fn has_key<Q>(&mut self, key: &Q) -> Result<bool>
+    where
+        String: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        RefCell::borrow_mut(&self.0).has_key(&(*key.borrow()))
     }
 }
+impl DbMapString for FileDbMapString {}
 
 impl FileDbMapU64 {
     pub(crate) fn open(
@@ -285,68 +302,76 @@ impl FileDbMapU64 {
         ))))
     }
     pub fn is_dirty(&self) -> bool {
-        self.0.borrow().is_dirty()
+        RefCell::borrow(&self.0).is_dirty()
     }
 }
 
 /// for debug
-impl FileDbMapU64 {
+impl CheckFileDbMap for FileDbMapU64 {
     /// convert index to graph string for debug.
-    pub fn to_graph_string(&self) -> Result<String> {
-        self.0.borrow().to_graph_string()
+    fn graph_string(&self) -> Result<String> {
+        RefCell::borrow(&self.0).graph_string()
     }
     /// convert index to graph string with key string for debug.
-    pub fn to_graph_string_with_key_string(&self) -> Result<String> {
-        self.0.borrow_mut().to_graph_string_with_key_string()
+    fn graph_string_with_key_string(&self) -> Result<String> {
+        RefCell::borrow_mut(&self.0).graph_string_with_key_string()
     }
     /// check the index tree is balanced
-    pub fn is_balanced(&self) -> Result<bool> {
-        self.0.borrow().is_balanced()
+    fn is_balanced(&self) -> Result<bool> {
+        RefCell::borrow(&self.0).is_balanced()
     }
     /// check it is multi search tree
-    pub fn is_mst_valid(&self) -> Result<bool> {
-        self.0.borrow().is_mst_valid()
+    fn is_mst_valid(&self) -> Result<bool> {
+        RefCell::borrow(&self.0).is_mst_valid()
     }
     /// check the node except the root and leaves of the tree has branches of half or more.
-    pub fn is_dense(&self) -> Result<bool> {
-        self.0.borrow().is_dense()
+    fn is_dense(&self) -> Result<bool> {
+        RefCell::borrow(&self.0).is_dense()
     }
     /// get a depth of the node tree.
-    pub fn depth_of_node_tree(&self) -> Result<u64> {
-        self.0.borrow().depth_of_node_tree()
+    fn depth_of_node_tree(&self) -> Result<u64> {
+        RefCell::borrow(&self.0).depth_of_node_tree()
     }
     /// count of free node
-    pub fn count_of_free_node(&self) -> Result<CountOfPerSize> {
-        self.0.borrow().count_of_free_node()
+    fn count_of_free_node(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_node()
     }
     /// count of free record
-    pub fn count_of_free_record(&self) -> Result<CountOfPerSize> {
-        self.0.borrow().count_of_free_record()
+    fn count_of_free_record(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_record()
     }
     /// count of used record and used node
-    pub fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
-        self.0.borrow().count_of_used_node()
+    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
+        RefCell::borrow(&self.0).count_of_used_node()
     }
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
-    pub fn buf_stats(&self) -> Vec<(String, i64)> {
-        self.0.borrow().buf_stats()
+    fn buf_stats(&self) -> Vec<(String, i64)> {
+        RefCell::borrow(&self.0).buf_stats()
     }
     /// record size statistics
-    pub fn record_size_stats(&self) -> Result<RecordSizeStats> {
-        self.0.borrow().record_size_stats()
+    fn record_size_stats(&self) -> Result<RecordSizeStats> {
+        RefCell::borrow(&self.0).record_size_stats()
     }
 }
 
-impl DbMapU64 for FileDbMapU64 {
-    fn get(&mut self, key: u64) -> Result<Option<Vec<u8>>> {
-        self.0.borrow_mut().get(&key)
+impl DbXxx<u64> for FileDbMapU64 {
+    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        u64: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.0.borrow_mut().get(&(*key.borrow()))
     }
     fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
-        self.0.borrow_mut().put(&key, value)
+        self.0.borrow_mut().put(key, value)
     }
-    fn delete(&mut self, key: u64) -> Result<()> {
-        self.0.borrow_mut().delete(&key)
+    fn delete<Q>(&mut self, key: &Q) -> Result<()>
+    where
+        u64: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.0.borrow_mut().delete(&(*key.borrow()))
     }
     fn flush(&mut self) -> Result<()> {
         self.0.borrow_mut().flush()
@@ -357,6 +382,34 @@ impl DbMapU64 for FileDbMapU64 {
     fn sync_data(&mut self) -> Result<()> {
         self.0.borrow_mut().sync_data()
     }
+}
+impl DbMapU64 for FileDbMapU64 {}
+
+/// Checks the file db map for debug.
+pub trait CheckFileDbMap {
+    /// convert the index node tree to graph string for debug.
+    fn graph_string(&self) -> Result<String>;
+    /// convert the index node tree to graph string for debug.
+    fn graph_string_with_key_string(&self) -> Result<String>;
+    /// check the index node tree is balanced
+    fn is_balanced(&self) -> Result<bool>;
+    /// check the index node tree is multi search tree
+    fn is_mst_valid(&self) -> Result<bool>;
+    /// check the index node except the root and leaves of the tree has branches of hm or more.
+    fn is_dense(&self) -> Result<bool>;
+    /// get the depth of the index node.
+    fn depth_of_node_tree(&self) -> Result<u64>;
+    /// count of the free node
+    fn count_of_free_node(&self) -> Result<CountOfPerSize>;
+    /// count of the free record
+    fn count_of_free_record(&self) -> Result<CountOfPerSize>;
+    /// count of the used record and the used node
+    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)>;
+    /// buffer statistics
+    #[cfg(feature = "buf_stats")]
+    fn buf_stats(&self) -> Vec<(String, i64)>;
+    /// record size statistics
+    fn record_size_stats(&self) -> Result<RecordSizeStats>;
 }
 
 /// record size statistics.
@@ -413,7 +466,15 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbMapU64>(), 8);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 72);
+            //
+            #[cfg(not(feature = "key_cache"))]
+            assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 32);
+            #[cfg(feature = "key_cache")]
             assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 56);
+            //
+            #[cfg(not(feature = "key_cache"))]
+            assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 32);
+            #[cfg(feature = "key_cache")]
             assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 56);
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 24);
@@ -426,7 +487,15 @@ mod debug {
             assert_eq!(std::mem::size_of::<FileDbMapU64>(), 4);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 36);
+            //
+            #[cfg(not(feature = "key_cache"))]
+            assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 16);
+            #[cfg(feature = "key_cache")]
             assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 28);
+            //
+            #[cfg(not(feature = "key_cache"))]
+            assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 16);
+            #[cfg(feature = "key_cache")]
             assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 28);
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 12);

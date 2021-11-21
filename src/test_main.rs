@@ -1,7 +1,7 @@
+use siamesedb::filedb::CheckFileDbMap;
 use siamesedb::filedb::FileDbMapString;
 use siamesedb::filedb::FileDbMapU64;
-use siamesedb::DbMapString;
-use siamesedb::DbMapU64;
+use siamesedb::DbXxx;
 
 fn main() {
     //_test_a1();
@@ -204,22 +204,22 @@ fn _test_a2() {
 }
 
 fn _test00_map() {
-    let db_name = "target/tmp/testA.shamdb";
+    let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     {
-        db_map.put_string("key1", "value1").unwrap();
-        db_map.put_string("key2", "value2").unwrap();
-        db_map.put_string("key3", "value3").unwrap();
-        db_map.put_string("key4", "value4").unwrap();
-        db_map.put_string("key5", "value5").unwrap();
+        db_map.put_string("key1".to_string(), "value1").unwrap();
+        db_map.put_string("key2".to_string(), "value2").unwrap();
+        db_map.put_string("key3".to_string(), "value3").unwrap();
+        db_map.put_string("key4".to_string(), "value4").unwrap();
+        db_map.put_string("key5".to_string(), "value5").unwrap();
         //
-        db_map.put_string("key6", "value6").unwrap();
-        db_map.put_string("key7", "value7").unwrap();
-        db_map.put_string("key8", "value8").unwrap();
-        db_map.put_string("key9", "value9").unwrap();
+        db_map.put_string("key6".to_string(), "value6").unwrap();
+        db_map.put_string("key7".to_string(), "value7").unwrap();
+        db_map.put_string("key8".to_string(), "value8").unwrap();
+        db_map.put_string("key9".to_string(), "value9").unwrap();
         /*
          */
         /*
@@ -231,8 +231,8 @@ fn _test00_map() {
         db_map.sync_data().unwrap();
     }
     //
-    //println!("{}", db_map.to_graph_string().unwrap());
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    //println!("{}", db_map.graph_string().unwrap());
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -256,8 +256,8 @@ fn _test00_map() {
         db_map.sync_data().unwrap();
     }
     //
-    //println!("{}", db_map.to_graph_string().unwrap());
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    //println!("{}", db_map.graph_string().unwrap());
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -268,7 +268,7 @@ fn _test00_map() {
 }
 
 fn _test00_list() {
-    let db_name = "target/tmp/testA.shamdb";
+    let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_list = db.db_map_u64("some_list1").unwrap();
@@ -295,8 +295,8 @@ fn _test00_list() {
         db_list.sync_data().unwrap();
     }
     //
-    //println!("{}", db_list.to_graph_string().unwrap());
-    println!("{}", db_list.to_graph_string_with_key_string().unwrap());
+    //println!("{}", db_list.graph_string().unwrap());
+    println!("{}", db_list.graph_string_with_key_string().unwrap());
     println!("db_list.is_balanced(): {}", db_list.is_balanced().unwrap());
     println!(
         "db_list.is_mst_valid(): {}",
@@ -313,7 +313,7 @@ fn _test00_list() {
         //db_map.delete("key1").unwrap();
         //db_map.delete("key2").unwrap();
         //db_map.delete("key3").unwrap();
-        db_list.delete(4).unwrap();
+        db_list.delete(&4).unwrap();
         //db_map.delete("key5").unwrap();
         //db_map.delete("key6").unwrap();
         //db_map.delete("key7").unwrap();
@@ -323,8 +323,8 @@ fn _test00_list() {
         db_list.sync_data().unwrap();
     }
     //
-    //println!("{}", db_list.to_graph_string().unwrap());
-    println!("{}", db_list.to_graph_string_with_key_string().unwrap());
+    //println!("{}", db_list.graph_string().unwrap());
+    println!("{}", db_list.graph_string_with_key_string().unwrap());
     println!("db_list.is_balanced(): {}", db_list.is_balanced().unwrap());
     println!(
         "db_list.is_mst_valid(): {}",
@@ -338,7 +338,7 @@ fn _test00_list() {
 }
 
 fn _test01() {
-    let db_name = "target/tmp/testA.shamdb";
+    let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map_string("some_map1").unwrap();
@@ -346,32 +346,32 @@ fn _test01() {
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, None);
     //
-    db_map.put_string("key1", "value1").unwrap();
+    db_map.put_string("key1".to_string(), "value1").unwrap();
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));
     //
-    db_map.put_string("key2", "value2").unwrap();
+    db_map.put_string("key2".to_string(), "value2").unwrap();
     let r = db_map.get_string("key2").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key0", "value0").unwrap();
+    db_map.put_string("key0".to_string(), "value0").unwrap();
     let r = db_map.get_string("key0").unwrap();
     assert_eq!(r, Some("value0".to_string()));
     //
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
-    db_map.put_string("key1", "value2").unwrap();
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
+    db_map.put_string("key1".to_string(), "value2").unwrap();
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key1", "value99").unwrap();
+    db_map.put_string("key1".to_string(), "value99").unwrap();
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value99".to_string()));
     //
     db_map.sync_data().unwrap();
     //
-    //println!("{}", db_map.to_graph_string().unwrap());
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    //println!("{}", db_map.graph_string().unwrap());
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
     println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     println!("db_map.is_dense(): {}", db_map.is_dense().unwrap());
@@ -382,7 +382,7 @@ fn _test01() {
 }
 
 fn _test02() {
-    let db_name = "target/tmp/testA.shamdb";
+    let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map_string("some_map1").unwrap();
@@ -390,12 +390,12 @@ fn _test02() {
     for i in 1..20 {
         let key = format!("key{:02}", i);
         let val = format!("value{:02}", i);
-        db_map.put_string(&key, &val).unwrap();
+        db_map.put_string(key, &val).unwrap();
     }
     //
     db_map.sync_data().unwrap();
     //
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!("record free: {:?}", db_map.count_of_free_record().unwrap());
     println!("free: {:?}", db_map.count_of_free_node().unwrap());
     println!("used: {:?}", db_map.count_of_used_node().unwrap());
@@ -442,8 +442,8 @@ fn _test02() {
     //
     db_map.sync_data().unwrap();
     //
-    //println!("{}", db_map.to_graph_string().unwrap());
-    println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+    //println!("{}", db_map.graph_string().unwrap());
+    println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!("record free: {:?}", db_map.count_of_free_record().unwrap());
     println!("free: {:?}", db_map.count_of_free_node().unwrap());
     println!("used: {:?}", db_map.count_of_used_node().unwrap());
@@ -482,7 +482,7 @@ where
     FK: Fn(usize) -> String,
     FV: Fn(usize) -> String,
 {
-    let db_name = "target/tmp/testA.shamdb";
+    let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db.db_map_string("some_map1").unwrap();
@@ -493,7 +493,7 @@ where
         for i in 0..test_cnf.max_cnt {
             let key = fmt_key_func(i);
             let val = fmt_val_func(i);
-            db_map.put_string(&key, &val).unwrap();
+            db_map.put_string(key, &val).unwrap();
         }
         let instant_ed = std::time::Instant::now();
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
@@ -546,7 +546,7 @@ where
     FK: Fn(usize) -> u64,
     FV: Fn(usize) -> String,
 {
-    let db_name = "target/tmp/testA.shamdb";
+    let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_list = db.db_map_u64("some_list1").unwrap();
@@ -579,7 +579,7 @@ where
             for i in 0..test_cnf.max_cnt {
                 let key = fmt_key_func(i);
                 let val = fmt_val_func(i);
-                let s = db_list.get_string(key).unwrap();
+                let s = db_list.get_string(&key).unwrap();
                 assert!(Some(val) == s, "key: {}, s: {:?}", key, s);
             }
             let instant_ed = std::time::Instant::now();
@@ -592,7 +592,7 @@ where
             let instant_st = std::time::Instant::now();
             for i in 0..test_cnf.max_cnt {
                 let key = fmt_key_func(i);
-                db_list.delete(key).unwrap();
+                db_list.delete(&key).unwrap();
             }
             let instant_ed = std::time::Instant::now();
             let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
@@ -609,7 +609,7 @@ where
 
 fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     if check_cnf.f_graph {
-        println!("{}", db_map.to_graph_string_with_key_string().unwrap());
+        println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     println!("record free: {:?}", db_map.count_of_free_record().unwrap());
     let (rec_v, node_v) = db_map.count_of_used_node().unwrap();
@@ -635,7 +635,7 @@ fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
 
 fn _print_check_db_list(db_list: &FileDbMapU64, check_cnf: CheckC) {
     if check_cnf.f_graph {
-        println!("{}", db_list.to_graph_string_with_key_string().unwrap());
+        println!("{}", db_list.graph_string_with_key_string().unwrap());
     }
     println!("record free: {:?}", db_list.count_of_free_record().unwrap());
     let (rec_v, node_v) = db_list.count_of_used_node().unwrap();
