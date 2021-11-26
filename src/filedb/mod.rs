@@ -91,23 +91,17 @@ pub struct FileDbMapU64(Rc<RefCell<FileDbMapU64Inner>>);
 /// chunk_size is MUST power of 2.
 #[derive(Debug, Clone)]
 pub struct FileDbParams {
-    /// number of chunks at dat file buffer.
-    pub dat_buf_num_chunks: u16,
-    /// chunk size of dat file buffer.
-    pub dat_buf_chunk_size: u32,
-    /// number of chunks at idx file buffer.
-    pub idx_buf_num_chunks: u16,
-    /// chunk size of idx file buffer.
-    pub idx_buf_chunk_size: u32,
+    /// buffer size of dat file buffer.
+    pub dat_buf_size: u32,
+    /// buffer size of idx file buffer.
+    pub idx_buf_size: u32,
 }
 
 impl std::default::Default for FileDbParams {
     fn default() -> Self {
         Self {
-            dat_buf_num_chunks: 32,
-            dat_buf_chunk_size: 16 * 1024,
-            idx_buf_num_chunks: 16,
-            idx_buf_chunk_size: 4 * 1024,
+            dat_buf_size: 512 * 1024,
+            idx_buf_size: 64 * 1024,
         }
     }
 }
@@ -264,6 +258,9 @@ impl DbXxx<String> for FileDbMapString {
     }
     fn put(&mut self, key: String, value: &[u8]) -> Result<()> {
         RefCell::borrow_mut(&self.0).put(key, value)
+    }
+    fn bulk_put(&mut self, bulk: &[(String, &[u8])]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).bulk_put(bulk)
     }
     fn delete<Q>(&mut self, key: &Q) -> Result<()>
     where
@@ -470,12 +467,22 @@ mod debug {
             #[cfg(not(feature = "key_cache"))]
             assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 32);
             #[cfg(feature = "key_cache")]
-            assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 56);
+            {
+                #[cfg(not(feature = "kc_lru"))]
+                assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 64);
+                #[cfg(feature = "kc_lru")]
+                assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 72);
+            }
             //
             #[cfg(not(feature = "key_cache"))]
             assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 32);
             #[cfg(feature = "key_cache")]
-            assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 56);
+            {
+                #[cfg(not(feature = "kc_lru"))]
+                assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 64);
+                #[cfg(feature = "kc_lru")]
+                assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 72);
+            }
             //
             assert_eq!(std::mem::size_of::<RecordSizeStats>(), 24);
         }

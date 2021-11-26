@@ -1,9 +1,11 @@
 use super::semtype::*;
 use rabuf::BufFile;
 use rabuf::{FileSetLen, FileSync, SmallWrite};
-use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
+
+#[cfg(not(feature = "vf_u64u64"))]
+use std::convert::TryInto;
 
 #[cfg(feature = "vf_vu64")]
 use rabuf::SmallRead;
@@ -45,46 +47,58 @@ impl VarFile {
         self.buf_file.buf_stats()
     }
     ///
-    pub fn seek_from_start<T>(&mut self, offset: Offset<T>) -> Result<Offset<T>> {
-        self.seek(SeekFrom::Start(offset.as_value()))
-            .map(Offset::<T>::new)
+    pub fn seek_from_start<T: PartialEq + Copy>(&mut self, offset: Offset<T>) -> Result<Offset<T>> {
+        let pos = self
+            .seek(SeekFrom::Start(offset.into()))
+            .map(Offset::<T>::new)?;
+        debug_assert!(pos == offset, "_pos: {} == offset: {}", pos, offset);
+        Ok(pos)
+    }
+    pub fn seek_to_end<T>(&mut self) -> Result<Offset<T>> {
+        self.seek(SeekFrom::End(0)).map(Offset::<T>::new)
+    }
+    pub fn seek_position<T>(&mut self) -> Result<Offset<T>> {
+        self.seek(SeekFrom::Current(0)).map(Offset::<T>::new)
     }
     ///
-    pub fn set_len<T>(&mut self, size: Offset<T>) -> Result<()> {
-        self.buf_file.set_len(size.as_value())
+    pub fn set_file_length<T>(&mut self, file_length: Offset<T>) -> Result<()> {
+        self.buf_file.set_len(file_length.into())
     }
     ///
     pub fn _write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         self.buf_file.write_all_small(buf)
     }
     ///
-    pub fn write_zero(&mut self, size: u32) -> Result<()> {
-        self.buf_file.write_zero(size)
+    pub fn write_zero<T>(&mut self, size: Size<T>) -> Result<()> {
+        self.buf_file.write_zero(size.into())
     }
-    pub fn write_zero_to(&mut self, offset: u64) -> Result<()> {
-        let start_offset = self.stream_position()?;
+    pub fn write_zero_to_offset<T: PartialOrd>(&mut self, offset: Offset<T>) -> Result<()> {
+        let start_offset = self.seek_position()?;
         if offset > start_offset {
-            self.buf_file
-                .write_zero((offset - start_offset).try_into().unwrap())
-        } else {
-            Ok(())
-        }
-    }
-    pub fn write_zero_to_offset<T>(&mut self, offset: Offset<T>) -> Result<()> {
-        let offset = offset.as_value();
-        let start_offset = self.stream_position()?;
-        if offset > start_offset {
-            self.buf_file
-                .write_zero((offset - start_offset).try_into().unwrap())
+            let size = offset - start_offset;
+            self.buf_file.write_zero(size.into())
         } else {
             Ok(())
         }
     }
     ///
     pub fn write_node_clear(&mut self, node_offset: NodeOffset, node_size: NodeSize) -> Result<()> {
-        let _ = self.seek_from_start(node_offset)?;
-        self.write_zero(node_size.as_value())?;
-        let _ = self.seek_from_start(node_offset)?;
+        debug_assert!(!node_size.is_zero());
+        #[cfg(debug_assertions)]
+        {
+            self.seek_from_start(node_offset)?;
+            let _node_size = self.read_node_size()?;
+            debug_assert!(
+                _node_size.is_zero() || node_size == _node_size,
+                "node_size: {} == _node_size: {}, offset: {}",
+                node_size,
+                _node_size,
+                node_offset
+            );
+        }
+        self.seek_from_start(node_offset)?;
+        self.write_zero(node_size)?;
+        self.seek_from_start(node_offset)?;
         self.write_node_size(node_size)?;
         Ok(())
     }
@@ -94,9 +108,9 @@ impl VarFile {
         record_offset: RecordOffset,
         record_size: RecordSize,
     ) -> Result<()> {
-        let _ = self.seek_from_start(record_offset)?;
-        self.write_zero(record_size.as_value())?;
-        let _ = self.seek_from_start(record_offset)?;
+        self.seek_from_start(record_offset)?;
+        self.write_zero(record_size)?;
+        self.seek_from_start(record_offset)?;
         self.write_record_size(record_size)?;
         Ok(())
     }
@@ -184,7 +198,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
-        self.write_u32_le(key_len.as_value())
+        self.write_u32_le(key_len.into())
     }
     #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
@@ -192,7 +206,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_u32_le(value_len.as_value())
+        self.write_u32_le(value_len.into())
     }
     //
     #[inline]
@@ -200,9 +214,13 @@ impl VarFile {
         self.read_u32_le().map(|o| RecordOffset::new(o as u64))
     }
     #[inline]
-    pub fn write_free_record_offset(&mut self, offset: RecordOffset) -> Result<()> {
-        debug_assert!(offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(offset.as_value() as u32)
+    pub fn write_free_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+        debug_assert!(record_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(
+            record_offset.try_into().unwrap_or_else(|err| {
+                panic!("record_offset: {}: {}", record_offset.as_value(), err)
+            }),
+        )
     }
     #[inline]
     pub fn read_record_size(&mut self) -> Result<RecordSize> {
@@ -210,7 +228,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
-        self.write_u32_le(record_size.as_value())
+        self.write_u32_le(record_size.into())
     }
     #[inline]
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
@@ -219,7 +237,11 @@ impl VarFile {
     #[inline]
     pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
         debug_assert!(record_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(record_offset.as_value() as u32)
+        self.write_u32_le(
+            record_offset.try_into().unwrap_or_else(|err| {
+                panic!("record_offset: {}: {}", record_offset.as_value(), err)
+            }),
+        )
     }
     //
     #[inline]
@@ -227,9 +249,13 @@ impl VarFile {
         self.read_u32_le().map(|o| NodeOffset::new(o as u64))
     }
     #[inline]
-    pub fn write_free_node_offset(&mut self, offset: NodeOffset) -> Result<()> {
-        debug_assert!(offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(offset.as_value() as u32)
+    pub fn write_free_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
+        debug_assert!(node_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(
+            node_offset
+                .try_into()
+                .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err)),
+        )
     }
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
@@ -238,7 +264,11 @@ impl VarFile {
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
         debug_assert!(node_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(node_offset.as_value() as u32)
+        self.write_u32_le(
+            node_offset
+                .try_into()
+                .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err)),
+        )
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
@@ -246,7 +276,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: NodeSize) -> Result<()> {
-        self.write_u32_le(node_size.as_value())
+        self.write_u32_le(node_size.into())
     }
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
@@ -254,7 +284,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_keys_count(&mut self, keys_len: KeysCount) -> Result<()> {
-        self.write_u16_le(keys_len.as_value())
+        self.write_u16_le(keys_len.into())
     }
 }
 
@@ -266,7 +296,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
-        self.write_u32_le(key_len.as_value())
+        self.write_u32_le(key_len.into())
     }
     #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
@@ -274,7 +304,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_u32_le(value_len.as_value())
+        self.write_u32_le(value_len.into())
     }
     //
     #[inline]
@@ -283,7 +313,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_free_record_offset(&mut self, offset: RecordOffset) -> Result<()> {
-        self.write_u64_le(offset.as_value())
+        self.write_u64_le(offset.into())
     }
     #[inline]
     pub fn read_record_size(&mut self) -> Result<RecordSize> {
@@ -291,7 +321,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
-        self.write_u32_le(record_size.as_value())
+        self.write_u32_le(record_size.into())
     }
     #[inline]
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
@@ -299,7 +329,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        self.write_u64_le(record_offset.as_value())
+        self.write_u64_le(record_offset.into())
     }
     //
     #[inline]
@@ -308,7 +338,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_free_node_offset(&mut self, offset: NodeOffset) -> Result<()> {
-        self.write_u64_le(offset.as_value())
+        self.write_u64_le(offset.into())
     }
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
@@ -316,7 +346,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        self.write_u64_le(node_offset.as_value())
+        self.write_u64_le(node_offset.into())
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
@@ -324,7 +354,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: NodeSize) -> Result<()> {
-        self.write_u32_le(node_size.as_value())
+        self.write_u32_le(node_size.into())
     }
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
@@ -332,7 +362,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_keys_count(&mut self, keys_len: KeysCount) -> Result<()> {
-        self.write_u16_le(keys_len.as_value())
+        self.write_u16_le(keys_len.into())
     }
 }
 
@@ -354,11 +384,17 @@ impl WriteVu64 for VarFile {}
 impl VarFile {
     #[inline]
     pub fn read_vu64_u16(&mut self) -> Result<u16> {
-        self.read_and_decode_vu64().map(|n| n as u16)
+        self.read_and_decode_vu64().map(|n| {
+            n.try_into()
+                .unwrap_or_else(|err| panic!("n:{} :{}", n, err))
+        })
     }
     #[inline]
     pub fn read_vu64_u32(&mut self) -> Result<u32> {
-        self.read_and_decode_vu64().map(|n| n as u32)
+        self.read_and_decode_vu64().map(|n| {
+            n.try_into()
+                .unwrap_or_else(|err| panic!("n:{} :{}", n, err))
+        })
     }
     #[inline]
     pub fn read_vu64_u64(&mut self) -> Result<u64> {
@@ -366,11 +402,11 @@ impl VarFile {
     }
     #[inline]
     pub fn write_vu64_u16(&mut self, value: u16) -> Result<()> {
-        self.encode_and_write_vu64(value as u64)
+        self.encode_and_write_vu64(value.into())
     }
     #[inline]
     pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
-        self.encode_and_write_vu64(value as u64)
+        self.encode_and_write_vu64(value.into())
     }
     #[inline]
     pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
@@ -386,11 +422,11 @@ impl VarFile {
     }
     #[inline]
     pub fn write_key_len(&mut self, key_len: KeyLength) -> Result<()> {
-        self.write_vu64_u32(key_len.as_value())
+        self.write_vu64_u32(key_len.into())
     }
     #[inline]
     pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_vu64_u32(value_len.as_value())
+        self.write_vu64_u32(value_len.into())
     }
     #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
@@ -403,7 +439,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_free_record_offset(&mut self, offset: RecordOffset) -> Result<()> {
-        self.write_u64_le(offset.as_value())
+        self.write_u64_le(offset.into())
     }
     #[inline]
     pub fn read_record_size(&mut self) -> Result<RecordSize> {
@@ -411,7 +447,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
-        self.write_vu64_u32(record_size.as_value())
+        self.write_vu64_u32(record_size.into())
     }
     #[inline]
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
@@ -419,7 +455,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        self.write_vu64_u64(record_offset.as_value())
+        self.write_vu64_u64(record_offset.into())
     }
     //
     #[inline]
@@ -428,7 +464,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_free_node_offset(&mut self, offset: NodeOffset) -> Result<()> {
-        self.write_u64_le(offset.as_value())
+        self.write_u64_le(offset.into())
     }
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
@@ -436,7 +472,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        self.write_vu64_u64(node_offset.as_value())
+        self.write_vu64_u64(node_offset.into())
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
@@ -444,7 +480,8 @@ impl VarFile {
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: NodeSize) -> Result<()> {
-        self.write_vu64_u32(node_size.as_value())
+        debug_assert!(!node_size.is_zero());
+        self.write_vu64_u32(node_size.into())
     }
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
@@ -452,7 +489,7 @@ impl VarFile {
     }
     #[inline]
     pub fn write_keys_count(&mut self, keys_count: KeysCount) -> Result<()> {
-        self.write_vu64_u16(keys_count.as_value())
+        self.write_vu64_u16(keys_count.into())
     }
 }
 

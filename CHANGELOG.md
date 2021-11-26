@@ -2,6 +2,15 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.10 (2021-11-26)
+=====
+
+* adds `buf_overf_rem_all` to default features.
+* bug fix: a node size is calculated small.
+* adds `nc_lru` to features
+* adds `kc_lru` to features
+* adds bulk_put() method that has pre sort function.
+
 0.1.9 (2021-11-21)
 =====
 

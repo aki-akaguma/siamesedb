@@ -1,4 +1,4 @@
-/**
+/*!
 Semantic Type
 
 defines several semantic types. They are written in the New Type pattern.
@@ -21,15 +21,19 @@ pub type ValueLength = Length<Value>;
 pub type KeysCount = Count<Key>;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Record();
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Node();
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Key();
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Value();
+pub struct Record;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+pub struct Node;
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Key;
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Value;
+
+/// The offset in dat/idx file.
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Offset<T> {
     val: u64,
     _phantom: PhantomData<T>,
@@ -59,13 +63,43 @@ impl<T> Display for Offset<T> {
     }
 }
 
-impl<T> std::ops::Add<Size<T>> for Offset<T> {
-    type Output = Offset<T>;
-    fn add(self, rhs: Size<T>) -> Self::Output {
-        Offset::new(self.as_value() + rhs.as_value() as u64)
+impl<T> TryFrom<Offset<T>> for u32 {
+    type Error = TryFromIntError;
+    fn try_from(value: Offset<T>) -> Result<Self, Self::Error> {
+        value.val.try_into()
     }
 }
 
+impl<T> From<Offset<T>> for u64 {
+    fn from(value: Offset<T>) -> Self {
+        value.val
+    }
+}
+
+impl<T> std::ops::Add<Size<T>> for Offset<T> {
+    type Output = Offset<T>;
+    fn add(self, rhs: Size<T>) -> Self::Output {
+        Offset::new(self.val + rhs.val as u64)
+    }
+}
+
+impl<T> std::ops::Sub<Offset<T>> for Offset<T> {
+    type Output = Size<T>;
+    fn sub(self, rhs: Offset<T>) -> Self::Output {
+        let val = self.val - rhs.val;
+        Size::new(val.try_into().unwrap_or_else(|err| {
+            panic!(
+                "{} - {} = {} : {}",
+                self.as_value(),
+                rhs.as_value(),
+                val,
+                err
+            )
+        }))
+    }
+}
+
+/// The size of record/node
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Size<T> {
     val: u32,
@@ -103,6 +137,13 @@ impl<T> TryFrom<Size<T>> for usize {
     }
 }
 
+impl<T> From<Size<T>> for u32 {
+    fn from(value: Size<T>) -> Self {
+        value.val
+    }
+}
+
+/// The byte length of key/value
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Length<T> {
     val: u32,
@@ -140,6 +181,13 @@ impl<T> TryFrom<Length<T>> for usize {
     }
 }
 
+impl<T> From<Length<T>> for u32 {
+    fn from(value: Length<T>) -> Self {
+        value.val
+    }
+}
+
+/// The count of keys
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Count<T> {
     val: u16,
@@ -174,6 +222,12 @@ impl<T> TryFrom<Count<T>> for usize {
     type Error = Infallible;
     fn try_from(value: Count<T>) -> Result<Self, Self::Error> {
         value.val.try_into()
+    }
+}
+
+impl<T> From<Count<T>> for u16 {
+    fn from(value: Count<T>) -> Self {
+        value.val
     }
 }
 

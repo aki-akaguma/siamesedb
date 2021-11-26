@@ -72,9 +72,8 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
     pub fn get(&mut self, record_offset: &RecordOffset) -> Option<Rc<Record<KT>>> {
         match self
             .cache
-            .binary_search_by_key(&record_offset.as_value(), |rcb| {
-                rcb.record_offset.as_value()
-            }) {
+            .binary_search_by_key(record_offset, |rcb| rcb.record_offset)
+        {
             Ok(k) => {
                 let rcb = self.cache.get_mut(k).unwrap();
                 Some(rcb.record.clone())
@@ -85,9 +84,8 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
     pub fn get_record_size(&mut self, record_offset: &RecordOffset) -> Option<RecordSize> {
         match self
             .cache
-            .binary_search_by_key(&record_offset.as_value(), |rcb| {
-                rcb.record_offset.as_value()
-            }) {
+            .binary_search_by_key(record_offset, |rcb| rcb.record_offset)
+        {
             Ok(k) => {
                 let rcb = self.cache.get_mut(k).unwrap();
                 Some(rcb.record_size)
@@ -105,9 +103,8 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
         debug_assert!(record_size.is_valid());
         match self
             .cache
-            .binary_search_by_key(&record.offset.as_value(), |rcb| {
-                rcb.record_offset.as_value()
-            }) {
+            .binary_search_by_key(&record.offset, |rcb| rcb.record_offset)
+        {
             Ok(k) => {
                 let rcb = self.cache.get_mut(k).unwrap();
                 rcb.record = Rc::new(record);
@@ -136,9 +133,8 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
     pub fn delete(&mut self, record_offset: &RecordOffset) -> Option<RecordSize> {
         match self
             .cache
-            .binary_search_by_key(&record_offset.as_value(), |rcb| {
-                rcb.record_offset.as_value()
-            }) {
+            .binary_search_by_key(record_offset, |rcb| rcb.record_offset)
+        {
             Ok(k) => {
                 let rcb = self.cache.remove(k);
                 Some(rcb.record_size)

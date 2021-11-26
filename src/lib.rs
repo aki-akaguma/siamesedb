@@ -138,6 +138,32 @@ pub trait DbXxx<KT> {
     {
         self.put(key, value.as_bytes())
     }
+
+    /// inserts bulk key-value pairs into the db.
+    fn bulk_put(&mut self, bulk: &[(KT, &[u8])]) -> Result<()>
+    where
+        KT: Ord + Clone,
+    {
+        let mut vec = bulk.to_vec();
+        vec.sort_by(|a, b| b.0.cmp(&(a.0)));
+        while let Some(kv) = vec.pop() {
+            self.put(kv.0, kv.1)?;
+        }
+        Ok(())
+    }
+
+    /// inserts bulk key-value pairs into the db.
+    fn bulk_put_string(&mut self, bulk: &[(KT, String)]) -> Result<()>
+    where
+        KT: Ord + Clone,
+    {
+        let mut vec = bulk.to_vec();
+        vec.sort_by(|a, b| b.0.cmp(&(a.0)));
+        while let Some(kv) = vec.pop() {
+            self.put(kv.0, kv.1.as_bytes())?;
+        }
+        Ok(())
+    }
 }
 
 /// key-value map store interface. the key type is `String`.

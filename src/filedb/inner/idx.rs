@@ -5,7 +5,7 @@ use super::vfile::VarFile;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::fs::OpenOptions;
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{Read, Result, Write};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -48,20 +48,21 @@ impl IdxFile {
             .write(true)
             .create(true)
             .open(pb)?;
+        let idx_buf_chunk_size = 4 * 1024;
+        let idx_buf_num_chunks = params.idx_buf_size / idx_buf_chunk_size;
         let mut file = VarFile::with_capacity(
             std_file,
-            params.idx_buf_num_chunks,
-            params.idx_buf_chunk_size,
+            idx_buf_num_chunks.try_into().unwrap(),
+            idx_buf_chunk_size,
         )?;
-        let _ = file.seek(SeekFrom::End(0))?;
-        let len = file.stream_position()?;
+        let file_length: NodeOffset = file.seek_to_end()?;
         //
         #[cfg(not(feature = "node_cache"))]
         let mut file_nc = VarFileNodeCache(file, PhantomData);
         #[cfg(feature = "node_cache")]
         let mut file_nc = VarFileNodeCache(file, NodeCache::new());
         //
-        if len == 0 {
+        if file_length.is_zero() {
             file_nc.0.write_idxf_init_header(sig2)?;
             // writing top node
             let top_node = IdxNode::new(NodeOffset::new(IDX_HEADER_SZ));
@@ -137,8 +138,7 @@ impl IdxFile {
     pub fn write_new_node(&self, mut node: IdxNode) -> Result<IdxNode> {
         node.offset = {
             let mut locked = self.0.borrow_mut();
-            let _ = locked.0.seek(SeekFrom::End(0));
-            NodeOffset::new(locked.0.stream_position()?)
+            locked.0.seek_to_end()?
         };
         let mut locked = self.0.borrow_mut();
         locked.write_node(node, true)
@@ -245,9 +245,6 @@ impl IdxFile {
             let key_offset1 = node.keys[i - 1];
             let key_offset2 = node.keys[i];
             let node_offset = node.downs[i];
-            if key_offset2.is_zero() {
-                break;
-            }
             let key_string1 = if !key_offset1.is_zero() {
                 dbxxx.load_key_string_no_cache(key_offset1)?
             } else {
@@ -534,7 +531,7 @@ The db index header size is 128 bytes.
 
 impl VarFile {
     fn write_idxf_init_header(&mut self, signature2: HeaderSignature) -> Result<()> {
-        let _ = self.seek(SeekFrom::Start(0))?;
+        self.seek_from_start(NodeOffset::new(0))?;
         // signature1
         self.write_all(&IDX_HEADER_SIGNATURE)?;
         // signature2
@@ -547,7 +544,7 @@ impl VarFile {
         Ok(())
     }
     fn check_idxf_header(&mut self, signature2: HeaderSignature) -> Result<()> {
-        let _ = self.seek(SeekFrom::Start(0))?;
+        self.seek_from_start(NodeOffset::new(0))?;
         // signature1
         let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
         let _sz = self.read_exact(&mut sig1)?;
@@ -567,12 +564,12 @@ impl VarFile {
         Ok(())
     }
     fn read_top_node_offset(&mut self) -> Result<NodeOffset> {
-        let _ = self.seek(SeekFrom::Start(IDX_HEADER_TOP_NODE_OFFSET))?;
+        self.seek_from_start(NodeOffset::new(IDX_HEADER_TOP_NODE_OFFSET))?;
         self.read_u64_le().map(NodeOffset::new)
     }
     fn write_top_node_offset(&mut self, offset: NodeOffset) -> Result<()> {
-        let _ = self.seek(SeekFrom::Start(IDX_HEADER_TOP_NODE_OFFSET))?;
-        self.write_u64_le(offset.as_value())?;
+        self.seek_from_start(NodeOffset::new(IDX_HEADER_TOP_NODE_OFFSET))?;
+        self.write_u64_le(offset.into())?;
         Ok(())
     }
 }
@@ -589,8 +586,6 @@ const NODE_SIZE_FREE_OFFSET: [u64; 8] = [
     NODE_SIZE_FREE_OFFSET_1ST + 8 * 6,
     NODE_SIZE_FREE_OFFSET_1ST + 8 * 7,
 ];
-
-const NODE_SIZE_ARY: [u32; 8] = [8 * 4, 8 * 9, 8 * 13, 8 * 18, 8 * 22, 8 * 27, 8 * 29, 8 * 32];
 
 impl NodeSize {
     fn free_node_list_offset_of_header(&self) -> u64 {
@@ -623,11 +618,23 @@ impl NodeSize {
         }
         NodeSize::new(((node_size + 63) / 64) * 64)
     }
+    fn can_down(&self, need: NodeSize) -> bool {
+        let node_size = self.as_value();
+        let need_size = need.as_value();
+        debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
+        for &n_sz in NODE_SIZE_ARY.iter().take(NODE_SIZE_ARY.len() - 1) {
+            if need_size <= n_sz {
+                return n_sz < node_size;
+            }
+        }
+        false
+    }
 }
 
 impl VarFile {
     fn read_free_node_offset_on_header(&mut self, node_size: NodeSize) -> Result<NodeOffset> {
-        let _ = self.seek(SeekFrom::Start(node_size.free_node_list_offset_of_header()))?;
+        let free_offset = node_size.free_node_list_offset_of_header();
+        self.seek_from_start(NodeOffset::new(free_offset))?;
         self.read_free_node_offset()
     }
 
@@ -637,7 +644,8 @@ impl VarFile {
         offset: NodeOffset,
     ) -> Result<()> {
         debug_assert!(offset.is_zero() || offset.as_value() >= IDX_HEADER_SZ);
-        let _ = self.seek(SeekFrom::Start(node_size.free_node_list_offset_of_header()))?;
+        let free_offset = node_size.free_node_list_offset_of_header();
+        self.seek_from_start(NodeOffset::new(free_offset))?;
         self.write_free_node_offset(offset)
     }
 
@@ -649,11 +657,12 @@ impl VarFile {
             while !free_next_offset.is_zero() {
                 count += 1;
                 free_next_offset = {
-                    let _a = self.seek_from_start(free_next_offset)?;
-                    debug_assert!(_a == free_next_offset);
+                    self.seek_from_start(free_next_offset)?;
                     let _node_len = self.read_node_size()?;
                     let _keys_count = self.read_keys_count()?;
                     debug_assert!(_keys_count.is_zero());
+                    let _node_offset = self.read_node_offset()?;
+                    debug_assert!(_node_offset.is_zero());
                     self.read_free_node_offset()?
                 };
             }
@@ -667,11 +676,14 @@ impl VarFile {
             if !free_1st.is_zero() {
                 let free_next = {
                     let (free_next, node_size) = {
-                        let _ = self.seek_from_start(free_1st)?;
+                        self.seek_from_start(free_1st)?;
                         let node_size = self.read_node_size()?;
                         debug_assert!(!node_size.is_zero());
+                        debug_assert!(node_size == new_node_size);
                         let _keys_count = self.read_keys_count()?;
                         debug_assert!(_keys_count.is_zero());
+                        let _node_offset = self.read_node_offset()?;
+                        debug_assert!(_node_offset.is_zero());
                         let node_offset = self.read_free_node_offset()?;
                         (node_offset, node_size)
                     };
@@ -697,21 +709,25 @@ impl VarFile {
         let mut free_curr = free_1st;
         while !free_curr.is_zero() {
             let (free_next, node_size) = {
-                let _ = self.seek_from_start(free_curr)?;
+                self.seek_from_start(free_curr)?;
                 let node_size = self.read_node_size()?;
                 debug_assert!(!node_size.is_zero());
                 let _keys_count = self.read_keys_count()?;
                 debug_assert!(_keys_count.is_zero());
+                let _node_offset = self.read_node_offset()?;
+                debug_assert!(_node_offset.is_zero());
                 let node_offset = self.read_free_node_offset()?;
                 (node_offset, node_size)
             };
             if new_node_size <= node_size {
                 if !free_prev.is_zero() {
-                    let _ = self.seek_from_start(free_prev)?;
+                    self.seek_from_start(free_prev)?;
                     let _node_size = self.read_node_size()?;
                     debug_assert!(!_node_size.is_zero());
                     let _keys_count = self.read_keys_count()?;
                     debug_assert!(_keys_count.is_zero());
+                    let _node_offset = self.read_node_offset()?;
+                    debug_assert!(_node_offset.is_zero());
                     self.write_free_node_offset(free_next)?;
                 } else {
                     self.write_free_node_offset_on_header(new_node_size, free_next)?;
@@ -738,10 +754,11 @@ impl VarFile {
         //
         let free_1st = self.read_free_node_offset_on_header(old_node_size)?;
         {
-            let _a = self.seek_from_start(old_node_offset)?;
-            debug_assert!(_a == old_node_offset);
+            self.write_node_clear(old_node_offset, old_node_size)?;
+            self.seek_from_start(old_node_offset)?;
             self.write_node_size(old_node_size)?;
             self.write_keys_count(KeysCount::new(0))?;
+            self.write_node_offset(NodeOffset::new(0))?;
             self.write_free_node_offset(free_1st)?;
         }
         self.write_free_node_offset_on_header(old_node_size, old_node_offset)?;
@@ -749,13 +766,51 @@ impl VarFile {
     }
 }
 
+#[cfg(feature = "small_node_slots")]
+pub const NODE_SLOTS_MAX: u16 = 8;
+
+#[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u32u32")]
-pub const NODE_SLOTS_MAX: u16 = 15;
+pub const NODE_SLOTS_MAX: u16 = 64;
+//pub const NODE_SLOTS_MAX: u16 = 15;
+
+#[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u64u64")]
 pub const NODE_SLOTS_MAX: u16 = 7;
+
+#[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_vu64")]
-pub const NODE_SLOTS_MAX: u16 = 7 * 2 - 1;
-pub const NODE_SLOTS_MAX_HALF: u16 = (NODE_SLOTS_MAX + 1) / 2;
+//pub const NODE_SLOTS_MAX: u16 = 128;
+//const NODE_SIZE_ARY: [u32; 8] = [32, 32 * 2, 32 * 4, 32 * 8, 32 * 16, 32 * 24, 32 * 32, 32 * 64];
+pub const NODE_SLOTS_MAX: u16 = 64;
+const NODE_SIZE_ARY: [u32; 8] = [
+    32 * 4,
+    32 * 6,
+    32 * 8,
+    32 * 10,
+    32 * 12,
+    32 * 14,
+    32 * 16,
+    32 * 18,
+];
+
+//const NODE_SIZE_ARY: [u32; 8] = [32 * 2, 32 * 4, 32 * 8, 32 * 12, 32 * 16, 32 * 20, 32 * 24, 32 * 28];
+//const NODE_SIZE_ARY: [u32; 8] = [32, 32 * 2, 32 * 4, 32 * 8, 32 * 16, 32 * 32, 32 * 64, 32 * 128];
+
+//pub const NODE_SLOTS_MAX: u16 = 18;
+//pub const NODE_SLOTS_MAX: u16 = 16;
+pub const NODE_SLOTS_MAX_HALF: u16 = NODE_SLOTS_MAX / 2;
+
+/*
+ * node_size = keys_count.len + (2 * NODE_SLOTS_MAX - 1) * vu64.len
+ * node_size = 1 + (2 *   8 -1) * 9 =  136 --> vu64 encoded len: 2
+ * node_size = 1 + (2 *  16 -1) * 9 =  288 --> vu64 encoded len: 2
+ * node_size = 1 + (2 *  32 -1) * 9 =  569 --> vu64 encoded len: 2
+ * node_size = 1 + (2 *  64 -1) * 9 = 1144 --> vu64 encoded len: 2
+ * node_size = 1 + (2 * 128 -1) * 9 = 2296 --> vu64 encoded len: 2
+ * node_size = 2 + (2 * 256 -1) * 9 = 4601 --> vu64 encoded len: 2
+ * node_size = 2 + (2 * 512 -1) * 9 = 9209 --> vu64 encoded len: 2
+*/
 
 #[derive(Debug, Default, Clone)]
 pub struct IdxNode {
@@ -829,7 +884,7 @@ impl IdxNode {
     fn encoded_node_size(&self) -> usize {
         let mut sum_size = 0usize;
         //
-        let keys_count = self.keys.len() as u16;
+        let keys_count: u16 = self.keys.len().try_into().unwrap();
         #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
         {
             sum_size += 2;
@@ -852,10 +907,17 @@ impl IdxNode {
             }
             #[cfg(feature = "vf_vu64")]
             {
-                sum_size += vu64::encoded_len(_offset.as_value() as u64) as usize;
+                sum_size += vu64::encoded_len(_offset.as_value()) as usize;
             }
         }
         for i in 0..((keys_count as usize) + 1) {
+            debug_assert!(
+                keys_count == 0 || i < self.downs.len(),
+                "i: {} < self.downs.len(): {}, keys_count: {}",
+                i,
+                self.downs.len(),
+                keys_count
+            );
             let _offset = if i < self.downs.len() {
                 self.downs[i]
             } else {
@@ -871,7 +933,7 @@ impl IdxNode {
             }
             #[cfg(feature = "vf_vu64")]
             {
-                sum_size += vu64::encoded_len(_offset.as_value() as u64) as usize;
+                sum_size += vu64::encoded_len(_offset.as_value()) as usize;
             }
         }
         //
@@ -879,12 +941,27 @@ impl IdxNode {
     }
     //
     pub(crate) fn idx_write_node_one(&self, file: &mut VarFile) -> Result<()> {
+        debug_assert!(!self.offset.is_zero());
+        debug_assert!(self.offset.as_value() == IDX_HEADER_SZ || !self.size.is_zero());
+        //
+        file.seek_from_start(self.offset)?;
+        file.write_zero(self.size)?;
+        //
+        let _start_pos = file.seek_from_start(self.offset)?;
+        file.write_node_size(self.size)?;
         let keys_count = self.keys.len();
+        //
         file.write_keys_count(KeysCount::new(keys_count.try_into().unwrap()))?;
+        debug_assert!(
+            keys_count < NODE_SLOTS_MAX as usize,
+            "keys_count: {} < NODE_SLOTS_MAX as usize - 1",
+            keys_count
+        );
+        debug_assert!(keys_count == 0 || self.downs.len() == keys_count + 1);
         //
         for i in 0..keys_count {
-            debug_assert!(!self.keys[i].is_zero());
             let offset = self.keys[i];
+            debug_assert!(!offset.is_zero());
             file.write_record_offset(offset)?;
         }
         for i in 0..(keys_count + 1) {
@@ -893,8 +970,18 @@ impl IdxNode {
             } else {
                 NodeOffset::new(0)
             };
+            debug_assert!((offset.as_value() & 0x0F) == 0);
             file.write_node_offset(offset)?;
         }
+        //
+        let _current_pos = file.seek_position()?;
+        debug_assert!(
+            _start_pos + self.size >= _current_pos,
+            "_start_pos: {} + self.size: {} >= _current_pos: {}",
+            _start_pos,
+            self.size,
+            _current_pos,
+        );
         //
         Ok(())
     }
@@ -916,7 +1003,7 @@ impl VarFileNodeCache {
     fn delete_node(&mut self, node: IdxNode) -> Result<NodeSize> {
         #[cfg(not(feature = "node_cache"))]
         let old_node_size = {
-            let _ = self.0.seek_from_start(node.offset)?;
+            self.0.seek_from_start(node.offset)?;
             self.0.read_node_size()?
         };
         #[cfg(feature = "node_cache")]
@@ -924,7 +1011,7 @@ impl VarFileNodeCache {
             match self.1.delete(&node.offset) {
                 Some(node_size) => node_size,
                 None => {
-                    let _ = self.0.seek_from_start(node.offset)?;
+                    self.0.seek_from_start(node.offset)?;
                     self.0.read_node_size()?
                 }
             }
@@ -936,20 +1023,23 @@ impl VarFileNodeCache {
 
     fn write_node(&mut self, mut node: IdxNode, is_new: bool) -> Result<IdxNode> {
         debug_assert!(!node.offset.is_zero());
+        debug_assert!((node.offset.as_value() & 0x0F) == 0);
         //
-        let buf_len = node.encoded_node_size();
+        let buf_len: u32 = node.encoded_node_size().try_into().unwrap();
         //
         #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
         let encoded_len = 4;
         #[cfg(feature = "vf_vu64")]
-        let encoded_len = vu64::encoded_len(buf_len as u64);
+        let encoded_len = 2;
+        //let encoded_len = vu64::encoded_len(buf_len as u64);
         //
-        let new_node_size = NodeSize::new(buf_len as u32 + encoded_len as u32).roundup();
+        // buggy: size operation for node size.
+        let new_node_size = NodeSize::new(buf_len + encoded_len).roundup();
         //
         if !is_new {
             #[cfg(not(feature = "node_cache"))]
             let old_node_size = {
-                let _ = self.0.seek_from_start(node.offset)?;
+                self.0.seek_from_start(node.offset)?;
                 self.0.read_node_size()?
             };
             #[cfg(feature = "node_cache")]
@@ -957,16 +1047,15 @@ impl VarFileNodeCache {
                 if let Some(node_size) = self.1.get_node_size(&node.offset) {
                     node_size
                 } else {
-                    let _ = self.0.seek_from_start(node.offset)?;
+                    self.0.seek_from_start(node.offset)?;
                     self.0.read_node_size()?
                 }
             };
-            if new_node_size <= old_node_size {
+            if new_node_size <= old_node_size && !old_node_size.can_down(new_node_size) {
                 // over writes.
                 #[cfg(not(feature = "node_cache"))]
                 {
-                    let _ = self.0.seek_from_start(node.offset)?;
-                    self.0.write_node_size(old_node_size)?;
+                    node.size = old_node_size;
                     node.idx_write_node_one(&mut self.0)?;
                     return Ok(node);
                 }
@@ -986,19 +1075,28 @@ impl VarFileNodeCache {
         // add new.
         {
             let free_node_offset = self.0.pop_free_node_list(new_node_size)?;
-            let new_node_offset = if !free_node_offset.is_zero() {
-                let _ = self.0.seek_from_start(free_node_offset)?;
+            let (new_node_offset, new_node_size) = if !free_node_offset.is_zero() {
+                self.0.seek_from_start(free_node_offset)?;
                 let node_size = self.0.read_node_size()?;
-                self.0.write_node_clear(free_node_offset, node_size)?;
-                free_node_offset
+                debug_assert!(
+                    (new_node_size.as_value() > 512 && node_size >= new_node_size)
+                        || node_size == new_node_size,
+                    "node_size: {} == new_node_size: {}",
+                    node_size.as_value(),
+                    new_node_size.as_value()
+                );
+                //self.0.write_node_clear(free_node_offset, node_size)?;
+                (free_node_offset, node_size)
             } else {
-                let _ = self.0.seek(SeekFrom::End(0))?;
-                let node_offset = NodeOffset::new(self.0.stream_position()?);
-                self.0.write_node_clear(node_offset, new_node_size)?;
-                node_offset
+                let node_offset: NodeOffset = self.0.seek_to_end()?;
+                //self.0.write_node_clear(node_offset, new_node_size)?;
+                (node_offset, new_node_size)
             };
-            node.idx_write_node_one(&mut self.0)?;
+            debug_assert!(!new_node_offset.is_zero());
+            debug_assert!((new_node_offset.as_value() & 0x0F) == 0);
             node.offset = new_node_offset;
+            node.size = new_node_size;
+            node.idx_write_node_one(&mut self.0)?;
         }
         //
         Ok(node)
@@ -1007,10 +1105,21 @@ impl VarFileNodeCache {
     #[cfg(not(feature = "node_cache"))]
     fn read_node(&mut self, offset: NodeOffset) -> Result<IdxNode> {
         debug_assert!(!offset.is_zero());
+        debug_assert!((offset.as_value() & 0x0F) == 0);
         //
-        let _ = self.0.seek_from_start(offset)?;
+        let _start_pos = self.0.seek_from_start(offset)?;
         let node_size = self.0.read_node_size()?;
+        debug_assert!(
+            !node_size.is_zero(),
+            "!node_size.is_zero(), offset: {}",
+            offset
+        );
         let keys_count = self.0.read_keys_count()?;
+        debug_assert!(
+            keys_count.as_value() < NODE_SLOTS_MAX,
+            "keys_count: {} < NODE_SLOTS_MAX",
+            keys_count
+        );
         let keys_count: usize = keys_count.try_into().unwrap();
         //
         let mut node = IdxNode::with_node_size(offset, node_size);
@@ -1027,8 +1136,16 @@ impl VarFileNodeCache {
                 .0
                 .read_node_offset()
                 .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+            debug_assert!(
+                (node_offset.as_value() & 0x0F) == 0,
+                "(node_offset.as_value(): {} & 0x0F) == 0, offset: {}",
+                node_offset,
+                offset.as_value()
+            );
             node.downs.push(node_offset);
         }
+        let _current_pos = self.0.seek_position()?;
+        debug_assert!(_start_pos + node_size >= _current_pos);
         //
         Ok(node)
     }
@@ -1036,18 +1153,25 @@ impl VarFileNodeCache {
     #[cfg(feature = "node_cache")]
     fn read_node(&mut self, offset: NodeOffset) -> Result<IdxNode> {
         debug_assert!(!offset.is_zero());
+        debug_assert!((offset.as_value() & 0x0F) == 0);
         //
         if let Some(rc) = self.1.get(&offset) {
             return Ok(rc.as_ref().clone());
         }
         //
-        let _ = self.0.seek_from_start(offset)?;
+        self.0.seek_from_start(offset)?;
         let node_size = self.0.read_node_size()?;
-        debug_assert!(!node_size.is_zero());
-        //
-        let _ = self.0.seek_from_start(offset)?;
-        let node_size = self.0.read_node_size()?;
+        debug_assert!(
+            !node_size.is_zero(),
+            "!node_size.is_zero(), offset: {}",
+            offset
+        );
         let keys_count = self.0.read_keys_count()?;
+        debug_assert!(
+            keys_count.as_value() < NODE_SLOTS_MAX,
+            "keys_count: {} < NODE_SLOTS_MAX",
+            keys_count
+        );
         let keys_count: usize = keys_count.try_into().unwrap();
         //
         let mut node = IdxNode::with_node_size(offset, node_size);
@@ -1064,6 +1188,7 @@ impl VarFileNodeCache {
                 .0
                 .read_node_offset()
                 .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+            debug_assert!((node_offset.as_value() & 0x0F) == 0);
             node.downs.push(node_offset);
         }
         //

@@ -5,7 +5,7 @@ use super::vfile::VarFile;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::fs::OpenOptions;
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{Read, Result, Write};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -45,14 +45,15 @@ impl<KT: FileDbXxxInnerKT> DatFile<KT> {
             .write(true)
             .create(true)
             .open(pb)?;
+        let dat_buf_chunk_size = 4 * 1024;
+        let dat_buf_num_chunks = params.dat_buf_size / dat_buf_chunk_size;
         let mut file = VarFile::with_capacity(
             std_file,
-            params.dat_buf_num_chunks,
-            params.dat_buf_chunk_size,
+            dat_buf_num_chunks.try_into().unwrap(),
+            dat_buf_chunk_size,
         )?;
-        let _ = file.seek(SeekFrom::End(0))?;
-        let len = file.stream_position()?;
-        if len == 0 {
+        let file_length: RecordOffset = file.seek_to_end()?;
+        if file_length.is_zero() {
             file.write_recf_init_header(sig2)?;
         } else {
             file.check_recf_header(sig2)?;
@@ -166,7 +167,7 @@ The db data header size is 128 bytes.
 
 impl VarFile {
     fn write_recf_init_header(&mut self, signature2: HeaderSignature) -> Result<()> {
-        let _ = self.seek(SeekFrom::Start(0))?;
+        self.seek_from_start(RecordOffset::new(0))?;
         // signature1
         self.write_all(&DAT_HEADER_SIGNATURE)?;
         // signature2
@@ -179,7 +180,7 @@ impl VarFile {
         Ok(())
     }
     fn check_recf_header(&mut self, signature2: HeaderSignature) -> Result<()> {
-        let _ = self.seek(SeekFrom::Start(0))?;
+        self.seek_from_start(RecordOffset::new(0))?;
         // signature1
         let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
         let _sz = self.read_exact(&mut sig1)?;
@@ -270,9 +271,8 @@ impl VarFile {
         &mut self,
         record_size: RecordSize,
     ) -> Result<RecordOffset> {
-        let _ = self.seek(SeekFrom::Start(
-            record_size.free_record_list_offset_of_header(),
-        ))?;
+        let free_offset = record_size.free_record_list_offset_of_header();
+        self.seek_from_start(RecordOffset::new(free_offset))?;
         self.read_u64_le().map(RecordOffset::new)
     }
 
@@ -281,10 +281,9 @@ impl VarFile {
         record_size: RecordSize,
         offset: RecordOffset,
     ) -> Result<()> {
-        let _ = self.seek(SeekFrom::Start(
-            record_size.free_record_list_offset_of_header(),
-        ))?;
-        self.write_u64_le(offset.as_value())
+        let free_offset = record_size.free_record_list_offset_of_header();
+        self.seek_from_start(RecordOffset::new(free_offset))?;
+        self.write_u64_le(offset.into())
     }
 
     fn count_of_free_record_list(&mut self, new_record_size: RecordSize) -> Result<u64> {
@@ -295,8 +294,7 @@ impl VarFile {
             while !free_next_offset.is_zero() {
                 count += 1;
                 free_next_offset = {
-                    let _a = self.seek_from_start(free_next_offset)?;
-                    debug_assert!(_a == free_next_offset);
+                    self.seek_from_start(free_next_offset)?;
                     let _record_size = self.read_record_size()?;
                     let _key_len = self.read_key_len()?;
                     debug_assert!(_key_len.is_zero());
@@ -312,7 +310,7 @@ impl VarFile {
         if !new_record_size.is_large_record_size() {
             if !free_1st.is_zero() {
                 let free_next = {
-                    let _ = self.seek_from_start(free_1st)?;
+                    self.seek_from_start(free_1st)?;
                     let (free_next, record_size) = {
                         let record_size = self.read_record_size()?;
                         let _key_len = self.read_key_len()?;
@@ -341,7 +339,7 @@ impl VarFile {
         let mut free_prev = RecordOffset::new(0);
         let mut free_curr = free_1st;
         while !free_curr.is_zero() {
-            let _ = self.seek_from_start(free_curr)?;
+            self.seek_from_start(free_curr)?;
             let (free_next, record_size) = {
                 let record_size = self.read_record_size()?;
                 let _key_len = self.read_key_len()?;
@@ -351,7 +349,7 @@ impl VarFile {
             };
             if new_record_size >= record_size {
                 if !free_prev.is_zero() {
-                    let _ = self.seek_from_start(free_prev)?;
+                    self.seek_from_start(free_prev)?;
                     let _record_size = self.read_record_size()?;
                     let _key_len = self.read_key_len()?;
                     debug_assert!(_key_len.is_zero());
@@ -382,11 +380,10 @@ impl VarFile {
         let free_1st = self.read_free_record_offset_on_header(old_record_size)?;
         {
             let start_offset = self.seek_from_start(old_record_offset)?;
-            debug_assert!(start_offset == old_record_offset);
             self.write_record_size(old_record_size)?;
             self.write_key_len(KeyLength::new(0))?;
             self.write_free_record_offset(free_1st)?;
-            self.write_zero_to(start_offset.as_value() + old_record_size.as_value() as u64)?;
+            self.write_zero_to_offset(start_offset + old_record_size)?;
         }
         self.write_free_record_offset_on_header(old_record_size, old_record_offset)?;
         Ok(())
@@ -456,9 +453,7 @@ impl<KT: FileDbXxxInnerKT> Record<KT> {
         let value = &self.value;
         let value_len = ValueLength::new(value.len().try_into().unwrap());
         //
-        let _a = file.seek_from_start(self.offset)?;
-        debug_assert!(_a == self.offset);
-        //
+        file.seek_from_start(self.offset)?;
         file.write_record_size(self.size)?;
         file.write_key_len(key_len)?;
         file.write_all(&key)?;
@@ -486,7 +481,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
     fn delete_record(&mut self, offset: RecordOffset) -> Result<RecordSize> {
         #[cfg(not(feature = "record_cache"))]
         let old_record_size = {
-            let _ = self.0.seek_from_start(offset)?;
+            self.0.seek_from_start(offset)?;
             self.0.read_record_size()?
         };
         #[cfg(feature = "record_cache")]
@@ -494,7 +489,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
             match self.1.delete(&offset) {
                 Some(record_size) => record_size,
                 None => {
-                    let _ = self.0.seek_from_start(offset)?;
+                    self.0.seek_from_start(offset)?;
                     self.0.read_record_size()?
                 }
             }
@@ -517,7 +512,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         if !is_new {
             #[cfg(not(feature = "record_cache"))]
             let old_record_size = {
-                let _ = self.0.seek_from_start(record.offset)?;
+                self.0.seek_from_start(record.offset)?;
                 self.0.read_record_size()?
             };
             #[cfg(feature = "record_cache")]
@@ -525,7 +520,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
                 if let Some(record_size) = self.1.get_record_size(&record.offset) {
                     record_size
                 } else {
-                    let _ = self.0.seek_from_start(record.offset)?;
+                    self.0.seek_from_start(record.offset)?;
                     self.0.read_record_size()?
                 }
             };
@@ -534,7 +529,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
                 // over writes.
                 #[cfg(not(feature = "record_cache"))]
                 {
-                    let _ = self.0.seek_from_start(record.offset)?;
+                    self.0.seek_from_start(record.offset)?;
                     record.size = old_record_size;
                     record.dat_write_record_one(&mut self.0)?;
                     return Ok(record);
@@ -557,11 +552,10 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         {
             let free_record_offset = self.0.pop_free_record_list(new_record_size)?;
             let new_record_offset = if !free_record_offset.is_zero() {
-                let _ = self.0.seek_from_start(free_record_offset)?;
+                self.0.seek_from_start(free_record_offset)?;
                 free_record_offset
             } else {
-                let _ = self.0.seek(SeekFrom::End(0))?;
-                RecordOffset::new(self.0.stream_position()?)
+                self.0.seek_to_end()?
             };
             record.offset = new_record_offset;
             record.size = new_record_size;
@@ -570,7 +564,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
                 Ok(()) => (),
                 Err(err) => {
                     // recover on error
-                    let _ = self.0.set_len(new_record_offset);
+                    let _ = self.0.set_file_length(new_record_offset);
                     return Err(err);
                 }
             }
@@ -588,7 +582,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
             return Ok(rc.as_ref().clone());
         }
         //
-        let _ = self.0.seek_from_start(offset)?;
+        self.0.seek_from_start(offset)?;
         let record_size = self.0.read_record_size()?;
         debug_assert!(record_size.is_valid());
         let key_len = self.0.read_key_len()?;
@@ -618,12 +612,12 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         #[cfg(feature = "record_cache")]
         {
             let record = self.read_record(offset)?;
-            return Ok(record.key.clone());
+            Ok(record.key)
         }
         //
         #[cfg(not(feature = "record_cache"))]
         {
-            let _ = self.0.seek_from_start(offset)?;
+            self.0.seek_from_start(offset)?;
             let _record_size = self.0.read_record_size()?;
             let key_len = self.0.read_key_len()?;
             let key = if key_len.is_zero() {
@@ -644,12 +638,12 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         #[cfg(feature = "record_cache")]
         {
             let record = self.read_record(offset)?;
-            return Ok(record.size);
+            Ok(record.size)
         }
         //
         #[cfg(not(feature = "record_cache"))]
         {
-            let _ = self.0.seek_from_start(offset)?;
+            self.0.seek_from_start(offset)?;
             let record_size = self.0.read_record_size()?;
             //
             Ok(record_size)
