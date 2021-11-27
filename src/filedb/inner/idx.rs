@@ -591,10 +591,11 @@ impl NodeSize {
     fn free_node_list_offset_of_header(&self) -> u64 {
         let node_size = self.as_value();
         debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
-        for i in 0..NODE_SIZE_ARY.len() {
-            if NODE_SIZE_ARY[i] == node_size {
-                return NODE_SIZE_FREE_OFFSET[i];
-            }
+        match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&node_size) {
+            Ok(k) => {
+                return NODE_SIZE_FREE_OFFSET[k];
+            },
+            Err(_k) => {},
         }
         debug_assert!(
             node_size > NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2],
@@ -611,10 +612,17 @@ impl NodeSize {
     fn roundup(&self) -> NodeSize {
         let node_size = self.as_value();
         debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
-        for &n_sz in NODE_SIZE_ARY.iter().take(NODE_SIZE_ARY.len() - 1) {
-            if node_size <= n_sz {
+        match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&node_size) {
+            Ok(k) => {
+                let n_sz = NODE_SIZE_ARY[k];
                 return NodeSize::new(n_sz);
-            }
+            },
+            Err(k) => {
+                if k < NODE_SIZE_ARY.len() - 1 {
+                    let n_sz = NODE_SIZE_ARY[k];
+                    return NodeSize::new(n_sz);
+                }
+            },
         }
         NodeSize::new(((node_size + 63) / 64) * 64)
     }
@@ -622,10 +630,17 @@ impl NodeSize {
         let node_size = self.as_value();
         let need_size = need.as_value();
         debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
-        for &n_sz in NODE_SIZE_ARY.iter().take(NODE_SIZE_ARY.len() - 1) {
-            if need_size <= n_sz {
+        match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&need_size) {
+            Ok(k) => {
+                let n_sz = NODE_SIZE_ARY[k];
                 return n_sz < node_size;
-            }
+            },
+            Err(k) => {
+                if k < NODE_SIZE_ARY.len() - 1 {
+                    let n_sz = NODE_SIZE_ARY[k];
+                    return n_sz < node_size;
+                }
+            },
         }
         false
     }
@@ -767,7 +782,19 @@ impl VarFile {
 }
 
 #[cfg(feature = "small_node_slots")]
-pub const NODE_SLOTS_MAX: u16 = 8;
+pub const NODE_SLOTS_MAX: u16 = 6;
+
+#[cfg(feature = "small_node_slots")]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16,
+    16 * 2,
+    16 * 2 * 2,
+    16 * 2 * 3,
+    16 * 2 * 4,
+    16 * 2 * 5,
+    16 * 2 * 6,
+    16 * 2 * 7,
+];
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u32u32")]
@@ -780,25 +807,146 @@ pub const NODE_SLOTS_MAX: u16 = 7;
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_vu64")]
-//pub const NODE_SLOTS_MAX: u16 = 128;
-//const NODE_SIZE_ARY: [u32; 8] = [32, 32 * 2, 32 * 4, 32 * 8, 32 * 16, 32 * 24, 32 * 32, 32 * 64];
-pub const NODE_SLOTS_MAX: u16 = 64;
+/*
+460.43user 71.00system 8:56.61elapsed 99%CPU (0avgtext+0avgdata 13316maxresident)k
+3824inputs+2986832outputs (4major+3046minor)pagefaults 0swaps
+414M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 4
+
+pub const NODE_SLOTS_MAX: u16 = 256;
+#[cfg(not(feature = "small_node_slots"))]
 const NODE_SIZE_ARY: [u32; 8] = [
-    32 * 4,
-    32 * 6,
+    16 * 40,
+    16 * 48,
+    16 * 56,
+    16 * 64,
+    16 * 72,
+    16 * 80,
+    16 * 88,
+    16 * 96,
+];
+*/
+/*
+377.26user 67.40system 7:29.32elapsed 98%CPU (0avgtext+0avgdata 9784maxresident)k
+4080inputs+2405296outputs (4major+15811minor)pagefaults 0swaps
+395M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 4
+
+pub const NODE_SLOTS_MAX: u16 = 128;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 16,
+    16 * 24,
+    16 * 32,
+    16 * 40,
+    16 * 48,
+    16 * 56,
+    16 * 64,
+    16 * 72,
+];
+*/
+/*
+361.56user 81.11system 7:28.43elapsed 98%CPU (0avgtext+0avgdata 7920maxresident)k
+3832inputs+2390312outputs (4major+3325minor)pagefaults 0swaps
+383M	./cmp_siamesedb/target/bench-db.siamesedb
+
+pub const NODE_SLOTS_MAX: u16 = 96;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
     32 * 8,
     32 * 10,
     32 * 12,
     32 * 14,
     32 * 16,
     32 * 18,
+    32 * 20,
+    32 * 21,
+];
+*/
+/*
+329.68user 69.59system 6:45.48elapsed 98%CPU (0avgtext+0avgdata 13124maxresident)k
+3824inputs+2171664outputs (4major+41444minor)pagefaults 0swaps
+383M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 5
+
+pub const NODE_SLOTS_MAX: u16 = 64;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 4 * 2,
+    16 * 4 * 4,
+    16 * 4 * 6,
+    16 * 4 * 8,
+    16 * 4 * 10,
+    16 * 4 * 12,
+    16 * 4 * 14,
+    16 * 4 * 16,
+];
+*/
+/*
+313.65user 76.71system 6:34.52elapsed 98%CPU (0avgtext+0avgdata 13072maxresident)k
+0inputs+2014176outputs (0major+62696minor)pagefaults 0swaps
+386M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 6
+*/
+
+pub const NODE_SLOTS_MAX: u16 = 32;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 4 * 2,
+    16 * 4 * 3,
+    16 * 4 * 4,
+    16 * 4 * 5,
+    16 * 4 * 6,
+    16 * 4 * 7,
+    16 * 4 * 8,
+    16 * 4 * 9,
 ];
 
-//const NODE_SIZE_ARY: [u32; 8] = [32 * 2, 32 * 4, 32 * 8, 32 * 12, 32 * 16, 32 * 20, 32 * 24, 32 * 28];
-//const NODE_SIZE_ARY: [u32; 8] = [32, 32 * 2, 32 * 4, 32 * 8, 32 * 16, 32 * 32, 32 * 64, 32 * 128];
+/*
+322.15user 86.74system 6:53.35elapsed 98%CPU (0avgtext+0avgdata 13120maxresident)k
+3272inputs+1946928outputs (4major+45556minor)pagefaults 0swaps
+393M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 7
 
-//pub const NODE_SLOTS_MAX: u16 = 18;
-//pub const NODE_SLOTS_MAX: u16 = 16;
+pub const NODE_SLOTS_MAX: u16 = 16;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 2 * 2,
+    16 * 2 * 3,
+    16 * 2 * 4,
+    16 * 2 * 5,
+    16 * 2 * 6,
+    16 * 2 * 7,
+    16 * 2 * 8,
+    16 * 2 * 9,
+];
+*/
+/*
+350.30user 101.32system 7:36.47elapsed 98%CPU (0avgtext+0avgdata 13092maxresident)k
+3824inputs+2305248outputs (4major+5719minor)pagefaults 0swaps
+404M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 10
+
+pub const NODE_SLOTS_MAX: u16 = 8;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 1 * 2,
+    16 * 1 * 3,
+    16 * 1 * 4,
+    16 * 1 * 5,
+    16 * 1 * 6,
+    16 * 1 * 7,
+    16 * 1 * 8,
+    16 * 1 * 9,
+];
+*/
+
 pub const NODE_SLOTS_MAX_HALF: u16 = NODE_SLOTS_MAX / 2;
 
 /*
