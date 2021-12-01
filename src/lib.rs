@@ -164,6 +164,39 @@ pub trait DbXxx<KT> {
         }
         Ok(())
     }
+
+    /// gets bulk key-value paires from the db.
+    fn bulk_get<Q>(&mut self, bulk_keys: &[&Q]) -> Result<Vec<Option<Vec<u8>>>>
+    where
+        KT: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
+        let mut vec: Vec<(usize, &Q)> =
+            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
+        vec.sort_by(|a, b| b.1.cmp(&(a.1)));
+        while let Some(ik) = vec.pop() {
+            let result_value = self.get(ik.1)?;
+            result.push((ik.0, result_value));
+        }
+        result.sort_by(|a, b| a.0.cmp(&(b.0)));
+        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
+        Ok(ret)
+    }
+    /// gets bulk key-value paires from the db.
+    fn bulk_get_string<Q>(&mut self, bulk_keys: &[&Q]) -> Result<Vec<Option<String>>>
+    where
+        KT: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        let vec = self.bulk_get(bulk_keys)?;
+        let mut ret = Vec::new();
+        for opt in vec {
+            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
+            ret.push(b);
+        }
+        Ok(ret)
+    }
 }
 
 /// key-value map store interface. the key type is `String`.

@@ -20,13 +20,29 @@ pub struct VarFile {
 }
 
 impl VarFile {
+    /// Creates a new VarFile.
+    #[allow(dead_code)]
+    pub fn new(file: File) -> Result<VarFile> {
+        Ok(Self {
+            buf_file: BufFile::new(file)?,
+        })
+    }
     /// Creates a new VarFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
     #[allow(dead_code)]
-    pub fn with_capacity(file: File, max_num_chunks: u16, chunk_size: u32) -> Result<VarFile> {
+    pub fn with_capacity(file: File, chunk_size: u32, max_num_chunks: u16) -> Result<VarFile> {
         debug_assert!(chunk_size == rabuf::roundup_powerof2(chunk_size));
         Ok(Self {
-            buf_file: BufFile::with_capacity(file, max_num_chunks, chunk_size)?,
+            buf_file: BufFile::with_capacity(file, chunk_size, max_num_chunks)?,
+        })
+    }
+    /// Creates a new VarFile with the specified number of chunks.
+    /// chunk_size is MUST power of 2.
+    #[allow(dead_code)]
+    pub fn with_per_mille(file: File, chunk_size: u32, per_mille: u16) -> Result<VarFile> {
+        debug_assert!(chunk_size == rabuf::roundup_powerof2(chunk_size));
+        Ok(Self {
+            buf_file: BufFile::with_per_mille(file, chunk_size, per_mille)?,
         })
     }
     ///
@@ -53,6 +69,10 @@ impl VarFile {
             .map(Offset::<T>::new)?;
         debug_assert!(pos == offset, "_pos: {} == offset: {}", pos, offset);
         Ok(pos)
+    }
+    pub fn seek_skip_length<T: PartialEq + Copy>(&mut self, length: Length<T>) -> Result<Offset<T>> {
+        let val: u32 = length.into();
+        self.seek(SeekFrom::Current(val as i64)).map(Offset::<T>::new)
     }
     pub fn seek_to_end<T>(&mut self) -> Result<Offset<T>> {
         self.seek(SeekFrom::End(0)).map(Offset::<T>::new)

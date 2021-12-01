@@ -1,4 +1,4 @@
-use super::super::{CountOfPerSize, FileDbParams};
+use super::super::{CountOfPerSize, FileBufSizeParam, FileDbParams};
 use super::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use super::semtype::*;
 use super::vfile::VarFile;
@@ -48,13 +48,22 @@ impl IdxFile {
             .write(true)
             .create(true)
             .open(pb)?;
-        let idx_buf_chunk_size = 4 * 1024;
-        let idx_buf_num_chunks = params.idx_buf_size / idx_buf_chunk_size;
-        let mut file = VarFile::with_capacity(
-            std_file,
-            idx_buf_num_chunks.try_into().unwrap(),
-            idx_buf_chunk_size,
-        )?;
+        let mut file = match params.idx_buf_size {
+            FileBufSizeParam::Size(val) => {
+                let idx_buf_chunk_size = 4 * 1024;
+                let idx_buf_num_chunks = val / idx_buf_chunk_size;
+                VarFile::with_capacity(
+                    std_file,
+                    idx_buf_chunk_size,
+                    idx_buf_num_chunks.try_into().unwrap(),
+                )?
+            }
+            FileBufSizeParam::PerMille(val) => {
+                let idx_buf_chunk_size = 4 * 1024;
+                VarFile::with_per_mille(std_file, idx_buf_chunk_size, val)?
+            }
+            FileBufSizeParam::Auto => VarFile::new(std_file)?,
+        };
         let file_length: NodeOffset = file.seek_to_end()?;
         //
         #[cfg(not(feature = "node_cache"))]
@@ -594,8 +603,8 @@ impl NodeSize {
         match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&node_size) {
             Ok(k) => {
                 return NODE_SIZE_FREE_OFFSET[k];
-            },
-            Err(_k) => {},
+            }
+            Err(_k) => {}
         }
         debug_assert!(
             node_size > NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2],
@@ -616,13 +625,13 @@ impl NodeSize {
             Ok(k) => {
                 let n_sz = NODE_SIZE_ARY[k];
                 return NodeSize::new(n_sz);
-            },
+            }
             Err(k) => {
                 if k < NODE_SIZE_ARY.len() - 1 {
                     let n_sz = NODE_SIZE_ARY[k];
                     return NodeSize::new(n_sz);
                 }
-            },
+            }
         }
         NodeSize::new(((node_size + 63) / 64) * 64)
     }
@@ -634,13 +643,13 @@ impl NodeSize {
             Ok(k) => {
                 let n_sz = NODE_SIZE_ARY[k];
                 return n_sz < node_size;
-            },
+            }
             Err(k) => {
                 if k < NODE_SIZE_ARY.len() - 1 {
                     let n_sz = NODE_SIZE_ARY[k];
                     return n_sz < node_size;
                 }
-            },
+            }
         }
         false
     }
@@ -847,30 +856,10 @@ const NODE_SIZE_ARY: [u32; 8] = [
 ];
 */
 /*
-361.56user 81.11system 7:28.43elapsed 98%CPU (0avgtext+0avgdata 7920maxresident)k
-3832inputs+2390312outputs (4major+3325minor)pagefaults 0swaps
-383M	./cmp_siamesedb/target/bench-db.siamesedb
-
-pub const NODE_SLOTS_MAX: u16 = 96;
-
-#[cfg(not(feature = "small_node_slots"))]
-const NODE_SIZE_ARY: [u32; 8] = [
-    32 * 8,
-    32 * 10,
-    32 * 12,
-    32 * 14,
-    32 * 16,
-    32 * 18,
-    32 * 20,
-    32 * 21,
-];
-*/
-/*
 329.68user 69.59system 6:45.48elapsed 98%CPU (0avgtext+0avgdata 13124maxresident)k
 3824inputs+2171664outputs (4major+41444minor)pagefaults 0swaps
 383M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 5
-
 pub const NODE_SLOTS_MAX: u16 = 64;
 
 #[cfg(not(feature = "small_node_slots"))]
@@ -891,7 +880,6 @@ const NODE_SIZE_ARY: [u32; 8] = [
 386M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 6
 */
-
 pub const NODE_SLOTS_MAX: u16 = 32;
 
 #[cfg(not(feature = "small_node_slots"))]

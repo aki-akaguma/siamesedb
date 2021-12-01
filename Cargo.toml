@@ -35,14 +35,16 @@ name = "check_main"
 path = "src/check_main.rs"
 
 [features]
-default = ["vf_vu64", "key_cache", "node_cache", "record_cache", "buf_overf_rem_all"]
-#default = ["vf_vu64", "key_cache", "buf_overf_rem_all"]
+default = ["vf_vu64", "key_cache", "node_cache", "buf_overf_rem_all", "buf_auto_buf_size", "buf_pin_zero"]
+#default = ["vf_u32u32", "key_cache", "node_cache", "buf_overf_rem_all", "buf_auto_buf_size", "buf_pin_zero"]
 
 # for developping
 vf_u32u32 = []
 vf_u64u64 = []
 vf_vu64 = []
 
+buf_pin_zero = ["rabuf/buf_pin_zero"]
+buf_auto_buf_size = ["rabuf/buf_auto_buf_size"]
 buf_overf_rem_all = ["rabuf/buf_overf_rem_all"]
 buf_overf_rem_half = ["rabuf/buf_overf_rem_half"]
 buf_lru = ["rabuf/buf_lru"]
@@ -62,11 +64,11 @@ test_large_data = []
 small_node_slots = []
 
 [dependencies]
-rabuf = "0.1"
+#rabuf = { version = "0.1", default-features=false }
 vu64 = "0.1"
 #rabuf = { git = "https://github.com/aki-akaguma/rabuf" }
 #vu64 = { git = "https://github.com/aki-akaguma/vu64" }
-#rabuf = { path = "../rabuf" }
+rabuf = { path = "../rabuf", default-features=false }
 #vu64 = { path = "../vu64" }
 
 [dev-dependencies]

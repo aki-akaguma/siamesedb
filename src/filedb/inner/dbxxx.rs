@@ -100,7 +100,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     fn load_value(&self, record_offset: RecordOffset) -> Result<Vec<u8>> {
         debug_assert!(record_offset != RecordOffset::new(0));
-        Ok(self.dat_file.read_record(record_offset)?.value)
+        Ok(self.dat_file.read_record_only_value(record_offset)?)
     }
     fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
         self.dat_file.read_record_only_size(record_offset)
@@ -133,8 +133,8 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             let mid = (left + right) / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
-            //let key_offset = unsafe { *node.keys.get_unchecked(mid) };
-            let key_offset = node.keys[mid];
+            let key_offset = unsafe { *node.keys.get_unchecked(mid) };
+            //let key_offset = node.keys[mid];
             //
             debug_assert!(key_offset != RecordOffset::new(0));
             let key_string = self.load_key_string(key_offset)?;
@@ -240,8 +240,8 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         let r = self.keys_binary_search(&mut node, key)?;
         match r {
             Ok(k) => {
-                //let record_offset = unsafe { *node.keys.get_unchecked(k) };
-                let record_offset = node.keys[k];
+                let record_offset = unsafe { *node.keys.get_unchecked(k) };
+                //let record_offset = node.keys[k];
                 debug_assert!(record_offset != RecordOffset::new(0));
                 let new_record_offset = self.store_value_on_insert(record_offset, value)?;
                 if record_offset != new_record_offset {
@@ -251,8 +251,8 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
                 Ok(node)
             }
             Err(k) => {
-                //let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 let node2 = if !node_offset1.is_zero() {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     self.insert_into_node_tree(node1, key, value)?
@@ -351,8 +351,8 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
                 return Ok(node);
             }
             Err(k) => {
-                //let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let node1 = self.idx_file.read_node(node_offset1)?;
                     let node1 = self.delete_from_node_tree(node1, key)?;
@@ -547,14 +547,14 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         let r = self.keys_binary_search(node, key)?;
         match r {
             Ok(k) => {
-                //let key_offset = unsafe { *node.keys.get_unchecked(k) };
-                let key_offset = node.keys[k];
+                let key_offset = unsafe { *node.keys.get_unchecked(k) };
+                //let key_offset = node.keys[k];
                 debug_assert!(key_offset != RecordOffset::new(0));
                 self.load_value(key_offset).map(Some)
             }
             Err(k) => {
-                //let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let mut node1 = self.idx_file.read_node(node_offset1)?;
                     self.find_in_node_tree(&mut node1, key)
@@ -576,8 +576,8 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         match r {
             Ok(_k) => Ok(true),
             Err(k) => {
-                //let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
-                let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let mut node1 = self.idx_file.read_node(node_offset1)?;
                     self.has_key_in_node_tree(&mut node1, key)

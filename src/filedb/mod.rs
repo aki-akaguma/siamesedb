@@ -86,22 +86,33 @@ pub struct FileDbMapString(Rc<RefCell<FileDbMapStringInner>>);
 #[derive(Debug, Clone)]
 pub struct FileDbMapU64(Rc<RefCell<FileDbMapU64Inner>>);
 
+/// Parameters of buffer.
+#[derive(Debug, Clone)]
+pub enum FileBufSizeParam {
+    /// Fixed buffer size
+    Size(u32),
+    /// Auto buffer size by file size.
+    PerMille(u16),
+    /// Default auto buffer size by file size.
+    Auto,
+}
+
 /// Parameters of filedb.
 ///
 /// chunk_size is MUST power of 2.
 #[derive(Debug, Clone)]
 pub struct FileDbParams {
-    /// buffer size of dat file buffer.
-    pub dat_buf_size: u32,
-    /// buffer size of idx file buffer.
-    pub idx_buf_size: u32,
+    /// buffer size of dat file buffer. None is auto buffer size.
+    pub dat_buf_size: FileBufSizeParam,
+    /// buffer size of idx file buffer. None is auto buffer size.
+    pub idx_buf_size: FileBufSizeParam,
 }
 
 impl std::default::Default for FileDbParams {
     fn default() -> Self {
         Self {
-            dat_buf_size: 512 * 1024,
-            idx_buf_size: 64 * 1024,
+            dat_buf_size: FileBufSizeParam::Auto,
+            idx_buf_size: FileBufSizeParam::Auto,
         }
     }
 }
