@@ -1,28 +1,32 @@
-use super::idx::IdxNode;
+use super::offidx::OffsetIndex;
 use super::semtype::*;
+use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::io::Result;
-use std::rc::Rc;
 
-const CACHE_SIZE: usize = 64;
+const CACHE_SIZE: usize = 128;
+//const CACHE_SIZE: usize = 1024;
+//const CACHE_SIZE: usize = 1024*1024;
 
 #[derive(Debug)]
 struct NodeCacheBean {
-    node: Rc<IdxNode>,
+    node: Option<IdxNode>,
     node_offset: NodeOffset,
     node_size: NodeSize,
     dirty: bool,
+    #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
     uses: u32,
 }
 
 impl NodeCacheBean {
-    fn new(node: Rc<IdxNode>, node_size: NodeSize, dirty: bool) -> Self {
-        let node_offset = node.offset;
+    fn new(node: IdxNode, node_size: NodeSize, dirty: bool) -> Self {
+        let node_offset = node.get_ref().offset();
         Self {
-            node,
+            node: Some(node),
             node_offset,
             node_size,
             dirty,
+            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
             uses: 0,
         }
     }
@@ -30,7 +34,8 @@ impl NodeCacheBean {
 
 #[derive(Debug)]
 pub struct NodeCache {
-    cache: Vec<NodeCacheBean>,
+    vec: Vec<NodeCacheBean>,
+    map: OffsetIndex,
     cache_size: usize,
     #[cfg(feature = "nc_lru")]
     uses_cnt: u32,
@@ -42,7 +47,8 @@ impl NodeCache {
     }
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
-            cache: Vec::with_capacity(cache_size),
+            vec: Vec::with_capacity(cache_size),
+            map: OffsetIndex::with_capacity(cache_size),
             cache_size,
             #[cfg(feature = "nc_lru")]
             uses_cnt: 0,
@@ -58,58 +64,68 @@ impl Default for NodeCache {
 
 impl NodeCache {
     #[inline]
-    fn touch(&mut self, cache_idx: usize) {
-        #[cfg(not(feature = "nc_lru"))]
+    fn touch(&mut self, _cache_idx: usize) {
+        #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
         {
-            self.cache[cache_idx].uses += 1;
-        }
-        #[cfg(feature = "nc_lru")]
-        {
-            self.uses_cnt += 1;
-            self.cache[cache_idx].uses = self.uses_cnt;
+            #[cfg(feature = "nc_lfu")]
+            {
+                self.cache[_cache_idx].uses += 1;
+            }
+            #[cfg(feature = "nc_lru")]
+            {
+                self.uses_cnt += 1;
+                self.cache[_cache_idx].uses = self.uses_cnt;
+            }
         }
     }
     pub fn flush(&mut self, file: &mut VarFile) -> Result<()> {
-        for ncb in &mut self.cache {
+        for &(_, idx) in self.map.vec.iter() {
+            let ncb = self.vec.get_mut(idx).unwrap();
             write_node(file, ncb)?;
         }
         Ok(())
     }
     pub fn clear(&mut self, file: &mut VarFile) -> Result<()> {
         self.flush(file)?;
-        self.cache.clear();
+        self.vec.clear();
+        self.map.clear();
         Ok(())
     }
     pub fn _is_empty(&self) -> bool {
         self._len() == 0
     }
     pub fn _len(&self) -> usize {
-        self.cache.len()
+        self.vec.len()
     }
-    pub fn get(&mut self, offset: &NodeOffset) -> Option<Rc<IdxNode>> {
-        match self
-            .cache
-            .binary_search_by_key(offset, |ncb| ncb.node_offset)
-        {
-            Ok(k) => {
-                self.touch(k);
-                let ncb = self.cache.get_mut(k).unwrap();
-                Some(ncb.node.clone())
+    pub fn get(&mut self, offset: &NodeOffset) -> Option<IdxNode> {
+        match self.map.get(&offset.as_value()) {
+            Some(idx) => {
+                self.touch(idx);
+                let ncb = self.vec.get_mut(idx).unwrap();
+                debug_assert!(
+                    ncb.node_offset == *offset,
+                    "ncb.node_offset: {} == *offset: {}",
+                    ncb.node_offset.as_value(),
+                    offset.as_value()
+                );
+                if ncb.node.is_some() {
+                    debug_assert!(ncb.node.as_ref().unwrap().get_ref().offset() == *offset);
+                    Some(ncb.node.as_ref().unwrap().clone())
+                } else {
+                    None
+                }
             }
-            Err(_k) => None,
+            None => None,
         }
     }
     pub fn get_node_size(&mut self, offset: &NodeOffset) -> Option<NodeSize> {
-        match self
-            .cache
-            .binary_search_by_key(offset, |ncb| ncb.node_offset)
-        {
-            Ok(k) => {
-                self.touch(k);
-                let ncb = self.cache.get_mut(k).unwrap();
+        match self.map.get(&offset.as_value()) {
+            Some(idx) => {
+                self.touch(idx);
+                let ncb = self.vec.get_mut(idx).unwrap();
                 Some(ncb.node_size)
             }
-            Err(_k) => None,
+            None => None,
         }
     }
     pub fn put(
@@ -119,41 +135,43 @@ impl NodeCache {
         node_size: NodeSize,
         dirty: bool,
     ) -> Result<IdxNode> {
-        match self
-            .cache
-            .binary_search_by_key(&node.offset, |ncb| ncb.node_offset)
-        {
-            Ok(k) => {
-                self.touch(k);
-                let ncb = self.cache.get_mut(k).unwrap();
-                ncb.node = Rc::new(node);
+        let node_offset = node.get_ref().offset();
+        match self.map.get(&node_offset.as_value()) {
+            Some(idx) => {
+                self.touch(idx);
+                let ncb = self.vec.get_mut(idx).unwrap();
+                debug_assert!(ncb.node_offset == node_offset);
+                if ncb.node.is_some() {
+                    debug_assert!(ncb.node.as_ref().unwrap().get_ref().offset() == node_offset);
+                }
+                ncb.node = Some(node);
                 ncb.node_size = node_size;
                 if dirty {
                     ncb.dirty = true;
                 }
-                Ok(ncb.node.as_ref().clone())
+                Ok(ncb.node.as_ref().unwrap().clone())
             }
-            Err(k) => {
-                let k = if self.cache.len() > self.cache_size {
-                    /*
+            None => {
+                if self.vec.len() > self.cache_size {
                     // all clear cache algorithm
                     self.clear(file)?;
-                    0
-                    */
-                    self.detach_cache(k, file)?
-                } else {
-                    k
-                };
-                let r = Rc::new(node);
-                self.cache
-                    .insert(k, NodeCacheBean::new(r, node_size, dirty));
+                    /*
+                     */
+                    //self.detach_cache(k, file)?
+                }
+                let k = self.vec.len();
+                self.vec.push(NodeCacheBean::new(node, node_size, dirty));
+                self.map.insert(&node_offset.as_value(), k);
                 self.touch(k);
-                let ncb = self.cache.get_mut(k).unwrap();
-                Ok(ncb.node.as_ref().clone())
+                let ncb = self.vec.get_mut(k).unwrap();
+                debug_assert!(ncb.node_offset == node_offset);
+                debug_assert!(ncb.node.as_ref().unwrap().get_ref().offset() == node_offset);
+                Ok(ncb.node.as_ref().unwrap().clone())
             }
         }
     }
-    fn detach_cache(&mut self, _k: usize, file: &mut VarFile) -> Result<usize> {
+    fn _detach_cache(&mut self, _k: usize, file: &mut VarFile) -> Result<usize> {
+        eprintln!("detach_cache!!");
         // all clear cache algorithm
         self.clear(file)?;
         Ok(0)
@@ -216,15 +234,13 @@ impl NodeCache {
         */
     }
     pub fn delete(&mut self, node_offset: &NodeOffset) -> Option<NodeSize> {
-        match self
-            .cache
-            .binary_search_by_key(node_offset, |ncb| ncb.node_offset)
-        {
-            Ok(k) => {
-                let ncb = self.cache.remove(k);
+        match self.map.remove(&node_offset.as_value()) {
+            Some(idx) => {
+                let ncb = self.vec.get_mut(idx).unwrap();
+                ncb.node = None;
                 Some(ncb.node_size)
             }
-            Err(_k) => None,
+            None => None,
         }
     }
 }
@@ -232,10 +248,29 @@ impl NodeCache {
 fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
     if ncb.dirty {
         //file.write_node_clear(ncb.node_offset, ncb.node_size)?;
-        debug_assert!(ncb.node_offset == ncb.node.offset);
-        debug_assert!(ncb.node_size == ncb.node.size);
-        ncb.node.idx_write_node_one(file)?;
+        if ncb.node.is_some() {
+            debug_assert!(ncb.node_offset == ncb.node.as_ref().unwrap().get_ref().offset());
+            debug_assert!(ncb.node_size == ncb.node.as_ref().unwrap().get_ref().size());
+            ncb.node.as_mut().unwrap().idx_write_node_one(file)?;
+        }
         ncb.dirty = false;
     }
     Ok(())
+}
+
+//--
+#[cfg(test)]
+mod debug {
+    use super::NodeCacheBean;
+    //
+    #[test]
+    fn test_size_of() {
+        #[cfg(target_pointer_width = "64")]
+        {
+            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+            assert_eq!(std::mem::size_of::<NodeCacheBean>(), 32);
+            #[cfg(not(any(feture = "nc_lru", feature = "nc_lfu")))]
+            assert_eq!(std::mem::size_of::<NodeCacheBean>(), 24);
+        }
+    }
 }

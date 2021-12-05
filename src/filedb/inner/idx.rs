@@ -1,6 +1,7 @@
 use super::super::{CountOfPerSize, FileBufSizeParam, FileDbParams};
 use super::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
 use super::semtype::*;
+use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::cell::RefCell;
 use std::convert::TryInto;
@@ -75,8 +76,8 @@ impl IdxFile {
             file_nc.0.write_idxf_init_header(sig2)?;
             // writing top node
             let top_node = IdxNode::new(NodeOffset::new(IDX_HEADER_SZ));
-            let _new_node = file_nc.write_node(top_node, true)?;
-            debug_assert!(_new_node.offset == NodeOffset::new(IDX_HEADER_SZ));
+            let _new_node_ = file_nc.write_node(top_node, true)?;
+            debug_assert!(_new_node_.get_ref().offset() == NodeOffset::new(IDX_HEADER_SZ));
         } else {
             file_nc.0.check_idxf_header(sig2)?;
         }
@@ -84,76 +85,80 @@ impl IdxFile {
         Ok(Self(Rc::new(RefCell::new(file_nc))))
     }
     pub fn flush(&self) -> Result<()> {
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         #[cfg(feature = "node_cache")]
         locked.flush_node_cache()?;
         locked.0.flush()
     }
     pub fn sync_all(&self) -> Result<()> {
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         #[cfg(feature = "node_cache")]
         locked.flush_node_cache_clear()?;
         locked.0.sync_all()
     }
     pub fn sync_data(&self) -> Result<()> {
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         #[cfg(feature = "node_cache")]
         locked.flush_node_cache_clear()?;
         locked.0.sync_data()
     }
     #[cfg(feature = "buf_stats")]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
-        let locked = self.0.borrow();
+        let locked = RefCell::borrow(&self.0);
         locked.0.buf_stats()
     }
     //
     pub fn read_top_node(&self) -> Result<IdxNode> {
         let offset = {
-            let mut locked = self.0.borrow_mut();
+            let mut locked = RefCell::borrow_mut(&self.0);
             locked.0.read_top_node_offset()?
         };
         self.read_node(offset)
     }
     pub fn write_top_node(&self, node: IdxNode) -> Result<IdxNode> {
-        if node.offset.is_zero() {
+        if node.get_ref().offset().is_zero() {
             let new_top_node = self.write_new_node(node)?;
             {
-                let mut locked = self.0.borrow_mut();
-                locked.0.write_top_node_offset(new_top_node.offset)?;
+                let mut locked = RefCell::borrow_mut(&self.0);
+                locked
+                    .0
+                    .write_top_node_offset(new_top_node.get_ref().offset())?;
             }
             Ok(new_top_node)
         } else {
             let top_node_offset = {
-                let mut locked = self.0.borrow_mut();
+                let mut locked = RefCell::borrow_mut(&self.0);
                 locked.0.read_top_node_offset()?
             };
             let new_top_node = self.write_node(node)?;
-            if new_top_node.offset != top_node_offset {
-                let mut locked = self.0.borrow_mut();
-                locked.0.write_top_node_offset(new_top_node.offset)?;
+            if new_top_node.get_ref().offset() != top_node_offset {
+                let mut locked = RefCell::borrow_mut(&self.0);
+                locked
+                    .0
+                    .write_top_node_offset(new_top_node.get_ref().offset())?;
             }
             Ok(new_top_node)
         }
     }
     //
     pub fn read_node(&self, offset: NodeOffset) -> Result<IdxNode> {
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.read_node(offset)
     }
     pub fn write_node(&self, node: IdxNode) -> Result<IdxNode> {
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.write_node(node, false)
     }
     pub fn write_new_node(&self, mut node: IdxNode) -> Result<IdxNode> {
-        node.offset = {
-            let mut locked = self.0.borrow_mut();
+        node.get_mut().set_offset({
+            let mut locked = RefCell::borrow_mut(&self.0);
             locked.0.seek_to_end()?
-        };
-        let mut locked = self.0.borrow_mut();
+        });
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.write_node(node, true)
     }
     pub fn delete_node(&self, node: IdxNode) -> Result<NodeSize> {
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.delete_node(node)
     }
 }
@@ -162,7 +167,7 @@ impl IdxFile {
 impl IdxFile {
     pub fn graph_string(&self) -> Result<String> {
         let top_node = self.read_top_node()?;
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.graph_string("", &top_node)
     }
     pub fn graph_string_with_key_string<KT>(&self, dbxxx: &FileDbXxxInner<KT>) -> Result<String>
@@ -170,12 +175,12 @@ impl IdxFile {
         KT: FileDbXxxInnerKT + std::fmt::Display,
     {
         let top_node = self.read_top_node()?;
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.graph_string_with_key_string("", &top_node, dbxxx)
     }
     // check the index tree is balanced
     pub fn is_balanced(&self, node: &IdxNode) -> Result<bool> {
-        let node_offset = node.downs[0];
+        let node_offset = node.get_ref().downs_get(0);
         let h = if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !self.is_balanced(&node1)? {
@@ -185,8 +190,8 @@ impl IdxFile {
         } else {
             0
         };
-        for i in 1..node.downs.len() {
-            let node_offset = node.downs[i];
+        for i in 1..node.get_ref().downs_len() {
+            let node_offset = node.get_ref().downs_get(i);
             let hh = if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 if !self.is_balanced(&node1)? {
@@ -204,15 +209,15 @@ impl IdxFile {
     }
     // return height of node tree
     fn height(&self, node: &IdxNode) -> Result<u32> {
-        let node_offset = node.downs[0];
+        let node_offset = node.get_ref().downs_get(0);
         let mut mx = if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             self.height(&node1)?
         } else {
             0
         };
-        for i in 1..node.downs.len() {
-            let node_offset = node.downs[i];
+        for i in 1..node.get_ref().downs_len() {
+            let node_offset = node.get_ref().downs_get(i);
             let h = if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 self.height(&node1)?
@@ -230,16 +235,16 @@ impl IdxFile {
     where
         KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
-        if node.keys.is_empty() {
+        if node.get_ref().keys_is_empty() {
             return Ok(true);
         }
-        let record_offset = node.keys[0];
+        let record_offset = node.get_ref().keys_get(0);
         let key_string = if !record_offset.is_zero() {
             dbxxx.load_key_string_no_cache(record_offset)?
         } else {
             Default::default()
         };
-        let node_offset = node.downs[0];
+        let node_offset = node.get_ref().downs_get(0);
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !self.is_small(&key_string, &node1, dbxxx)? {
@@ -250,10 +255,10 @@ impl IdxFile {
             }
         }
         //
-        for i in 1..node.keys.len() {
-            let key_offset1 = node.keys[i - 1];
-            let key_offset2 = node.keys[i];
-            let node_offset = node.downs[i];
+        for i in 1..node.get_ref().keys_len() {
+            let key_offset1 = node.get_ref().keys_get(i - 1);
+            let key_offset2 = node.get_ref().keys_get(i);
+            let node_offset = node.get_ref().downs_get(i);
             let key_string1 = if !key_offset1.is_zero() {
                 dbxxx.load_key_string_no_cache(key_offset1)?
             } else {
@@ -278,8 +283,8 @@ impl IdxFile {
             }
         }
         //
-        let record_offset = node.keys[node.keys.len() - 1];
-        let node_offset = node.downs[node.keys.len()];
+        let record_offset = node.get_ref().keys_get(node.get_ref().keys_len() - 1);
+        let node_offset = node.get_ref().downs_get(node.get_ref().keys_len());
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !record_offset.is_zero() {
@@ -300,15 +305,15 @@ impl IdxFile {
     where
         KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
-        for i in 0..node.keys.len() {
-            let node_offset = node.downs[i];
+        for i in 0..node.get_ref().keys_len() {
+            let node_offset = node.get_ref().downs_get(i);
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 if !self.is_small(key, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
-            let record_offset = node.keys[i];
+            let record_offset = node.get_ref().keys_get(i);
             if !record_offset.is_zero() {
                 let key_string1 = dbxxx.load_key_string_no_cache(record_offset)?;
                 if key <= &key_string1 {
@@ -317,7 +322,7 @@ impl IdxFile {
             }
         }
         //
-        let node_offset = node.downs[node.keys.len()];
+        let node_offset = node.get_ref().downs_get(node.get_ref().keys_len());
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !self.is_small(key, &node1, dbxxx)? {
@@ -337,15 +342,15 @@ impl IdxFile {
     where
         KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
-        for i in 0..node.keys.len() {
-            let node_offset = node.downs[i];
+        for i in 0..node.get_ref().keys_len() {
+            let node_offset = node.get_ref().downs_get(i);
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 if !self.is_between(key1, key2, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
-            let record_offset11 = node.keys[i];
+            let record_offset11 = node.get_ref().keys_get(i);
             if !record_offset11.is_zero() {
                 let ket_string11 = dbxxx.load_key_string_no_cache(record_offset11)?;
                 if key1 >= &ket_string11 {
@@ -357,7 +362,7 @@ impl IdxFile {
             }
         }
         //
-        let node_offset = node.downs[node.keys.len()];
+        let node_offset = node.get_ref().downs_get(node.get_ref().keys_len());
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !self.is_between(key1, key2, &node1, dbxxx)? {
@@ -371,15 +376,15 @@ impl IdxFile {
     where
         KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
-        for i in 0..node.keys.len() {
-            let node_offset = node.downs[i];
+        for i in 0..node.get_ref().keys_len() {
+            let node_offset = node.get_ref().downs_get(i);
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 if !self.is_large(key, &node1, dbxxx)? {
                     return Ok(false);
                 }
             }
-            let record_offset = node.keys[i];
+            let record_offset = node.get_ref().keys_get(i);
             if !record_offset.is_zero() {
                 let ket_string1 = dbxxx.load_key_string_no_cache(record_offset)?;
                 if key >= &ket_string1 {
@@ -388,7 +393,7 @@ impl IdxFile {
             }
         }
         //
-        let node_offset = node.downs[node.keys.len()];
+        let node_offset = node.get_ref().downs_get(node.get_ref().keys_len());
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !self.is_large(key, &node1, dbxxx)? {
@@ -400,18 +405,18 @@ impl IdxFile {
     }
     //
     pub fn is_dense(&self, top_node: &IdxNode) -> Result<bool> {
-        if top_node.downs.is_empty() {
+        if top_node.get_ref().downs_is_empty() {
             return Ok(true);
         }
-        let n = top_node.downs.len();
+        let n = top_node.get_ref().downs_len();
         if n > NODE_SLOTS_MAX as usize {
             return Ok(false);
         }
-        if n == 1 && !top_node.downs[0].is_zero() {
+        if n == 1 && !top_node.get_ref().downs_get(0).is_zero() {
             return Ok(false);
         }
         for i in 0..n {
-            let node_offset = top_node.downs[i];
+            let node_offset = top_node.get_ref().downs_get(i);
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 if !self.is_dense_half(&node1)? {
@@ -423,12 +428,12 @@ impl IdxFile {
         Ok(true)
     }
     fn is_dense_half(&self, node: &IdxNode) -> Result<bool> {
-        let n = node.downs.len();
+        let n = node.get_ref().downs_len();
         if n < NODE_SLOTS_MAX_HALF as usize || n > NODE_SLOTS_MAX as usize {
             return Ok(false);
         }
         for i in 0..n {
-            let node_offset = node.downs[i];
+            let node_offset = node.get_ref().downs_get(i);
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 if !self.is_dense_half(&node1)? {
@@ -441,8 +446,8 @@ impl IdxFile {
     }
     pub fn depth_of_node_tree(&self, node: &IdxNode) -> Result<u64> {
         let mut cnt = 1;
-        if !node.downs.is_empty() {
-            let node_offset = node.downs[0];
+        if !node.get_ref().downs_is_empty() {
+            let node_offset = node.get_ref().downs_get(0);
             if !node_offset.is_zero() {
                 let node1 = self.read_node(node_offset)?;
                 cnt += self.depth_of_node_tree(&node1)?;
@@ -455,7 +460,7 @@ impl IdxFile {
         let sz_ary = NODE_SIZE_ARY;
         //
         let mut vec = Vec::new();
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         for node_size in sz_ary {
             let cnt = locked.0.count_of_free_node_list(NodeSize::new(node_size))?;
             vec.push((node_size, cnt));
@@ -482,7 +487,7 @@ impl IdxFile {
         }
         //
         let top_node = self.read_top_node()?;
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.count_of_used_node(
             &top_node,
             &mut node_vec,
@@ -499,7 +504,7 @@ impl IdxFile {
         let mut record_size_stats = RecordSizeStats::default();
         //
         let top_node = self.read_top_node()?;
-        let mut locked = self.0.borrow_mut();
+        let mut locked = RefCell::borrow_mut(&self.0);
         locked.idx_record_size_stats(&top_node, &mut record_size_stats, read_record_size_func)?;
         //
         Ok(record_size_stats)
@@ -860,6 +865,7 @@ const NODE_SIZE_ARY: [u32; 8] = [
 3824inputs+2171664outputs (4major+41444minor)pagefaults 0swaps
 383M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 5
+
 pub const NODE_SLOTS_MAX: u16 = 64;
 
 #[cfg(not(feature = "small_node_slots"))]
@@ -879,7 +885,7 @@ const NODE_SIZE_ARY: [u32; 8] = [
 0inputs+2014176outputs (0major+62696minor)pagefaults 0swaps
 386M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 6
-*/
+
 pub const NODE_SLOTS_MAX: u16 = 32;
 
 #[cfg(not(feature = "small_node_slots"))]
@@ -893,10 +899,16 @@ const NODE_SIZE_ARY: [u32; 8] = [
     16 * 4 * 8,
     16 * 4 * 9,
 ];
-
+*/
 /*
-322.15user 86.74system 6:53.35elapsed 98%CPU (0avgtext+0avgdata 13120maxresident)k
-3272inputs+1946928outputs (4major+45556minor)pagefaults 0swaps
+-g
+187.01user 1.49system 3:09.54elapsed 99%CPU (0avgtext+0avgdata 407752maxresident)k
+0inputs+973656outputs (0major+101670minor)pagefaults 0swaps
+
+-c
+141.69user 0.91system 2:23.54elapsed 99%CPU (0avgtext+0avgdata 411168maxresident)k
+0inputs+0outputs (0major+102580minor)pagefaults 0swaps
+
 393M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 7
 
@@ -904,6 +916,7 @@ pub const NODE_SLOTS_MAX: u16 = 16;
 
 #[cfg(not(feature = "small_node_slots"))]
 const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 2,
     16 * 2 * 2,
     16 * 2 * 3,
     16 * 2 * 4,
@@ -911,12 +924,68 @@ const NODE_SIZE_ARY: [u32; 8] = [
     16 * 2 * 6,
     16 * 2 * 7,
     16 * 2 * 8,
-    16 * 2 * 9,
 ];
 */
 /*
-350.30user 101.32system 7:36.47elapsed 98%CPU (0avgtext+0avgdata 13092maxresident)k
-3824inputs+2305248outputs (4major+5719minor)pagefaults 0swaps
+-g
+184.58user 1.35system 3:07.51elapsed 99%CPU (0avgtext+0avgdata 400792maxresident)k
+0inputs+778992outputs (0major+99942minor)pagefaults 0swaps
+
+-c
+140.35user 0.79system 2:22.02elapsed 99%CPU (0avgtext+0avgdata 406108maxresident)k
+0inputs+0outputs (0major+101292minor)pagefaults 0swaps
+
+381M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 8
+*/
+pub const NODE_SLOTS_MAX: u16 = 12;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 2,
+    16 * 3,
+    16 * 4,
+    16 * 5,
+    16 * 6,
+    16 * 7,
+    16 * 8,
+    16 * 9,
+];
+
+/*
+-g
+186.71user 1.41system 3:09.31elapsed 99%CPU (0avgtext+0avgdata 409280maxresident)k
+0inputs+798416outputs (0major+102053minor)pagefaults 0swaps
+
+-c
+141.90user 0.91system 2:23.81elapsed 99%CPU (0avgtext+0avgdata 415180maxresident)k
+0inputs+0outputs (0major+103538minor)pagefaults 0swaps
+
+390M	./cmp_siamesedb/target/bench-db.siamesedb
+db_map.depth_of_node_tree(): 9
+
+pub const NODE_SLOTS_MAX: u16 = 10;
+
+#[cfg(not(feature = "small_node_slots"))]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 1 * 2,
+    16 * 1 * 3,
+    16 * 1 * 4,
+    16 * 1 * 5,
+    16 * 1 * 6,
+    16 * 1 * 7,
+    16 * 1 * 8,
+    16 * 1 * 9,
+];
+*/
+/*
+-g
+191.93user 1.41system 3:14.53elapsed 99%CPU (0avgtext+0avgdata 411704maxresident)k
+0inputs+970704outputs (0major+102705minor)pagefaults 0swaps
+-c
+143.53user 0.80system 2:25.16elapsed 99%CPU (0avgtext+0avgdata 418428maxresident)k
+0inputs+0outputs (0major+104379minor)pagefaults 0swaps
+
 404M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 10
 
@@ -947,9 +1016,61 @@ pub const NODE_SLOTS_MAX_HALF: u16 = NODE_SLOTS_MAX / 2;
  * node_size = 2 + (2 * 256 -1) * 9 = 4601 --> vu64 encoded len: 2
  * node_size = 2 + (2 * 512 -1) * 9 = 9209 --> vu64 encoded len: 2
 */
+/*
+#[derive(Debug, Default, Clone)]
+pub struct IdxNode(Rc<RefCell<TreeNode>>);
+
+impl IdxNode {
+    pub fn new(offset: NodeOffset) -> Self {
+        Self(Rc::new(RefCell::new(TreeNode::new(offset))))
+    }
+    pub fn with_node_size(offset: NodeOffset, size: NodeSize) -> Self {
+        Self(Rc::new(RefCell::new(TreeNode::with_node_size(
+            offset, size,
+        ))))
+    }
+    pub fn new_active(
+        record_offset: RecordOffset,
+        l_node_offset: NodeOffset,
+        r_node_offset: NodeOffset,
+    ) -> Self {
+        Self(Rc::new(RefCell::new(TreeNode::new_active(
+            record_offset,
+            l_node_offset,
+            r_node_offset,
+        ))))
+    }
+    //
+    pub fn get_mut(&mut self) -> RefMut<TreeNode> {
+        RefCell::borrow_mut(&self.0)
+    }
+    pub fn get_ref(&self) -> Ref<TreeNode> {
+        RefCell::borrow(&self.0)
+    }
+    //
+    pub fn is_over_len(&self) -> bool {
+        let locked = RefCell::borrow(&self.0);
+        locked.is_over_len()
+    }
+    pub fn deactivate(&self) -> Self {
+        Self(Rc::new(RefCell::new(RefCell::borrow(&self.0).deactivate())))
+    }
+    pub fn is_active_on_insert(&self) -> bool {
+        let locked = RefCell::borrow(&self.0);
+        locked.is_active_on_insert()
+    }
+    pub fn is_active_on_delete(&self) -> bool {
+        let locked = RefCell::borrow(&self.0);
+        locked.is_active_on_delete()
+    }
+    pub(crate) fn idx_write_node_one(&self, file: &mut VarFile) -> Result<()> {
+        let locked = RefCell::borrow(&self.0);
+        locked.idx_write_node_one(file)
+    }
+}
 
 #[derive(Debug, Default, Clone)]
-pub struct IdxNode {
+pub struct TreeNode {
     /// active node flag is used insert operation. this not store into file.
     pub is_active: bool,
     /// offset of IdxNode in idx file.
@@ -958,13 +1079,11 @@ pub struct IdxNode {
     pub size: NodeSize,
     /// key slot: offset of key-value record in dat file.
     pub keys: Vec<RecordOffset>,
-    //pub keys: [u64; (NODE_SLOTS_MAX as usize) - 1],
     /// down slot: offset of next IdxNode in idx file.
     pub downs: Vec<NodeOffset>,
-    //pub downs: [u64; (NODE_SLOTS_MAX as usize)],
 }
 
-impl IdxNode {
+impl TreeNode {
     pub fn new(offset: NodeOffset) -> Self {
         Self::with_node_size(offset, NodeSize::new(0))
     }
@@ -999,7 +1118,7 @@ impl IdxNode {
         true
     }
     /// convert active node to normal node
-    pub fn deactivate(&self) -> IdxNode {
+    pub fn deactivate(&self) -> Self {
         if self.is_active {
             let mut r = Self::new(NodeOffset::new(0));
             r.keys.push(self.keys[0]);
@@ -1122,6 +1241,7 @@ impl IdxNode {
         Ok(())
     }
 }
+*/
 
 impl VarFileNodeCache {
     #[cfg(feature = "node_cache")]
@@ -1136,32 +1256,34 @@ impl VarFileNodeCache {
         Ok(())
     }
 
-    fn delete_node(&mut self, node: IdxNode) -> Result<NodeSize> {
+    fn delete_node(&mut self, node_: IdxNode) -> Result<NodeSize> {
+        let node_offset = node_.get_ref().offset();
+        //
         #[cfg(not(feature = "node_cache"))]
         let old_node_size = {
-            self.0.seek_from_start(node.offset)?;
+            self.0.seek_from_start(node_offset)?;
             self.0.read_node_size()?
         };
         #[cfg(feature = "node_cache")]
         let old_node_size = {
-            match self.1.delete(&node.offset) {
+            match self.1.delete(&node_offset) {
                 Some(node_size) => node_size,
                 None => {
-                    self.0.seek_from_start(node.offset)?;
+                    self.0.seek_from_start(node_offset)?;
                     self.0.read_node_size()?
                 }
             }
         };
         //
-        self.0.push_free_node_list(node.offset, old_node_size)?;
+        self.0.push_free_node_list(node_offset, old_node_size)?;
         Ok(old_node_size)
     }
 
-    fn write_node(&mut self, mut node: IdxNode, is_new: bool) -> Result<IdxNode> {
-        debug_assert!(!node.offset.is_zero());
-        debug_assert!((node.offset.as_value() & 0x0F) == 0);
+    fn write_node(&mut self, mut node_: IdxNode, is_new: bool) -> Result<IdxNode> {
+        debug_assert!(!node_.get_ref().offset().is_zero());
+        debug_assert!((node_.get_ref().offset().as_value() & 0x0F) == 0);
         //
-        let buf_len: u32 = node.encoded_node_size().try_into().unwrap();
+        let buf_len: u32 = node_.get_ref().encoded_node_size().try_into().unwrap();
         //
         #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
         let encoded_len = 4;
@@ -1175,15 +1297,15 @@ impl VarFileNodeCache {
         if !is_new {
             #[cfg(not(feature = "node_cache"))]
             let old_node_size = {
-                self.0.seek_from_start(node.offset)?;
+                self.0.seek_from_start(node_.get_ref().offset)?;
                 self.0.read_node_size()?
             };
             #[cfg(feature = "node_cache")]
             let old_node_size = {
-                if let Some(node_size) = self.1.get_node_size(&node.offset) {
+                if let Some(node_size) = self.1.get_node_size(&node_.get_ref().offset()) {
                     node_size
                 } else {
-                    self.0.seek_from_start(node.offset)?;
+                    self.0.seek_from_start(node_.get_ref().offset())?;
                     self.0.read_node_size()?
                 }
             };
@@ -1191,21 +1313,22 @@ impl VarFileNodeCache {
                 // over writes.
                 #[cfg(not(feature = "node_cache"))]
                 {
-                    node.size = old_node_size;
-                    node.idx_write_node_one(&mut self.0)?;
-                    return Ok(node);
+                    node_.get_mut().size = old_node_size;
+                    node_.idx_write_node_one(&mut self.0)?;
+                    return Ok(node_);
                 }
                 #[cfg(feature = "node_cache")]
                 {
-                    let node = self.1.put(&mut self.0, node, old_node_size, true)?;
-                    return Ok(node);
+                    let node_ = self.1.put(&mut self.0, node_, old_node_size, true)?;
+                    return Ok(node_);
                 }
             } else {
                 // delete old and add new
                 #[cfg(feature = "node_cache")]
-                self.1.delete(&node.offset);
+                self.1.delete(&node_.get_ref().offset());
                 // old
-                self.0.push_free_node_list(node.offset, old_node_size)?;
+                self.0
+                    .push_free_node_list(node_.get_ref().offset(), old_node_size)?;
             }
         }
         // add new.
@@ -1230,12 +1353,15 @@ impl VarFileNodeCache {
             };
             debug_assert!(!new_node_offset.is_zero());
             debug_assert!((new_node_offset.as_value() & 0x0F) == 0);
-            node.offset = new_node_offset;
-            node.size = new_node_size;
-            node.idx_write_node_one(&mut self.0)?;
+            {
+                let mut node = node_.get_mut();
+                node.set_offset(new_node_offset);
+                node.set_size(new_node_size);
+                node.idx_write_node_one(&mut self.0)?;
+            }
         }
         //
-        Ok(node)
+        Ok(node_)
     }
 
     #[cfg(not(feature = "node_cache"))]
@@ -1258,32 +1384,34 @@ impl VarFileNodeCache {
         );
         let keys_count: usize = keys_count.try_into().unwrap();
         //
-        let mut node = IdxNode::with_node_size(offset, node_size);
-        for _i in 0..keys_count {
-            let record_offset = self
-                .0
-                .read_record_offset()
-                .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-            debug_assert!(!record_offset.is_zero());
-            node.keys.push(record_offset);
+        let mut node_ = IdxNode::with_node_size(offset, node_size);
+        {
+            let mut node = node_.get_mut();
+            for _i in 0..keys_count {
+                let record_offset = self
+                    .0
+                    .read_record_offset()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                debug_assert!(!record_offset.is_zero());
+                node.keys.push(record_offset);
+            }
+            for _i in 0..(keys_count + 1) {
+                let node_offset = self
+                    .0
+                    .read_node_offset()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                debug_assert!(
+                    (node_offset.as_value() & 0x0F) == 0,
+                    "(node_offset.as_value(): {} & 0x0F) == 0, offset: {}",
+                    node_offset,
+                    offset.as_value()
+                );
+                node.downs.push(node_offset);
+            }
         }
-        for _i in 0..(keys_count + 1) {
-            let node_offset = self
-                .0
-                .read_node_offset()
-                .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-            debug_assert!(
-                (node_offset.as_value() & 0x0F) == 0,
-                "(node_offset.as_value(): {} & 0x0F) == 0, offset: {}",
-                node_offset,
-                offset.as_value()
-            );
-            node.downs.push(node_offset);
-        }
-        let _current_pos = self.0.seek_position()?;
-        debug_assert!(_start_pos + node_size >= _current_pos);
+        debug_assert!(_start_pos + node_size >= self.0.seek_position()?);
         //
-        Ok(node)
+        Ok(node_)
     }
 
     #[cfg(feature = "node_cache")]
@@ -1291,8 +1419,8 @@ impl VarFileNodeCache {
         debug_assert!(!offset.is_zero());
         debug_assert!((offset.as_value() & 0x0F) == 0);
         //
-        if let Some(rc) = self.1.get(&offset) {
-            return Ok(rc.as_ref().clone());
+        if let Some(cached_node) = self.1.get(&offset) {
+            return Ok(cached_node);
         }
         //
         self.0.seek_from_start(offset)?;
@@ -1310,27 +1438,30 @@ impl VarFileNodeCache {
         );
         let keys_count: usize = keys_count.try_into().unwrap();
         //
-        let mut node = IdxNode::with_node_size(offset, node_size);
-        for _i in 0..keys_count {
-            let record_offset = self
-                .0
-                .read_record_offset()
-                .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-            debug_assert!(!record_offset.is_zero());
-            node.keys.push(record_offset);
-        }
-        for _i in 0..(keys_count + 1) {
-            let node_offset = self
-                .0
-                .read_node_offset()
-                .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-            debug_assert!((node_offset.as_value() & 0x0F) == 0);
-            node.downs.push(node_offset);
+        let mut node_ = IdxNode::with_node_size(offset, node_size);
+        {
+            let mut node = node_.get_mut();
+            for _i in 0..keys_count {
+                let record_offset = self
+                    .0
+                    .read_record_offset()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                debug_assert!(!record_offset.is_zero());
+                node.keys_push(record_offset);
+            }
+            for _i in 0..(keys_count + 1) {
+                let node_offset = self
+                    .0
+                    .read_node_offset()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                debug_assert!((node_offset.as_value() & 0x0F) == 0);
+                node.downs_push(node_offset);
+            }
         }
         //
-        let node = self.1.put(&mut self.0, node, node_size, false)?;
+        let node_ = self.1.put(&mut self.0, node_, node_size, false)?;
         //
-        Ok(node)
+        Ok(node_)
     }
 }
 
@@ -1343,10 +1474,11 @@ const GRAPH_NODE_ED: &str = "v";
 
 // for debug
 impl VarFileNodeCache {
-    fn graph_string(&mut self, head: &str, node: &IdxNode) -> Result<String> {
-        let mut gs = format!("{}{}:{:04x}\n", head, GRAPH_NODE_ST, node.offset.as_value());
-        let mut i = node.downs.len() - 1;
-        let node_offset = node.downs[i];
+    fn graph_string(&mut self, head: &str, node_: &IdxNode) -> Result<String> {
+        let node = node_.get_ref();
+        let mut gs = format!("{}{}:{:04x}\n", head, GRAPH_NODE_ST, node.offset().as_value());
+        let mut i = node.downs_len() - 1;
+        let node_offset = node.downs_get(i);
         if !node_offset.is_zero() {
             let node = self
                 .read_node(node_offset)
@@ -1356,9 +1488,9 @@ impl VarFileNodeCache {
         }
         while i > 0 {
             i -= 1;
-            let record_offset = node.keys[i];
+            let record_offset = node.keys_get(i);
             gs += &format!("{}{:04x}\n", head, record_offset.as_value());
-            let node_offset = node.downs[i];
+            let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
                 let node = self
                     .read_node(node_offset)
@@ -1375,21 +1507,22 @@ impl VarFileNodeCache {
     fn graph_string_with_key_string<KT>(
         &mut self,
         head: &str,
-        node: &IdxNode,
+        node_: &IdxNode,
         dbxxx: &FileDbXxxInner<KT>,
     ) -> Result<String>
     where
         KT: FileDbXxxInnerKT + std::fmt::Display,
     {
+        let node = node_.get_ref();
         let mut gs = format!(
             "{}{}:0x{:04x},{03}\n",
             head,
             GRAPH_NODE_ST,
-            node.offset.as_value(),
-            node.size
+            node.offset().as_value(),
+            node.size()
         );
-        let mut i = node.downs.len() - 1;
-        let node_offset = node.downs[i];
+        let mut i = node.downs_len() - 1;
+        let node_offset = node.downs_get(i);
         if !node_offset.is_zero() {
             let node = self
                 .read_node(node_offset)
@@ -1399,7 +1532,7 @@ impl VarFileNodeCache {
         }
         while i > 0 {
             i -= 1;
-            let record_offset = node.keys[i];
+            let record_offset = node.keys_get(i);
             if !record_offset.is_zero() {
                 let key_string = dbxxx.load_key_string_no_cache(record_offset)?;
                 gs += &format!(
@@ -1409,7 +1542,7 @@ impl VarFileNodeCache {
                     key_string
                 );
             }
-            let node_offset = node.downs[i];
+            let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
                 let node = self
                     .read_node(node_offset)
@@ -1426,7 +1559,7 @@ impl VarFileNodeCache {
 
     fn count_of_used_node<F>(
         &mut self,
-        node: &IdxNode,
+        node_: &IdxNode,
         node_vec: &mut Vec<(u32, u64)>,
         record_vec: &mut Vec<(u32, u64)>,
         read_record_size_func: F,
@@ -1434,7 +1567,8 @@ impl VarFileNodeCache {
     where
         F: Fn(RecordOffset) -> Result<RecordSize> + Copy,
     {
-        match node_vec.iter().position(|v| v.0 == node.size.as_value()) {
+        let node = node_.get_ref();
+        match node_vec.iter().position(|v| v.0 == node.size().as_value()) {
             Some(sz_idx) => {
                 node_vec[sz_idx].1 += 1;
             }
@@ -1444,8 +1578,8 @@ impl VarFileNodeCache {
             }
         }
         //
-        let mut i = node.downs.len() - 1;
-        let node_offset = node.downs[i];
+        let mut i = node.downs_len() - 1;
+        let node_offset = node.downs_get(i);
         if !node_offset.is_zero() {
             let node = self
                 .read_node(node_offset)
@@ -1455,7 +1589,7 @@ impl VarFileNodeCache {
         while i > 0 {
             i -= 1;
             //
-            let record_offset = node.keys[i];
+            let record_offset = node.keys_get(i);
             if !record_offset.is_zero() {
                 let record_size = read_record_size_func(record_offset)?;
                 match record_vec
@@ -1472,7 +1606,7 @@ impl VarFileNodeCache {
                 }
             }
             //
-            let node_offset = node.downs[i];
+            let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
                 let node = self
                     .read_node(node_offset)
@@ -1486,15 +1620,16 @@ impl VarFileNodeCache {
 
     fn idx_record_size_stats<F>(
         &mut self,
-        node: &IdxNode,
+        node_: &IdxNode,
         record_vec: &mut RecordSizeStats,
         read_record_size_func: F,
     ) -> Result<()>
     where
         F: Fn(RecordOffset) -> Result<RecordSize> + Copy,
     {
-        let mut i = node.downs.len() - 1;
-        let node_offset = node.downs[i];
+        let node = node_.get_ref();
+        let mut i = node.downs_len() - 1;
+        let node_offset = node.downs_get(i);
         if !node_offset.is_zero() {
             let node = self
                 .read_node(node_offset)
@@ -1504,13 +1639,13 @@ impl VarFileNodeCache {
         while i > 0 {
             i -= 1;
             //
-            let record_offset = node.keys[i];
+            let record_offset = node.keys_get(i);
             if !record_offset.is_zero() {
                 let record_size = read_record_size_func(record_offset)?;
                 record_vec.touch_size(record_size);
             }
             //
-            let node_offset = node.downs[i];
+            let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
                 let node = self
                     .read_node(node_offset)

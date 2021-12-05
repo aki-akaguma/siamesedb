@@ -174,7 +174,7 @@ pub trait DbXxx<KT> {
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
-        vec.sort_by(|a, b| b.1.cmp(&(a.1)));
+        vec.sort_by(|a, b| b.1.cmp(a.1));
         while let Some(ik) = vec.pop() {
             let result_value = self.get(ik.1)?;
             result.push((ik.0, result_value));

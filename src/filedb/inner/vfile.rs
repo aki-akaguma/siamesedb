@@ -70,9 +70,13 @@ impl VarFile {
         debug_assert!(pos == offset, "_pos: {} == offset: {}", pos, offset);
         Ok(pos)
     }
-    pub fn seek_skip_length<T: PartialEq + Copy>(&mut self, length: Length<T>) -> Result<Offset<T>> {
+    pub fn seek_skip_length<T: PartialEq + Copy>(
+        &mut self,
+        length: Length<T>,
+    ) -> Result<Offset<T>> {
         let val: u32 = length.into();
-        self.seek(SeekFrom::Current(val as i64)).map(Offset::<T>::new)
+        self.seek(SeekFrom::Current(val as i64))
+            .map(Offset::<T>::new)
     }
     pub fn seek_to_end<T>(&mut self) -> Result<Offset<T>> {
         self.seek(SeekFrom::End(0)).map(Offset::<T>::new)

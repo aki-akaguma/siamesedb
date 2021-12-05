@@ -480,7 +480,12 @@ mod debug {
             #[cfg(feature = "key_cache")]
             {
                 #[cfg(not(feature = "kc_lru"))]
-                assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 64);
+                {
+                    #[cfg(not(feature = "kc_hash"))]
+                    assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 64);
+                    #[cfg(feature = "kc_hash")]
+                    assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 88);
+                }
                 #[cfg(feature = "kc_lru")]
                 assert_eq!(std::mem::size_of::<FileDbMapStringInner>(), 72);
             }
@@ -490,7 +495,12 @@ mod debug {
             #[cfg(feature = "key_cache")]
             {
                 #[cfg(not(feature = "kc_lru"))]
-                assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 64);
+                {
+                    #[cfg(not(feature = "kc_hash"))]
+                    assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 64);
+                    #[cfg(feature = "kc_hash")]
+                    assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 88);
+                }
                 #[cfg(feature = "kc_lru")]
                 assert_eq!(std::mem::size_of::<FileDbMapU64Inner>(), 72);
             }

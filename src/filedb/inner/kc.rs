@@ -1,7 +1,11 @@
 use super::semtype::*;
 use std::rc::Rc;
 
+#[cfg(feature = "kc_hash")]
+use std::collections::HashMap;
+
 const CACHE_SIZE: usize = 128;
+//const CACHE_SIZE: usize = 10*1024*1024;
 
 #[derive(Debug)]
 struct KeyCacheBean<KT> {
@@ -24,7 +28,10 @@ impl<KT> KeyCacheBean<KT> {
 
 #[derive(Debug)]
 pub struct KeyCache<KT> {
+    #[cfg(not(feature = "kc_hash"))]
     cache: Vec<KeyCacheBean<KT>>,
+    #[cfg(feature = "kc_hash")]
+    cache: HashMap<RecordOffset, KeyCacheBean<KT>>,
     cache_size: usize,
     #[cfg(feature = "kc_lru")]
     uses_cnt: u32,
@@ -36,7 +43,10 @@ impl<KT> KeyCache<KT> {
     }
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
+            #[cfg(not(feature = "kc_hash"))]
             cache: Vec::with_capacity(cache_size),
+            #[cfg(feature = "kc_hash")]
+            cache: HashMap::with_capacity(cache_size),
             cache_size,
             #[cfg(feature = "kc_lru")]
             uses_cnt: 0,
@@ -176,6 +186,7 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
         self.cache.len()
     }
     fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>> {
+        #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 self.touch(k);
@@ -184,8 +195,17 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
             }
             Err(_k) => None,
         }
+        #[cfg(feature = "kc_hash")]
+        match self.cache.get(offset) {
+            Some(v) => {
+                //self.touch(k);
+                Some(v.key_string.clone())
+            }
+            None => None,
+        }
     }
     fn put(&mut self, offset: &RecordOffset, key: KT) -> Rc<KT> {
+        #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 self.touch(k);
@@ -205,20 +225,56 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
                 r
             }
         }
+        #[cfg(feature = "kc_hash")]
+        match self.cache.get(&offset) {
+            Some(v) => {
+                //self.touch(v);
+                v.key_string.clone()
+            }
+            None => {
+                if self.cache.len() > self.cache_size {
+                    // all clear cache algorithm
+                    self.clear();
+                }
+                let r = Rc::new(key);
+                self.cache
+                    .insert(*offset, KeyCacheBean::new(*offset, r.clone()));
+                //lf.touch(k);
+                r
+            }
+        }
     }
     fn delete(&mut self, offset: &RecordOffset) {
+        #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 let _kcb = self.cache.remove(k);
             }
             Err(_k) => (),
         }
+        #[cfg(feature = "kc_hash")]
+        let _ = self.cache.remove(offset);
     }
     fn clear(&mut self) {
         self.cache.clear();
         #[cfg(feature = "kc_lru")]
         {
             self.uses_cnt = 0;
+        }
+    }
+}
+
+//--
+#[cfg(test)]
+mod debug {
+    use super::KeyCacheBean;
+    //
+    #[test]
+    fn test_size_of() {
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(std::mem::size_of::<KeyCacheBean<String>>(), 16);
+            assert_eq!(std::mem::size_of::<KeyCacheBean<u64>>(), 16);
         }
     }
 }

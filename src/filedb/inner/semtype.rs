@@ -20,10 +20,10 @@ pub type ValueLength = Length<Value>;
 
 pub type KeysCount = Count<Key>;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Record;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Node;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -33,7 +33,7 @@ pub struct Key;
 pub struct Value;
 
 /// The offset in dat/idx file.
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Offset<T> {
     val: u64,
     _phantom: PhantomData<T>,

@@ -1,6 +1,7 @@
 use super::super::super::DbXxx;
 use super::super::{CheckFileDbMap, CountOfPerSize, FileDbNode, FileDbParams, RecordSizeStats};
 use super::semtype::*;
+use super::tr::{IdxNode, TreeNode};
 use super::{dat, idx};
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -100,14 +101,14 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     }
     fn load_value(&self, record_offset: RecordOffset) -> Result<Vec<u8>> {
         debug_assert!(record_offset != RecordOffset::new(0));
-        Ok(self.dat_file.read_record_only_value(record_offset)?)
+        self.dat_file.read_record_only_value(record_offset)
     }
     fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
         self.dat_file.read_record_only_size(record_offset)
     }
     fn keys_binary_search<Q>(
         &mut self,
-        node: &mut idx::IdxNode,
+        node: &TreeNode,
         key: &Q,
     ) -> Result<std::result::Result<usize, usize>>
     where
@@ -127,13 +128,13 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         /*
          */
         let mut left = 0;
-        let mut right = node.keys.len();
+        let mut right = node.keys_len();
         while left < right {
             //let mid = left + (right - left) / 2;
             let mid = (left + right) / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
-            let key_offset = unsafe { *node.keys.get_unchecked(mid) };
+            let key_offset = unsafe { node.keys_get_unchecked(mid) };
             //let key_offset = node.keys[mid];
             //
             debug_assert!(key_offset != RecordOffset::new(0));
@@ -150,12 +151,12 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         Ok(Err(left))
     }
     #[inline]
-    fn write_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
+    fn write_node(&mut self, node: IdxNode) -> Result<IdxNode> {
         self.dirty = true;
         self.idx_file.write_node(node)
     }
     #[inline]
-    fn write_new_node(&mut self, node: idx::IdxNode) -> Result<idx::IdxNode> {
+    fn write_new_node(&mut self, node: IdxNode) -> Result<IdxNode> {
         self.dirty = true;
         self.idx_file.write_new_node(node)
     }
@@ -225,52 +226,51 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp
 impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
     fn insert_into_node_tree(
         &mut self,
-        mut node: idx::IdxNode,
+        mut node_: IdxNode,
         key: &KT,
         value: &[u8],
-    ) -> Result<idx::IdxNode> {
-        if node.keys.is_empty() {
-            let new_record = self.dat_file.add_record(key, value)?;
-            return Ok(idx::IdxNode::new_active(
-                new_record.offset,
-                NodeOffset::new(0),
-                NodeOffset::new(0),
-            ));
-        }
-        let r = self.keys_binary_search(&mut node, key)?;
+    ) -> Result<IdxNode> {
+        let r = {
+            let node = node_.get_ref();
+            if node.keys_is_empty() {
+                let new_record = self.dat_file.add_record(key, value)?;
+                return Ok(IdxNode::new_active(
+                    new_record.offset,
+                    NodeOffset::new(0),
+                    NodeOffset::new(0),
+                ));
+            }
+            self.keys_binary_search(&node, key)?
+        };
         match r {
             Ok(k) => {
-                let record_offset = unsafe { *node.keys.get_unchecked(k) };
+                let record_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
                 //let record_offset = node.keys[k];
                 debug_assert!(record_offset != RecordOffset::new(0));
                 let new_record_offset = self.store_value_on_insert(record_offset, value)?;
                 if record_offset != new_record_offset {
-                    node.keys[k] = new_record_offset;
-                    return self.write_node(node);
+                    node_.get_mut().keys_set(k, new_record_offset);
+                    return self.write_node(node_);
                 }
-                Ok(node)
+                Ok(node_)
             }
             Err(k) => {
-                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                let node_offset1 = unsafe { node_.get_ref().downs_get_unchecked(k) };
                 //let node_offset1 = node.downs[k];
-                let node2 = if !node_offset1.is_zero() {
-                    let node1 = self.idx_file.read_node(node_offset1)?;
-                    self.insert_into_node_tree(node1, key, value)?
+                let node2_ = if !node_offset1.is_zero() {
+                    let node1_ = self.idx_file.read_node(node_offset1)?;
+                    self.insert_into_node_tree(node1_, key, value)?
                 } else {
                     let new_record = self.dat_file.add_record(key, value)?;
-                    idx::IdxNode::new_active(
-                        new_record.offset,
-                        NodeOffset::new(0),
-                        NodeOffset::new(0),
-                    )
+                    IdxNode::new_active(new_record.offset, NodeOffset::new(0), NodeOffset::new(0))
                 };
-                if node2.is_active_on_insert() {
-                    self.balance_on_insert(node, k, &node2)
+                if node2_.is_active_on_insert() {
+                    self.balance_on_insert(node_, k, &node2_)
                 } else {
-                    debug_assert!(!node2.offset.is_zero());
-                    let node2 = self.write_node(node2)?;
-                    node.downs[k] = node2.offset;
-                    self.write_node(node)
+                    debug_assert!(!node2_.get_ref().offset().is_zero());
+                    let node2_ = self.write_node(node2_)?;
+                    node_.get_mut().downs_set(k, node2_.get_ref().offset());
+                    self.write_node(node_)
                 }
             }
         }
@@ -289,89 +289,91 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
     #[inline]
     fn balance_on_insert(
         &mut self,
-        mut node: idx::IdxNode,
+        mut node_: IdxNode,
         i: usize,
-        active_node: &idx::IdxNode,
-    ) -> Result<idx::IdxNode> {
-        debug_assert!(active_node.is_active_on_insert());
+        active_node_: &IdxNode,
+    ) -> Result<IdxNode> {
+        debug_assert!(active_node_.get_ref().is_active_on_insert());
         //
-        node.keys.insert(i, active_node.keys[0]);
-        node.downs[i] = active_node.downs[1];
-        node.downs.insert(i, active_node.downs[0]);
+        node_
+            .get_mut()
+            .keys_insert(i, active_node_.get_ref().keys_get(0));
+        node_.get_mut().downs_set(i, active_node_.get_ref().downs_get(1));
+        node_
+            .get_mut()
+            .downs_insert(i, active_node_.get_ref().downs_get(0));
         //
-        if node.is_over_len() {
-            self.split_on_insert(node)
+        if node_.borrow().is_over_len() {
+            self.split_on_insert(node_)
         } else {
-            let node = self.write_node(node)?;
+            let node = self.write_node(node_)?;
             Ok(node)
         }
     }
     #[inline]
-    fn split_on_insert(&mut self, mut node: idx::IdxNode) -> Result<idx::IdxNode> {
-        debug_assert!(node.keys.len() == idx::NODE_SLOTS_MAX as usize);
-        debug_assert!(node.downs.len() == idx::NODE_SLOTS_MAX as usize + 1);
-        debug_assert!(node.keys.len() >= idx::NODE_SLOTS_MAX_HALF as usize);
-        debug_assert!(node.downs.len() >= idx::NODE_SLOTS_MAX_HALF as usize);
-        let mut node1 = idx::IdxNode::new(NodeOffset::new(0));
-        let slice = &node.keys[idx::NODE_SLOTS_MAX_HALF as usize..node.keys.len()];
-        node1.keys.extend_from_slice(slice);
-        let slice = &node.downs[idx::NODE_SLOTS_MAX_HALF as usize..node.downs.len()];
-        node1.downs.extend_from_slice(slice);
+    fn split_on_insert(&mut self, mut node_: IdxNode) -> Result<IdxNode> {
+        debug_assert!(node_.get_ref().keys_len() == idx::NODE_SLOTS_MAX as usize);
+        debug_assert!(node_.get_ref().downs_len() == idx::NODE_SLOTS_MAX as usize + 1);
+        debug_assert!(node_.get_ref().keys_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
+        debug_assert!(node_.get_ref().downs_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
+        let mut node1_ = IdxNode::new(NodeOffset::new(0));
+        node1_.get_mut().keys_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
+        node1_.get_mut().downs_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
         //
-        node.keys
-            .resize(idx::NODE_SLOTS_MAX_HALF as usize, RecordOffset::new(0));
-        node.downs
-            .resize(idx::NODE_SLOTS_MAX_HALF as usize, NodeOffset::new(0));
+        node_
+            .get_mut()
+            .keys_resize(idx::NODE_SLOTS_MAX_HALF as usize);
+        node_
+            .get_mut()
+            .downs_resize(idx::NODE_SLOTS_MAX_HALF as usize);
         //
-        let key_offset1 = node.keys.pop().unwrap();
-        let node1 = self.write_new_node(node1)?;
-        let node = self.write_node(node)?;
-        Ok(idx::IdxNode::new_active(
-            key_offset1,
-            node.offset,
-            node1.offset,
-        ))
+        let key_offset1 = node_.get_mut().keys_pop().unwrap();
+        let node1_ = self.write_new_node(node1_)?;
+        let node_ = self.write_node(node_)?;
+        let node_offset = node_.get_ref().offset();
+        let node1_offset = node1_.get_ref().offset();
+        Ok(IdxNode::new_active(key_offset1, node_offset, node1_offset))
     }
 }
 
 // delete: NEW
 impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
-    fn delete_from_node_tree<Q>(&mut self, mut node: idx::IdxNode, key: &Q) -> Result<idx::IdxNode>
+    fn delete_from_node_tree<Q>(&mut self, mut node_: IdxNode, key: &Q) -> Result<IdxNode>
     where
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        if node.keys.is_empty() {
-            return Ok(node);
+        if node_.get_ref().keys_is_empty() {
+            return Ok(node_);
         }
-        let r = self.keys_binary_search(&mut node, key)?;
+        let r = self.keys_binary_search(&node_.get_ref(), key)?;
         match r {
             Ok(k) => {
-                let node = self.delete_at(node, k)?;
-                return Ok(node);
+                let node_ = self.delete_at(node_, k)?;
+                return Ok(node_);
             }
             Err(k) => {
-                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
+                let node_offset1 = unsafe { node_.get_mut().downs_get_unchecked(k) };
                 //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
-                    let node1 = self.idx_file.read_node(node_offset1)?;
-                    let node1 = self.delete_from_node_tree(node1, key)?;
-                    node.downs[k] = node1.offset;
-                    let node = self.write_node(node)?;
-                    if k == node.downs.len() - 1 {
-                        let node = self.balance_right(node, k)?;
-                        return Ok(node);
+                    let node1_ = self.idx_file.read_node(node_offset1)?;
+                    let node1_ = self.delete_from_node_tree(node1_, key)?;
+                    node_.get_mut().downs_set(k, node1_.get_ref().offset());
+                    let node_ = self.write_node(node_)?;
+                    if k == node_.get_ref().downs_len() - 1 {
+                        let node_ = self.balance_right(node_, k)?;
+                        return Ok(node_);
                     } else {
-                        let node = self.balance_left(node, k)?;
-                        return Ok(node);
+                        let node_ = self.balance_left(node_, k)?;
+                        return Ok(node_);
                     }
                 }
             }
         }
-        Ok(node)
+        Ok(node_)
     }
-    fn delete_at(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
-        let record_offset = node.keys[i];
+    fn delete_at(&mut self, mut node_: IdxNode, i: usize) -> Result<IdxNode> {
+        let record_offset = node_.get_ref().keys_get(i);
         debug_assert!(
             record_offset != RecordOffset::new(0),
             "key_offset: {} != 0",
@@ -382,205 +384,223 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
             self.clear_key_cache(record_offset);
             self.dat_file.delete_record(record_offset)?;
         }
-        let node_offset1 = node.downs[i];
+        let node_offset1 = node_.get_ref().downs_get(i);
         if node_offset1.is_zero() {
-            let _key_offset = node.keys.remove(i);
-            let _node_offset = node.downs.remove(i);
-            let new_node = self.write_node(node)?;
-            Ok(new_node)
+            let _key_offset = node_.get_mut().keys_remove(i);
+            let _node_offset = node_.get_mut().downs_remove(i);
+            let new_node_ = self.write_node(node_)?;
+            Ok(new_node_)
         } else {
-            let node1 = self.idx_file.read_node(node_offset1)?;
-            let (record_offset, node1) = self.delete_max(node1)?;
-            node.keys[i] = record_offset;
-            node.downs[i] = node1.offset;
-            let node = self.write_node(node)?;
-            self.balance_left(node, i)
+            let node1_ = self.idx_file.read_node(node_offset1)?;
+            let (record_offset, node1_) = self.delete_max(node1_)?;
+            node_.get_mut().keys_set(i, record_offset);
+            node_.get_mut().downs_set(i, node1_.get_ref().offset());
+            let node_ = self.write_node(node_)?;
+            self.balance_left(node_, i)
         }
     }
-    fn delete_max(&mut self, mut node: idx::IdxNode) -> Result<(RecordOffset, idx::IdxNode)> {
-        let j = node.keys.len();
+    fn delete_max(&mut self, mut node_: IdxNode) -> Result<(RecordOffset, IdxNode)> {
+        let j = node_.get_ref().keys_len();
         let i = j - 1;
-        let node_offset1 = node.downs[j];
+        let node_offset1 = node_.get_ref().downs_get(j);
         if node_offset1.is_zero() {
-            node.downs.remove(j);
-            let key_offset2 = node.keys.remove(i);
-            let new_node = self.write_node(node)?;
-            Ok((key_offset2, new_node))
+            node_.get_mut().downs_remove(j);
+            let key_offset2 = node_.get_mut().keys_remove(i);
+            let new_node_ = self.write_node(node_)?;
+            Ok((key_offset2, new_node_))
         } else {
-            let node1 = self.idx_file.read_node(node_offset1)?;
-            let (key_offset2, node1) = self.delete_max(node1)?;
-            node.downs[j] = node1.offset;
-            let node = self.write_node(node)?;
-            let new_node = self.balance_right(node, j)?;
-            Ok((key_offset2, new_node))
+            let node1_ = self.idx_file.read_node(node_offset1)?;
+            let (key_offset2, node1_) = self.delete_max(node1_)?;
+            node_.get_mut().downs_set(j, node1_.get_ref().offset());
+            let node_ = self.write_node(node_)?;
+            let new_node_ = self.balance_right(node_, j)?;
+            Ok((key_offset2, new_node_))
         }
     }
-    fn balance_left(&mut self, mut node: idx::IdxNode, i: usize) -> Result<idx::IdxNode> {
-        let node_offset1 = node.downs[i];
+    fn balance_left(&mut self, mut node_: IdxNode, i: usize) -> Result<IdxNode> {
+        let node_offset1 = node_.get_ref().downs_get(i);
         if node_offset1.is_zero() {
-            return Ok(node);
+            return Ok(node_);
         }
-        let mut node1 = self.idx_file.read_node(node_offset1)?;
-        if !node1.is_active_on_delete() {
-            return Ok(node);
+        let mut node1_ = self.idx_file.read_node(node_offset1)?;
+        if !node1_.is_active_on_delete() {
+            return Ok(node_);
         }
         let j = i + 1;
-        let key_offset2 = node.keys[i];
-        let node_offset2 = node.downs[j];
+        let key_offset2 = node_.get_ref().keys_get(i);
+        let node_offset2 = node_.get_ref().downs_get(j);
         debug_assert!(!node_offset2.is_zero());
         if !node_offset2.is_zero() {
-            let mut node2 = self.idx_file.read_node(node_offset2)?;
-            if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
+            let mut node2_ = self.idx_file.read_node(node_offset2)?;
+            if node2_.get_ref().downs_len() == idx::NODE_SLOTS_MAX_HALF as usize {
                 // unification
-                node1.keys.push(key_offset2);
+                node1_.get_mut().keys_push(key_offset2);
                 //
-                node1.keys.extend_from_slice(&node2.keys[0..]);
-                node1.downs.extend_from_slice(&node2.downs[0..]);
-                self.idx_file.delete_node(node2)?;
+                node1_
+                    .get_mut()
+                    .keys_extend_from_node(&node2_.get_ref(), 0);
+                node1_
+                    .get_mut()
+                    .downs_extend_from_node(&node2_.get_ref(), 0);
+                self.idx_file.delete_node(node2_)?;
                 //
-                node.keys.remove(i);
-                node.downs.remove(j);
+                node_.get_mut().keys_remove(i);
+                node_.get_mut().downs_remove(j);
                 //
-                let node1 = self.write_node(node1)?;
-                node.downs[i] = node1.offset;
+                let node1_ = self.write_node(node1_)?;
+                node_.get_mut().downs_set(i, node1_.get_ref().offset());
             } else {
                 let key_offset3 =
-                    self.move_a_node_from_right_to_left(key_offset2, &mut node1, &mut node2);
-                node.keys[i] = key_offset3;
-                let node2 = self.write_node(node2)?;
-                let node1 = self.write_node(node1)?;
-                node.downs[j] = node2.offset;
-                node.downs[i] = node1.offset;
+                    self.move_a_node_from_right_to_left(key_offset2, &mut node1_, &mut node2_);
+                node_.get_mut().keys_set(i, key_offset3);
+                let node2_ = self.write_node(node2_)?;
+                let node1_ = self.write_node(node1_)?;
+                node_.get_mut().downs_set(j, node2_.get_ref().offset());
+                node_.get_mut().downs_set(i, node1_.get_ref().offset());
             }
-            let new_node = self.write_node(node)?;
-            return Ok(new_node);
+            let new_node_ = self.write_node(node_)?;
+            return Ok(new_node_);
         }
-        Ok(node)
+        Ok(node_)
     }
-    fn balance_right(&mut self, mut node: idx::IdxNode, j: usize) -> Result<idx::IdxNode> {
-        let node_offset1 = node.downs[j];
+    fn balance_right(&mut self, mut node_: IdxNode, j: usize) -> Result<IdxNode> {
+        let node_offset1 = node_.get_ref().downs_get(j);
         if node_offset1.is_zero() {
-            return Ok(node);
+            return Ok(node_);
         }
-        let mut node1 = self.idx_file.read_node(node_offset1)?;
-        if !node1.is_active_on_delete() {
-            return Ok(node);
+        let mut node1_ = self.idx_file.read_node(node_offset1)?;
+        if !node1_.is_active_on_delete() {
+            return Ok(node_);
         }
         let i = j - 1;
-        let key_offset2 = node.keys[i];
-        let node_offset2 = node.downs[i];
+        let key_offset2 = node_.get_ref().keys_get(i);
+        let node_offset2 = node_.get_ref().downs_get(i);
         debug_assert!(!node_offset2.is_zero());
         if !node_offset2.is_zero() {
-            let mut node2 = self.idx_file.read_node(node_offset2)?;
-            if node2.downs.len() == idx::NODE_SLOTS_MAX_HALF as usize {
+            let mut node2_ = self.idx_file.read_node(node_offset2)?;
+            if node2_.get_ref().downs_len() == idx::NODE_SLOTS_MAX_HALF as usize {
                 // unification
-                node2.keys.push(key_offset2);
+                node2_.get_mut().keys_push(key_offset2);
                 //
-                node2.keys.extend_from_slice(&node1.keys[0..]);
-                node2.downs.extend_from_slice(&node1.downs[0..]);
-                self.idx_file.delete_node(node1)?;
+                node2_
+                    .get_mut()
+                    .keys_extend_from_node(&node1_.get_ref(), 0);
+                node2_
+                    .get_mut()
+                    .downs_extend_from_node(&node1_.get_ref(), 0);
+                self.idx_file.delete_node(node1_)?;
                 //
-                node.keys.remove(i);
-                node.downs.remove(j);
+                node_.get_mut().keys_remove(i);
+                node_.get_mut().downs_remove(j);
                 //
-                let node2 = self.write_node(node2)?;
-                node.downs[i] = node2.offset;
+                let node2_ = self.write_node(node2_)?;
+                node_.get_mut().downs_set(i, node2_.get_ref().offset());
             } else {
-                let key_offset3 = self.move_left_right(key_offset2, &mut node2, &mut node1);
-                node.keys[i] = key_offset3;
-                let node1 = self.write_node(node1)?;
-                let node2 = self.write_node(node2)?;
-                node.downs[j] = node1.offset;
-                node.downs[i] = node2.offset;
+                let key_offset3 = self.move_left_right(key_offset2, &mut node2_, &mut node1_);
+                node_.get_mut().keys_set(i, key_offset3);
+                let node1_ = self.write_node(node1_)?;
+                let node2_ = self.write_node(node2_)?;
+                node_.get_mut().downs_set(j, node1_.get_ref().offset());
+                node_.get_mut().downs_set(i, node2_.get_ref().offset());
             }
-            let new_node = self.write_node(node)?;
-            return Ok(new_node);
+            let new_node_ = self.write_node(node_)?;
+            return Ok(new_node_);
         }
-        Ok(node)
+        Ok(node_)
     }
     fn move_a_node_from_right_to_left(
         &mut self,
         record_offset: RecordOffset,
-        node_l: &mut idx::IdxNode,
-        node_r: &mut idx::IdxNode,
+        node_l: &mut IdxNode,
+        node_r: &mut IdxNode,
     ) -> RecordOffset {
-        node_l.keys.push(record_offset);
-        node_l.downs.push(node_r.downs.remove(0));
-        node_r.keys.remove(0)
+        node_l.get_mut().keys_push(record_offset);
+        node_l
+            .get_mut()
+            .downs_push(node_r.get_mut().downs_remove(0));
+        node_r.get_mut().keys_remove(0)
     }
     fn move_left_right(
         &mut self,
         record_offset: RecordOffset,
-        node_l: &mut idx::IdxNode,
-        node_r: &mut idx::IdxNode,
+        node_l: &mut IdxNode,
+        node_r: &mut IdxNode,
     ) -> RecordOffset {
-        let j = node_l.keys.len();
+        let j = node_l.get_ref().keys_len();
         let i = j - 1;
-        node_r.keys.insert(0, record_offset);
-        node_r.downs.insert(0, node_l.downs.remove(j));
-        node_l.keys.remove(i)
+        node_r.get_mut().keys_insert(0, record_offset);
+        node_r
+            .get_mut()
+            .downs_insert(0, node_l.get_mut().downs_remove(j));
+        node_l.get_mut().keys_remove(i)
     }
     #[inline]
-    fn trim(&self, node: idx::IdxNode) -> Result<idx::IdxNode> {
-        if node.downs.len() == 1 {
-            let node_offset1 = node.downs[0];
+    fn trim(&self, node_: IdxNode) -> Result<IdxNode> {
+        if node_.get_ref().downs_len() == 1 {
+            let node_offset1 = node_.get_ref().downs_get(0);
             if !node_offset1.is_zero() {
-                let node1 = self.idx_file.read_node(node_offset1)?;
-                self.idx_file.delete_node(node)?;
-                return Ok(node1);
+                let node1_ = self.idx_file.read_node(node_offset1)?;
+                self.idx_file.delete_node(node_)?;
+                return Ok(node1_);
             }
         }
-        Ok(node)
+        Ok(node_)
     }
 }
 
 // find: NEW
 impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
-    fn find_in_node_tree<Q>(&mut self, node: &mut idx::IdxNode, key: &Q) -> Result<Option<Vec<u8>>>
+    fn find_in_node_tree<Q>(&mut self, node_: &mut IdxNode, key: &Q) -> Result<Option<Vec<u8>>>
     where
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        if node.keys.is_empty() {
-            return Ok(None);
-        }
-        let r = self.keys_binary_search(node, key)?;
+        let r = {
+            let node = node_.get_ref();
+            if node.keys_is_empty() {
+                return Ok(None);
+            }
+            self.keys_binary_search(&node, key)?
+        };
         match r {
             Ok(k) => {
-                let key_offset = unsafe { *node.keys.get_unchecked(k) };
-                //let key_offset = node.keys[k];
+                let key_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //let key_offset = node_.get_ref().keys[k];
                 debug_assert!(key_offset != RecordOffset::new(0));
                 self.load_value(key_offset).map(Some)
             }
             Err(k) => {
-                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
-                //let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { node_.get_ref().downs_get_unchecked(k) };
+                //let node_offset1 = node_.get_ref().downs[k];
                 if !node_offset1.is_zero() {
-                    let mut node1 = self.idx_file.read_node(node_offset1)?;
-                    self.find_in_node_tree(&mut node1, key)
+                    let mut node1_ = self.idx_file.read_node(node_offset1)?;
+                    self.find_in_node_tree(&mut node1_, key)
                 } else {
                     Ok(None)
                 }
             }
         }
     }
-    fn has_key_in_node_tree<Q>(&mut self, node: &mut idx::IdxNode, key: &Q) -> Result<bool>
+    fn has_key_in_node_tree<Q>(&mut self, node_: &mut IdxNode, key: &Q) -> Result<bool>
     where
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        if node.keys.is_empty() {
-            return Ok(false);
-        }
-        let r = self.keys_binary_search(node, key)?;
+        let r = {
+            let node = node_.get_ref();
+            if node.keys_is_empty() {
+                return Ok(false);
+            }
+            self.keys_binary_search(&node, key)?
+        };
         match r {
             Ok(_k) => Ok(true),
             Err(k) => {
-                let node_offset1 = unsafe { *node.downs.get_unchecked(k) };
-                //let node_offset1 = node.downs[k];
+                let node_offset1 = unsafe { node_.get_ref().downs_get_unchecked(k) };
+                //let node_offset1 = node_.get_ref().downs[k];
                 if !node_offset1.is_zero() {
-                    let mut node1 = self.idx_file.read_node(node_offset1)?;
-                    self.has_key_in_node_tree(&mut node1, key)
+                    let mut node1_ = self.idx_file.read_node(node_offset1)?;
+                    self.has_key_in_node_tree(&mut node1_, key)
                 } else {
                     Ok(false)
                 }
@@ -614,10 +634,10 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         Q: Ord + ?Sized,
     {
         let top_node = self.idx_file.read_top_node()?;
-        let top_node_offset = top_node.offset;
+        let top_node_offset = top_node.get_ref().offset();
         let top_node = self.delete_from_node_tree(top_node, key)?;
         let new_top_node = self.trim(top_node)?;
-        if top_node_offset != new_top_node.offset {
+        if top_node_offset != new_top_node.get_ref().offset() {
             self.idx_file.write_top_node(new_top_node)?;
         }
         Ok(())

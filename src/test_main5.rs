@@ -1,4 +1,4 @@
-use siamesedb::filedb::{FileBufSizeParam, FileDbParams};
+use siamesedb::filedb::{FileBufSizeParam, FileDbMapString, FileDbParams};
 use siamesedb::DbXxx;
 
 fn main() -> Result<(), std::io::Error> {
@@ -85,19 +85,7 @@ fn _test_gen_check(db_name: &str) -> Result<(), std::io::Error> {
             break;
         }
         if i % 10_000 == 0 {
-            let keys: Vec<&String> = key_vec.iter().map(|a| a).collect();
-            let result = db_map.bulk_get_string(&keys)?;
-            //
-            for (idx, answer) in result.iter().enumerate() {
-                if let Some(answer) = answer {
-                    let correct = &value_vec[idx];
-                    if answer != correct {
-                        panic!("invalid value: {:?} != {:?}", answer, correct);
-                    }
-                } else {
-                    panic!("not found value: {} => {}", key_vec[idx], value_vec[idx]);
-                }
-            }
+            _test_gen_check_one(&mut db_map, &key_vec, &value_vec)?;
             //
             key_vec.clear();
             value_vec.clear();
@@ -107,34 +95,33 @@ fn _test_gen_check(db_name: &str) -> Result<(), std::io::Error> {
         let correct = format!("val-{}", i);
         key_vec.push(k);
         value_vec.push(correct);
-        /*
-        let answer = db_map.get_string(&k)?;
+    }
+    if !key_vec.is_empty() {
+        _test_gen_check_one(&mut db_map, &key_vec, &value_vec)?;
+        //
+        key_vec.clear();
+        value_vec.clear();
+    }
+    Ok(())
+}
+
+fn _test_gen_check_one(
+    db_map: &mut FileDbMapString,
+    key_vec: &[String],
+    value_vec: &[String],
+) -> Result<(), std::io::Error> {
+    let keys: Vec<&String> = key_vec.iter().collect();
+    let result = db_map.bulk_get_string(&keys)?;
+    //
+    for (idx, answer) in result.iter().enumerate() {
         if let Some(answer) = answer {
+            let correct = &value_vec[idx];
             if answer != correct {
                 panic!("invalid value: {:?} != {:?}", answer, correct);
             }
         } else {
-            panic!("not found value: {} => {}", k, correct);
+            panic!("not found value: {} => {}", key_vec[idx], value_vec[idx]);
         }
-        */
-    }
-    if !key_vec.is_empty() {
-        let keys: Vec<&String> = key_vec.iter().map(|a| a).collect();
-        let result = db_map.bulk_get_string(&keys)?;
-        //
-        for (idx, answer) in result.iter().enumerate() {
-            if let Some(answer) = answer {
-                let correct = &value_vec[idx];
-                if answer != correct {
-                    panic!("invalid value: {:?} != {:?}", answer, correct);
-                }
-            } else {
-                panic!("not found value: {} => {}", key_vec[idx], value_vec[idx]);
-            }
-        }
-        //
-        key_vec.clear();
-        value_vec.clear();
     }
     Ok(())
 }

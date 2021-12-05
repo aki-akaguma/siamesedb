@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 pub(crate) mod dbxxx;
 pub(crate) mod semtype;
 
+mod offidx;
+mod tr;
+
 mod dat;
 mod idx;
 mod vfile;
