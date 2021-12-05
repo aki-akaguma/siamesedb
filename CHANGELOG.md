@@ -2,6 +2,10 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.11 (2021-12-05)
+=====
+
+* refactoring node.
 * adds `FileBufSizeParam`.
 * adds `buf_auto_buf_size` to features
 * changes max node slots for best performance.
