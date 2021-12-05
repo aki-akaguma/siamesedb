@@ -70,11 +70,11 @@ test_large_data = []
 small_node_slots = []
 
 [dependencies]
-#rabuf = { version = "0.1", default-features=false }
+rabuf = { version = "0.1", default-features=false }
 vu64 = "0.1"
 #rabuf = { git = "https://github.com/aki-akaguma/rabuf" }
 #vu64 = { git = "https://github.com/aki-akaguma/vu64" }
-rabuf = { path = "../rabuf", default-features=false }
+#rabuf = { path = "../rabuf", default-features=false }
 #vu64 = { path = "../vu64" }
 
 [dev-dependencies]
