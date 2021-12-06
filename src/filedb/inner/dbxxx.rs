@@ -1,5 +1,7 @@
 use super::super::super::DbXxx;
-use super::super::{CheckFileDbMap, CountOfPerSize, FileDbNode, FileDbParams, RecordSizeStats, KeysCountStats};
+use super::super::{
+    CheckFileDbMap, CountOfPerSize, FileDbNode, FileDbParams, KeysCountStats, RecordSizeStats,
+};
 use super::semtype::*;
 use super::tr::{IdxNode, TreeNode};
 use super::{dat, idx};
@@ -151,7 +153,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         }
         Ok(Err(left))
     }
-    
+
     #[cfg(feature = "node_dm32")]
     fn load_node_keys_len(&mut self, node_offset: NodeOffset) -> Result<usize> {
         self.idx_file.read_node_keys_len(node_offset)
@@ -164,7 +166,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     fn load_node_downs_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<NodeOffset> {
         self.idx_file.read_node_downs_get(node_offset, idx)
     }
-    
+
     #[cfg(feature = "node_dm32")]
     fn keys_binary_search_offset<Q>(
         &mut self,
@@ -210,7 +212,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         }
         Ok(Err(left))
     }
-    
+
     #[inline]
     fn write_node(&mut self, node: IdxNode) -> Result<IdxNode> {
         self.dirty = true;
@@ -283,8 +285,7 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp
     }
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats> {
-        self.idx_file
-            .keys_count_stats()
+        self.idx_file.keys_count_stats()
     }
 }
 
@@ -364,7 +365,9 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         node_
             .get_mut()
             .keys_insert(i, active_node_.get_ref().keys_get(0));
-        node_.get_mut().downs_set(i, active_node_.get_ref().downs_get(1));
+        node_
+            .get_mut()
+            .downs_set(i, active_node_.get_ref().downs_get(1));
         node_
             .get_mut()
             .downs_insert(i, active_node_.get_ref().downs_get(0));
@@ -383,8 +386,12 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         debug_assert!(node_.get_ref().keys_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
         debug_assert!(node_.get_ref().downs_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
         let mut node1_ = IdxNode::new(NodeOffset::new(0));
-        node1_.get_mut().keys_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
-        node1_.get_mut().downs_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
+        node1_
+            .get_mut()
+            .keys_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
+        node1_
+            .get_mut()
+            .downs_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
         //
         node_
             .get_mut()
@@ -502,9 +509,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
                 // unification
                 node1_.get_mut().keys_push(key_offset2);
                 //
-                node1_
-                    .get_mut()
-                    .keys_extend_from_node(&node2_.get_ref(), 0);
+                node1_.get_mut().keys_extend_from_node(&node2_.get_ref(), 0);
                 node1_
                     .get_mut()
                     .downs_extend_from_node(&node2_.get_ref(), 0);
@@ -548,9 +553,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
                 // unification
                 node2_.get_mut().keys_push(key_offset2);
                 //
-                node2_
-                    .get_mut()
-                    .keys_extend_from_node(&node1_.get_ref(), 0);
+                node2_.get_mut().keys_extend_from_node(&node1_.get_ref(), 0);
                 node2_
                     .get_mut()
                     .downs_extend_from_node(&node1_.get_ref(), 0);
@@ -649,7 +652,11 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         }
     }
     #[cfg(feature = "node_dm32")]
-    fn find_in_node_tree_offset<Q>(&mut self, node_offset: NodeOffset, key: &Q) -> Result<Option<Vec<u8>>>
+    fn find_in_node_tree_offset<Q>(
+        &mut self,
+        node_offset: NodeOffset,
+        key: &Q,
+    ) -> Result<Option<Vec<u8>>>
     where
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,

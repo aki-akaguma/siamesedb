@@ -10,7 +10,7 @@ use std::io::{Read, Result, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-use super::super::{RecordSizeStats, KeysCountStats};
+use super::super::{KeysCountStats, RecordSizeStats};
 
 type HeaderSignature = [u8; 8];
 
@@ -1346,7 +1346,7 @@ impl VarFileNodeCache {
         if !is_new {
             #[cfg(not(feature = "node_cache"))]
             let old_node_size = {
-                self.0.seek_from_start(node_.get_ref().offset)?;
+                self.0.seek_from_start(node_.get_ref().offset())?;
                 self.0.read_node_size()?
             };
             #[cfg(feature = "node_cache")]
@@ -1362,7 +1362,7 @@ impl VarFileNodeCache {
                 // over writes.
                 #[cfg(not(feature = "node_cache"))]
                 {
-                    node_.get_mut().size = old_node_size;
+                    node_.get_mut().set_size(old_node_size);
                     node_.idx_write_node_one(&mut self.0)?;
                     return Ok(node_);
                 }
@@ -1442,7 +1442,7 @@ impl VarFileNodeCache {
                     .read_record_offset()
                     .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
                 debug_assert!(!record_offset.is_zero());
-                node.keys.push(record_offset);
+                node.keys_push(record_offset);
             }
             for _i in 0..(keys_count + 1) {
                 let node_offset = self
@@ -1455,7 +1455,7 @@ impl VarFileNodeCache {
                     node_offset,
                     offset.as_value()
                 );
-                node.downs.push(node_offset);
+                node.downs_push(node_offset);
             }
         }
         debug_assert!(_start_pos + node_size >= self.0.seek_position()?);
@@ -1512,7 +1512,7 @@ impl VarFileNodeCache {
         //
         Ok(node_)
     }
-    
+
     #[cfg(feature = "node_dm32")]
     fn read_node_keys_len(&mut self, offset: NodeOffset) -> Result<usize> {
         debug_assert!(!offset.is_zero());
@@ -1607,7 +1607,8 @@ impl VarFileNodeCache {
             return Ok(NodeOffset::new(0));
         }
         //
-        self.0.seek_skip_size(NodeSize::new(4 * keys_count as u32 + 8 * idx as u32))?;
+        self.0
+            .seek_skip_size(NodeSize::new(4 * keys_count as u32 + 8 * idx as u32))?;
         let node_offset = self
             .0
             .read_node_offset()
@@ -1629,7 +1630,12 @@ const GRAPH_NODE_ED: &str = "v";
 impl VarFileNodeCache {
     fn graph_string(&mut self, head: &str, node_: &IdxNode) -> Result<String> {
         let node = node_.get_ref();
-        let mut gs = format!("{}{}:{:04x}\n", head, GRAPH_NODE_ST, node.offset().as_value());
+        let mut gs = format!(
+            "{}{}:{:04x}\n",
+            head,
+            GRAPH_NODE_ST,
+            node.offset().as_value()
+        );
         let mut i = node.downs_len() - 1;
         let node_offset = node.downs_get(i);
         if !node_offset.is_zero() {
@@ -1814,8 +1820,7 @@ impl VarFileNodeCache {
         &mut self,
         node_: &IdxNode,
         keys_vec: &mut KeysCountStats,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let node = node_.get_ref();
         let mut i = node.downs_len() - 1;
         let node_offset = node.downs_get(i);

@@ -57,10 +57,7 @@ fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
             "record_size_stats(): {}",
             db_map.record_size_stats().unwrap()
         );
-        println!(
-            "keys_count_stats(): {}",
-            db_map.keys_count_stats().unwrap()
-        );
+        println!("keys_count_stats(): {}", db_map.keys_count_stats().unwrap());
     }
     if check_cnf.f_mst {
         println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());

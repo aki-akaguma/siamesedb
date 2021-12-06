@@ -171,6 +171,16 @@ pub trait DbXxx<KT> {
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
+        /*
+        let mut vec = Vec::with_capacity(bulk_keys.len());
+        for a in bulk_keys {
+            let value = self.get(a)?;
+            vec.push(value);
+        }
+        Ok(vec)
+        */
+        /*
+        */
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();

@@ -33,6 +33,8 @@ pub struct KeyCache<KT> {
     #[cfg(feature = "kc_hash")]
     cache: HashMap<RecordOffset, KeyCacheBean<KT>>,
     cache_size: usize,
+    offset_high: RecordOffset,
+    offset_low: RecordOffset,
     #[cfg(feature = "kc_lru")]
     uses_cnt: u32,
 }
@@ -48,6 +50,8 @@ impl<KT> KeyCache<KT> {
             #[cfg(feature = "kc_hash")]
             cache: HashMap::with_capacity(cache_size),
             cache_size,
+            offset_high: RecordOffset::new(0),
+            offset_low: RecordOffset::new(0),
             #[cfg(feature = "kc_lru")]
             uses_cnt: 0,
         }
@@ -186,6 +190,12 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
         self.cache.len()
     }
     fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>> {
+        if self.cache.is_empty() {
+            return None;
+        }
+        if *offset > self.offset_high || *offset < self.offset_low {
+            return None;
+        }
         #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
@@ -222,6 +232,14 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
                 let r = Rc::new(key);
                 self.cache.insert(k, KeyCacheBean::new(*offset, r.clone()));
                 self.touch(k);
+                //
+                if *offset > self.offset_high {
+                    self.offset_high = *offset;
+                }
+                if *offset < self.offset_low {
+                    self.offset_low = *offset;
+                }
+                //
                 r
             }
         }
@@ -245,10 +263,21 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
         }
     }
     fn delete(&mut self, offset: &RecordOffset) {
+        if *offset > self.offset_high || *offset < self.offset_low {
+            return;
+        }
         #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 let _kcb = self.cache.remove(k);
+                if self.cache.is_empty() {
+                    self.offset_high = RecordOffset::new(0);
+                    self.offset_low = RecordOffset::new(0);
+                } else if *offset == self.offset_high {
+                        self.offset_low = self.cache.last().unwrap().record_offset;
+                } else if *offset == self.offset_low {
+                    self.offset_low = self.cache.first().unwrap().record_offset;
+                }
             }
             Err(_k) => (),
         }
@@ -257,6 +286,10 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
     }
     fn clear(&mut self) {
         self.cache.clear();
+        //
+        self.offset_high = RecordOffset::new(0);
+        self.offset_low = RecordOffset::new(0);
+        //
         #[cfg(feature = "kc_lru")]
         {
             self.uses_cnt = 0;

@@ -22,7 +22,7 @@ fn test01(db_name: &str) -> std::io::Result<()> {
     _print_check_db_map(
         &db_map,
         CheckC {
-            check: true,
+            _check: true,
             ..Default::default()
         },
     );
@@ -32,7 +32,7 @@ fn test01(db_name: &str) -> std::io::Result<()> {
 
 #[derive(Debug, Default, Clone, Copy)]
 struct CheckC {
-    check: bool,
+    _check: bool,
     f_mst: bool,
     f_graph: bool,
 }

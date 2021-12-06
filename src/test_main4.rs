@@ -136,7 +136,7 @@ fn test_fixtures_fruits() {
         _print_check_db_map(
             &db_map,
             CheckC {
-                check: true,
+                _check: true,
                 ..Default::default()
             },
         );
@@ -156,7 +156,7 @@ fn test_fixtures_fruits() {
         _print_check_db_map(
             &db_map,
             CheckC {
-                check: true,
+                _check: true,
                 ..Default::default()
             },
         );
@@ -186,8 +186,8 @@ fn test_fixtures_fruits() {
 
 #[derive(Debug, Default, Clone, Copy)]
 struct CheckC {
-    check: bool,
-    f_depth: bool,
+    _check: bool,
+    _f_depth: bool,
     f_mst: bool,
     f_graph: bool,
 }

@@ -468,7 +468,6 @@ impl std::fmt::Display for RecordSizeStats {
     }
 }
 
-
 /// record size statistics.
 #[derive(Debug, Default)]
 pub struct KeysCountStats(Vec<(KeysCount, u64)>);
