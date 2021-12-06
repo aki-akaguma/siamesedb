@@ -257,6 +257,10 @@ impl CheckFileDbMap for FileDbMapString {
     fn record_size_stats(&self) -> Result<RecordSizeStats> {
         RefCell::borrow(&self.0).record_size_stats()
     }
+    /// keys count statistics
+    fn keys_count_stats(&self) -> Result<KeysCountStats> {
+        RefCell::borrow(&self.0).keys_count_stats()
+    }
 }
 
 impl DbXxx<String> for FileDbMapString {
@@ -361,6 +365,10 @@ impl CheckFileDbMap for FileDbMapU64 {
     fn record_size_stats(&self) -> Result<RecordSizeStats> {
         RefCell::borrow(&self.0).record_size_stats()
     }
+    /// keys count statistics
+    fn keys_count_stats(&self) -> Result<KeysCountStats> {
+        RefCell::borrow(&self.0).keys_count_stats()
+    }
 }
 
 impl DbXxx<u64> for FileDbMapU64 {
@@ -418,6 +426,8 @@ pub trait CheckFileDbMap {
     fn buf_stats(&self) -> Vec<(String, i64)>;
     /// record size statistics
     fn record_size_stats(&self) -> Result<RecordSizeStats>;
+    /// keys count statistics
+    fn keys_count_stats(&self) -> Result<KeysCountStats>;
 }
 
 /// record size statistics.
@@ -441,6 +451,45 @@ impl RecordSizeStats {
 }
 
 impl std::fmt::Display for RecordSizeStats {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("[")?;
+        if self.0.len() > 1 {
+            for (a, b) in self.0.iter().take(self.0.len() - 1) {
+                formatter.write_fmt(format_args!("({}, {})", a, b))?;
+                formatter.write_str(", ")?;
+            }
+        }
+        if !self.0.is_empty() {
+            let (a, b) = self.0[self.0.len() - 1];
+            formatter.write_fmt(format_args!("({}, {})", a, b))?;
+        }
+        formatter.write_str("]")?;
+        Ok(())
+    }
+}
+
+
+/// record size statistics.
+#[derive(Debug, Default)]
+pub struct KeysCountStats(Vec<(KeysCount, u64)>);
+
+impl KeysCountStats {
+    pub fn new(vec: Vec<(KeysCount, u64)>) -> Self {
+        Self(vec)
+    }
+    pub fn touch_size(&mut self, keys_count: KeysCount) {
+        match self.0.binary_search_by_key(&keys_count, |&(a, _b)| a) {
+            Ok(sz_idx) => {
+                self.0[sz_idx].1 += 1;
+            }
+            Err(sz_idx) => {
+                self.0.insert(sz_idx, (keys_count, 1));
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for KeysCountStats {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("[")?;
         if self.0.len() > 1 {

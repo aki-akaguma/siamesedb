@@ -50,10 +50,13 @@ buf_overf_rem_all = ["rabuf/buf_overf_rem_all"]
 buf_overf_rem_half = ["rabuf/buf_overf_rem_half"]
 buf_lru = ["rabuf/buf_lru"]
 buf_stats = ["rabuf/buf_stats"]
-buf_idx_btreemap = ["rabuf/buf_idx_btreemap"]
 
 key_cache = []
 node_cache = []
+
+# under development
+buf_idx_btreemap = ["rabuf/buf_idx_btreemap"]
+
 record_cache = []
 
 kc_hash = []
@@ -64,6 +67,7 @@ nc_lru = []
 nc_lfu = []
 
 offidx_btreemap = []
+node_dm32 = []
 
 # for test
 test_large_data = []

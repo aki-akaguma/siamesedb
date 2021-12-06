@@ -78,6 +78,15 @@ impl VarFile {
         self.seek(SeekFrom::Current(val as i64))
             .map(Offset::<T>::new)
     }
+    #[cfg(feature = "node_dm32")]
+    pub fn seek_skip_size<T: PartialEq + Copy>(
+        &mut self,
+        size: Size<T>,
+    ) -> Result<Offset<T>> {
+        let val: u32 = size.into();
+        self.seek(SeekFrom::Current(val as i64))
+            .map(Offset::<T>::new)
+    }
     pub fn seek_to_end<T>(&mut self) -> Result<Offset<T>> {
         self.seek(SeekFrom::End(0)).map(Offset::<T>::new)
     }
@@ -176,6 +185,22 @@ impl VarFile {
     }
 }
 
+#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64", feature = "node_dm32"))]
+impl VarFile {
+    #[inline]
+    pub fn read_u32_le(&mut self) -> Result<u32> {
+        let mut buf = [0; 4];
+        self.read_exact(&mut buf)?;
+        Ok(u32::from_le_bytes(buf))
+    }
+    #[inline]
+    pub fn write_u32_le(&mut self, value: u32) -> Result<()> {
+        let mut buf = [0; 4];
+        buf[0..].copy_from_slice(&value.to_le_bytes());
+        self.write_all(&buf)
+    }
+}
+
 #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
 impl VarFile {
     #[inline]
@@ -197,18 +222,6 @@ impl VarFile {
     #[inline]
     pub fn write_u16_le(&mut self, value: u16) -> Result<()> {
         let mut buf = [0; 2];
-        buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
-    }
-    #[inline]
-    pub fn read_u32_le(&mut self) -> Result<u32> {
-        let mut buf = [0; 4];
-        self.read_exact(&mut buf)?;
-        Ok(u32::from_le_bytes(buf))
-    }
-    #[inline]
-    pub fn write_u32_le(&mut self, value: u32) -> Result<()> {
-        let mut buf = [0; 4];
         buf[0..].copy_from_slice(&value.to_le_bytes());
         self.write_all(&buf)
     }
@@ -420,6 +433,7 @@ impl VarFile {
                 .unwrap_or_else(|err| panic!("n:{} :{}", n, err))
         })
     }
+    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn read_vu64_u64(&mut self) -> Result<u64> {
         self.read_and_decode_vu64()
@@ -432,6 +446,7 @@ impl VarFile {
     pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
         self.encode_and_write_vu64(value.into())
     }
+    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
         self.encode_and_write_vu64(value)
@@ -473,13 +488,25 @@ impl VarFile {
     pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
         self.write_vu64_u32(record_size.into())
     }
+    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
         self.read_vu64_u64().map(RecordOffset::new)
     }
+    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
         self.write_vu64_u64(record_offset.into())
+    }
+    #[cfg(feature = "node_dm32")]
+    #[inline]
+    pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
+        self.read_u32_le().map(|a| RecordOffset::new(a.into()))
+    }
+    #[cfg(feature = "node_dm32")]
+    #[inline]
+    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+        self.write_u32_le(record_offset.as_value().try_into().unwrap())
     }
     //
     #[inline]
@@ -490,13 +517,25 @@ impl VarFile {
     pub fn write_free_node_offset(&mut self, offset: NodeOffset) -> Result<()> {
         self.write_u64_le(offset.into())
     }
+    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
         self.read_vu64_u64().map(NodeOffset::new)
     }
+    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
         self.write_vu64_u64(node_offset.into())
+    }
+    #[cfg(feature = "node_dm32")]
+    #[inline]
+    pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
+        self.read_u64_le().map(NodeOffset::new)
+    }
+    #[cfg(feature = "node_dm32")]
+    #[inline]
+    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
+        self.write_u64_le(node_offset.into())
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {

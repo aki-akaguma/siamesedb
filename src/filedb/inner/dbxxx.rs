@@ -1,5 +1,5 @@
 use super::super::super::DbXxx;
-use super::super::{CheckFileDbMap, CountOfPerSize, FileDbNode, FileDbParams, RecordSizeStats};
+use super::super::{CheckFileDbMap, CountOfPerSize, FileDbNode, FileDbParams, RecordSizeStats, KeysCountStats};
 use super::semtype::*;
 use super::tr::{IdxNode, TreeNode};
 use super::{dat, idx};
@@ -106,6 +106,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
     fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
         self.dat_file.read_record_only_size(record_offset)
     }
+
     fn keys_binary_search<Q>(
         &mut self,
         node: &TreeNode,
@@ -150,6 +151,66 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         }
         Ok(Err(left))
     }
+    
+    #[cfg(feature = "node_dm32")]
+    fn load_node_keys_len(&mut self, node_offset: NodeOffset) -> Result<usize> {
+        self.idx_file.read_node_keys_len(node_offset)
+    }
+    #[cfg(feature = "node_dm32")]
+    fn load_node_keys_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<RecordOffset> {
+        self.idx_file.read_node_keys_get(node_offset, idx)
+    }
+    #[cfg(feature = "node_dm32")]
+    fn load_node_downs_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<NodeOffset> {
+        self.idx_file.read_node_downs_get(node_offset, idx)
+    }
+    
+    #[cfg(feature = "node_dm32")]
+    fn keys_binary_search_offset<Q>(
+        &mut self,
+        node_offset: NodeOffset,
+        key: &Q,
+    ) -> Result<std::result::Result<usize, usize>>
+    where
+        KT: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        /*
+        match node.keys.binary_search_by(|&key_offset| {
+            debug_assert!(!key_offset.is_zero());
+            let key_string = self.load_key_string(key_offset).unwrap();
+            key_string.as_ref().borrow().cmp(key)
+        }) {
+            Ok(k) => Ok(Ok(k)),
+            Err(k) => Ok(Err(k)),
+        }
+        */
+        /*
+         */
+        let mut left = 0;
+        let mut right = self.load_node_keys_len(node_offset)?;
+        while left < right {
+            //let mid = left + (right - left) / 2;
+            let mid = (left + right) / 2;
+            //
+            // SAFETY: `mid` is limited by `[left; right)` bound.
+            let key_offset = self.load_node_keys_get(node_offset, mid)?;
+            //let key_offset = node.keys[mid];
+            //
+            debug_assert!(key_offset != RecordOffset::new(0));
+            let key_string = self.load_key_string(key_offset)?;
+            //
+            match key.cmp(key_string.as_ref().borrow()) {
+                Ordering::Greater => left = mid + 1,
+                Ordering::Less => right = mid,
+                Ordering::Equal => {
+                    return Ok(Ok(mid));
+                }
+            }
+        }
+        Ok(Err(left))
+    }
+    
     #[inline]
     fn write_node(&mut self, node: IdxNode) -> Result<IdxNode> {
         self.dirty = true;
@@ -219,6 +280,11 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp
     fn record_size_stats(&self) -> Result<RecordSizeStats> {
         self.idx_file
             .record_size_stats(|off| self.load_record_size(off))
+    }
+    /// keys count statistics
+    fn keys_count_stats(&self) -> Result<KeysCountStats> {
+        self.idx_file
+            .keys_count_stats()
     }
 }
 
@@ -550,6 +616,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
 
 // find: NEW
 impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
+    #[cfg(not(feature = "node_dm32"))]
     fn find_in_node_tree<Q>(&mut self, node_: &mut IdxNode, key: &Q) -> Result<Option<Vec<u8>>>
     where
         KT: Borrow<Q> + Ord,
@@ -575,6 +642,36 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
                 if !node_offset1.is_zero() {
                     let mut node1_ = self.idx_file.read_node(node_offset1)?;
                     self.find_in_node_tree(&mut node1_, key)
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+    #[cfg(feature = "node_dm32")]
+    fn find_in_node_tree_offset<Q>(&mut self, node_offset: NodeOffset, key: &Q) -> Result<Option<Vec<u8>>>
+    where
+        KT: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        let r = {
+            if self.load_node_keys_len(node_offset)? == 0 {
+                return Ok(None);
+            }
+            self.keys_binary_search_offset(node_offset, key)?
+        };
+        match r {
+            Ok(k) => {
+                let key_offset = self.load_node_keys_get(node_offset, k)?;
+                //let key_offset = node_.get_ref().keys[k];
+                debug_assert!(key_offset != RecordOffset::new(0));
+                self.load_value(key_offset).map(Some)
+            }
+            Err(k) => {
+                let node_offset1 = self.load_node_downs_get(node_offset, k)?;
+                //let node_offset1 = node_.get_ref().downs[k];
+                if !node_offset1.is_zero() {
+                    self.find_in_node_tree_offset(node_offset1, key)
                 } else {
                     Ok(None)
                 }
@@ -615,8 +712,18 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        let mut top_node = self.idx_file.read_top_node()?;
-        self.find_in_node_tree(&mut top_node, key)
+        #[cfg(not(feature = "node_dm32"))]
+        {
+            let mut top_node = self.idx_file.read_top_node()?;
+            self.find_in_node_tree(&mut top_node, key)
+        }
+        #[cfg(feature = "node_dm32")]
+        {
+            self.flush()?;
+            let top_node = self.idx_file.read_top_node()?;
+            let node_offset = top_node.get_ref().offset();
+            self.find_in_node_tree_offset(node_offset, key)
+        }
     }
     fn put(&mut self, key: KT, value: &[u8]) -> Result<()>
     where

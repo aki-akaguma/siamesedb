@@ -2,6 +2,8 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* adds `node_dm32` to features.
+
 0.1.11 (2021-12-05)
 =====
 

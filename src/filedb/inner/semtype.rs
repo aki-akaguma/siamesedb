@@ -26,7 +26,7 @@ pub struct Record;
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Node;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Key;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -188,7 +188,7 @@ impl<T> From<Length<T>> for u32 {
 }
 
 /// The count of keys
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Count<T> {
     val: u16,
     _phantom: PhantomData<T>,
