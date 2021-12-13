@@ -1,5 +1,6 @@
 use super::semtype::*;
 use rabuf::BufFile;
+use rabuf::MaybeSlice;
 use rabuf::{FileSetLen, FileSync, SmallWrite};
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
@@ -46,14 +47,17 @@ impl VarFile {
         })
     }
     ///
+    #[inline]
     pub fn sync_all(&mut self) -> Result<()> {
         self.buf_file.sync_all()
     }
     ///
+    #[inline]
     pub fn sync_data(&mut self) -> Result<()> {
         self.buf_file.sync_data()
     }
     ///
+    #[inline]
     pub fn _clear(&mut self) -> Result<()> {
         self.buf_file.clear()
     }
@@ -63,6 +67,7 @@ impl VarFile {
         self.buf_file.buf_stats()
     }
     ///
+    #[inline]
     pub fn seek_from_start<T: PartialEq + Copy>(&mut self, offset: Offset<T>) -> Result<Offset<T>> {
         let pos = self
             .seek(SeekFrom::Start(offset.into()))
@@ -70,6 +75,7 @@ impl VarFile {
         debug_assert!(pos == offset, "_pos: {} == offset: {}", pos, offset);
         Ok(pos)
     }
+    #[inline]
     pub fn seek_skip_length<T: PartialEq + Copy>(
         &mut self,
         length: Length<T>,
@@ -79,29 +85,40 @@ impl VarFile {
             .map(Offset::<T>::new)
     }
     #[cfg(feature = "node_dm32")]
+    #[inline]
     pub fn seek_skip_size<T: PartialEq + Copy>(&mut self, size: Size<T>) -> Result<Offset<T>> {
         let val: u32 = size.into();
         self.seek(SeekFrom::Current(val as i64))
             .map(Offset::<T>::new)
     }
+    #[inline]
     pub fn seek_to_end<T>(&mut self) -> Result<Offset<T>> {
         self.seek(SeekFrom::End(0)).map(Offset::<T>::new)
     }
+    #[inline]
     pub fn seek_position<T>(&mut self) -> Result<Offset<T>> {
         self.seek(SeekFrom::Current(0)).map(Offset::<T>::new)
     }
     ///
+    #[inline]
     pub fn set_file_length<T>(&mut self, file_length: Offset<T>) -> Result<()> {
         self.buf_file.set_len(file_length.into())
     }
+    #[inline]
+    pub fn read_fill_buffer(&mut self) -> Result<()> {
+        self.buf_file.read_fill_buffer()
+    }
     ///
+    #[inline]
     pub fn _write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         self.buf_file.write_all_small(buf)
     }
     ///
+    #[inline]
     pub fn write_zero<T>(&mut self, size: Size<T>) -> Result<()> {
         self.buf_file.write_zero(size.into())
     }
+    #[inline]
     pub fn write_zero_to_offset<T: PartialOrd>(&mut self, offset: Offset<T>) -> Result<()> {
         let start_offset = self.seek_position()?;
         if offset > start_offset {
@@ -112,6 +129,7 @@ impl VarFile {
         }
     }
     ///
+    #[inline]
     pub fn write_node_clear(&mut self, node_offset: NodeOffset, node_size: NodeSize) -> Result<()> {
         debug_assert!(!node_size.is_zero());
         #[cfg(debug_assertions)]
@@ -133,6 +151,7 @@ impl VarFile {
         Ok(())
     }
     ///
+    #[inline]
     pub fn write_record_clear(
         &mut self,
         record_offset: RecordOffset,
@@ -147,21 +166,25 @@ impl VarFile {
 }
 
 impl Read for VarFile {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.buf_file.read(buf)
     }
 }
 
 impl Write for VarFile {
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.buf_file.write(buf)
     }
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.buf_file.flush()
     }
 }
 
 impl Seek for VarFile {
+    #[inline]
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         self.buf_file.seek(pos)
     }
@@ -402,17 +425,80 @@ impl VarFile {
 
 #[cfg(feature = "vf_vu64")]
 impl ReadVu64 for VarFile {
+    #[inline]
     fn read_one_byte(&mut self) -> Result<u8> {
         self.buf_file.read_one_byte()
     }
+    #[inline]
     fn read_exact_max8byte(&mut self, buf: &mut [u8]) -> Result<()> {
         debug_assert!(buf.len() <= 8, "buf.len(): {} <= 8", buf.len());
         self.buf_file.read_exact_small(buf)
+    }
+    /// reads `vu64` bytes and decods it to `u64`
+    #[inline]
+    fn read_and_decode_vu64(&mut self) -> Result<u64> {
+        /*
+        let byte_1st = self.buf_file.read_one_byte()?;
+        let len = vu64::decoded_len(byte_1st);
+        let maybe_slice = self.buf_file.read_exact_maybeslice(len as usize - 1)?;
+        match vu64::decode_with_first_and_follow(len, byte_1st, &maybe_slice) {
+            Ok(i) => Ok(i),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{}", err),
+            )),
+        }
+        */
+        /*
+        let mut buf = [0u8; vu64::MAX_BYTES-1];
+        let byte_1st = self.buf_file.read_one_byte()?;
+        let len = vu64::decoded_len(byte_1st);
+        if len > 1 {
+            self.buf_file.read_exact_small(&mut buf[..len as usize - 1])?;
+        }
+        match vu64::decode_with_first_and_follow(len, byte_1st, &buf[..len as usize - 1]) {
+            Ok(i) => Ok(i),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{}", err),
+            )),
+        }
+        */
+        let byte_1st = self.buf_file.read_one_byte()?;
+        let len = vu64::decoded_len(byte_1st);
+        let max_8_bytes = self.buf_file.read_max_8_bytes(len as usize - 1)?;
+        match vu64::decode_with_first_and_follow_le(len, byte_1st, max_8_bytes) {
+            Ok(i) => Ok(i),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{}", err),
+            )),
+        }
     }
 }
 
 #[cfg(feature = "vf_vu64")]
 impl WriteVu64 for VarFile {}
+
+#[cfg(feature = "vf_vu64")]
+impl rabuf::SmallRead for VarFile {
+    #[inline]
+    fn read_one_byte(&mut self) -> Result<u8> {
+        self.buf_file.read_one_byte()
+    }
+    #[inline]
+    fn read_max_8_bytes(&mut self, size: usize) -> Result<u64> {
+        self.buf_file.read_max_8_bytes(size)
+    }
+    #[inline]
+    fn read_exact_small(&mut self, buf: &mut [u8]) -> Result<()> {
+        self.buf_file.read_exact_small(buf)
+    }
+    #[inline]
+    fn read_exact_maybeslice(&mut self, size: usize) -> Result<MaybeSlice> {
+        self.buf_file.read_exact_maybeslice(size)
+    }
+}
 
 #[cfg(feature = "vf_vu64")]
 impl VarFile {
@@ -572,7 +658,7 @@ mod debug {
             #[cfg(not(any(feature = "buf_stats", feature = "buf_lru")))]
             {
                 #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
-                assert_eq!(std::mem::size_of::<VarFile>(), 76);
+                assert_eq!(std::mem::size_of::<VarFile>(), 80);
                 #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                 assert_eq!(std::mem::size_of::<VarFile>(), 88);
             }

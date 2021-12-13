@@ -20,6 +20,7 @@ impl OffsetIndex {
             btm: BTreeMap::new(),
         }
     }
+    #[inline]
     pub(crate) fn get(&mut self, offset: &u64) -> Option<usize> {
         #[cfg(not(feature = "offidx_btreemap"))]
         {
@@ -46,6 +47,7 @@ impl OffsetIndex {
             None
         }
     }
+    #[inline]
     pub(crate) fn insert(&mut self, offset: &u64, idx: usize) {
         #[cfg(not(feature = "offidx_btreemap"))]
         match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
@@ -59,6 +61,7 @@ impl OffsetIndex {
         #[cfg(feature = "offidx_btreemap")]
         let _ = self.btm.insert(*offset, idx);
     }
+    #[inline]
     pub(crate) fn remove(&mut self, offset: &u64) -> Option<usize> {
         #[cfg(not(feature = "offidx_btreemap"))]
         match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
@@ -68,6 +71,7 @@ impl OffsetIndex {
         #[cfg(feature = "offidx_btreemap")]
         self.btm.remove(offset)
     }
+    #[inline]
     pub(crate) fn clear(&mut self) {
         #[cfg(not(feature = "offidx_btreemap"))]
         self.vec.clear();

@@ -4,10 +4,13 @@ Semantic Type
 defines several semantic types. They are written in the New Type pattern.
 */
 use std::cmp::PartialOrd;
-use std::convert::{Infallible, TryFrom, TryInto};
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::num::TryFromIntError;
+
+#[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
+use std::convert::Infallible;
 
 pub type RecordOffset = Offset<Record>;
 pub type NodeOffset = Offset<Node>;
@@ -65,12 +68,14 @@ impl<T> Display for Offset<T> {
 
 impl<T> TryFrom<Offset<T>> for u32 {
     type Error = TryFromIntError;
+    #[inline]
     fn try_from(value: Offset<T>) -> Result<Self, Self::Error> {
         value.val.try_into()
     }
 }
 
 impl<T> From<Offset<T>> for u64 {
+    #[inline]
     fn from(value: Offset<T>) -> Self {
         value.val
     }
@@ -78,6 +83,7 @@ impl<T> From<Offset<T>> for u64 {
 
 impl<T> std::ops::Add<Size<T>> for Offset<T> {
     type Output = Offset<T>;
+    #[inline]
     fn add(self, rhs: Size<T>) -> Self::Output {
         Offset::new(self.val + rhs.val as u64)
     }
@@ -85,6 +91,7 @@ impl<T> std::ops::Add<Size<T>> for Offset<T> {
 
 impl<T> std::ops::Sub<Offset<T>> for Offset<T> {
     type Output = Size<T>;
+    #[inline]
     fn sub(self, rhs: Offset<T>) -> Self::Output {
         let val = self.val - rhs.val;
         Size::new(val.try_into().unwrap_or_else(|err| {
@@ -130,14 +137,25 @@ impl<T> Display for Size<T> {
     }
 }
 
+#[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
 impl<T> TryFrom<Size<T>> for usize {
     type Error = TryFromIntError;
+    #[inline]
     fn try_from(value: Size<T>) -> Result<Self, Self::Error> {
         value.val.try_into()
     }
 }
 
+#[cfg(any(target_pointer_width = "64", target_pointer_width = "32"))]
+impl<T> From<Size<T>> for usize {
+    #[inline]
+    fn from(value: Size<T>) -> Self {
+        value.val as usize
+    }
+}
+
 impl<T> From<Size<T>> for u32 {
+    #[inline]
     fn from(value: Size<T>) -> Self {
         value.val
     }
@@ -174,14 +192,25 @@ impl<T> Display for Length<T> {
     }
 }
 
+#[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
 impl<T> TryFrom<Length<T>> for usize {
     type Error = TryFromIntError;
+    #[inline]
     fn try_from(value: Length<T>) -> Result<Self, Self::Error> {
         value.val.try_into()
     }
 }
 
+#[cfg(any(target_pointer_width = "64", target_pointer_width = "32"))]
+impl<T> From<Length<T>> for usize {
+    #[inline]
+    fn from(value: Length<T>) -> Self {
+        value.val as usize
+    }
+}
+
 impl<T> From<Length<T>> for u32 {
+    #[inline]
     fn from(value: Length<T>) -> Self {
         value.val
     }
@@ -218,14 +247,25 @@ impl<T> Display for Count<T> {
     }
 }
 
+#[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
 impl<T> TryFrom<Count<T>> for usize {
     type Error = Infallible;
+    #[inline]
     fn try_from(value: Count<T>) -> Result<Self, Self::Error> {
         value.val.try_into()
     }
 }
 
+#[cfg(any(target_pointer_width = "64", target_pointer_width = "32"))]
+impl<T> From<Count<T>> for usize {
+    #[inline]
+    fn from(value: Count<T>) -> Self {
+        value.val as usize
+    }
+}
+
 impl<T> From<Count<T>> for u16 {
+    #[inline]
     fn from(value: Count<T>) -> Self {
         value.val
     }

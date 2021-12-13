@@ -186,9 +186,11 @@ pub trait KeyCacheTrait<KT> {
 }
 
 impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
+    #[inline]
     fn len(&self) -> usize {
         self.cache.len()
     }
+    #[inline]
     fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>> {
         if self.cache.is_empty() {
             return None;
@@ -200,7 +202,8 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 self.touch(k);
-                let a = self.cache.get_mut(k).unwrap();
+                //let a = self.cache.get_mut(k).unwrap();
+                let a = unsafe { self.cache.get_unchecked_mut(k) };
                 Some(a.key_string.clone())
             }
             Err(_k) => None,
@@ -274,7 +277,7 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
                     self.offset_high = RecordOffset::new(0);
                     self.offset_low = RecordOffset::new(0);
                 } else if *offset == self.offset_high {
-                        self.offset_low = self.cache.last().unwrap().record_offset;
+                    self.offset_low = self.cache.last().unwrap().record_offset;
                 } else if *offset == self.offset_low {
                     self.offset_low = self.cache.first().unwrap().record_offset;
                 }
@@ -284,6 +287,7 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
         #[cfg(feature = "kc_hash")]
         let _ = self.cache.remove(offset);
     }
+    #[inline]
     fn clear(&mut self) {
         self.cache.clear();
         //

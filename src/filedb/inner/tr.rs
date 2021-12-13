@@ -10,14 +10,17 @@ use std::rc::Rc;
 pub struct IdxNode(Rc<RefCell<TreeNode>>);
 
 impl IdxNode {
+    #[inline]
     pub fn new(offset: NodeOffset) -> Self {
         Self(Rc::new(RefCell::new(TreeNode::new(offset))))
     }
+    #[inline]
     pub fn with_node_size(offset: NodeOffset, size: NodeSize) -> Self {
         Self(Rc::new(RefCell::new(TreeNode::with_node_size(
             offset, size,
         ))))
     }
+    #[inline]
     pub fn new_active(
         record_offset: RecordOffset,
         l_node_offset: NodeOffset,
@@ -30,28 +33,35 @@ impl IdxNode {
         ))))
     }
     //
+    #[inline]
     pub fn get_mut(&mut self) -> RefMut<TreeNode> {
         RefCell::borrow_mut(&self.0)
     }
+    #[inline]
     pub fn get_ref(&self) -> Ref<TreeNode> {
         RefCell::borrow(&self.0)
     }
     //
+    #[inline]
     pub fn is_over_len(&self) -> bool {
         let locked = RefCell::borrow(&self.0);
         locked.is_over_len()
     }
+    #[inline]
     pub fn deactivate(&self) -> Self {
         Self(Rc::new(RefCell::new(RefCell::borrow(&self.0).deactivate())))
     }
+    #[inline]
     pub fn is_active_on_insert(&self) -> bool {
         let locked = RefCell::borrow(&self.0);
         locked.is_active_on_insert()
     }
+    #[inline]
     pub fn is_active_on_delete(&self) -> bool {
         let locked = RefCell::borrow(&self.0);
         locked.is_active_on_delete()
     }
+    #[inline]
     pub(crate) fn idx_write_node_one(&self, file: &mut VarFile) -> Result<()> {
         let locked = RefCell::borrow(&self.0);
         locked.idx_write_node_one(file)
@@ -73,9 +83,11 @@ pub struct TreeNode {
 }
 
 impl TreeNode {
+    #[inline]
     pub fn new(offset: NodeOffset) -> Self {
         Self::with_node_size(offset, NodeSize::new(0))
     }
+    #[inline]
     pub fn with_node_size(offset: NodeOffset, size: NodeSize) -> Self {
         Self {
             offset,
@@ -85,6 +97,7 @@ impl TreeNode {
             ..Default::default()
         }
     }
+    #[inline]
     pub fn new_active(
         record_offset: RecordOffset,
         l_node_offset: NodeOffset,
@@ -102,15 +115,19 @@ impl TreeNode {
 }
 
 impl TreeNode {
+    #[inline]
     pub fn offset(&self) -> NodeOffset {
         self.offset
     }
+    #[inline]
     pub fn set_offset(&mut self, offset: NodeOffset) {
         self.offset = offset;
     }
+    #[inline]
     pub fn size(&self) -> NodeSize {
         self.size
     }
+    #[inline]
     pub fn set_size(&mut self, size: NodeSize) {
         self.size = size;
     }
@@ -118,36 +135,47 @@ impl TreeNode {
 
 // keys
 impl TreeNode {
+    #[inline]
     pub fn keys_is_empty(&self) -> bool {
         self.keys.is_empty()
     }
+    #[inline]
     pub fn keys_len(&self) -> usize {
         self.keys.len()
     }
+    #[inline]
     pub fn keys_get(&self, idx: usize) -> RecordOffset {
         self.keys[idx]
     }
+    #[inline]
     pub unsafe fn keys_get_unchecked(&self, idx: usize) -> RecordOffset {
         *self.keys.get_unchecked(idx)
     }
+    #[inline]
     pub fn keys_set(&mut self, idx: usize, val: RecordOffset) {
         self.keys[idx] = val;
     }
+    #[inline]
     pub fn keys_pop(&mut self) -> Option<RecordOffset> {
         self.keys.pop()
     }
+    #[inline]
     pub fn keys_push(&mut self, val: RecordOffset) {
         self.keys.push(val);
     }
+    #[inline]
     pub fn keys_insert(&mut self, idx: usize, val: RecordOffset) {
         self.keys.insert(idx, val);
     }
+    #[inline]
     pub fn keys_extend_from_node(&mut self, other: &TreeNode, st: usize) {
         self.keys.extend_from_slice(&other.keys[st..])
     }
+    #[inline]
     pub fn keys_remove(&mut self, idx: usize) -> RecordOffset {
         self.keys.remove(idx)
     }
+    #[inline]
     pub fn keys_resize(&mut self, new_size: usize) {
         self.keys.resize(new_size, RecordOffset::new(0));
     }
@@ -155,42 +183,54 @@ impl TreeNode {
 
 // downs
 impl TreeNode {
+    #[inline]
     pub fn downs_is_empty(&self) -> bool {
         self.downs.is_empty()
     }
+    #[inline]
     pub fn downs_len(&self) -> usize {
         self.downs.len()
     }
+    #[inline]
     pub fn downs_get(&self, idx: usize) -> NodeOffset {
         self.downs[idx]
     }
+    #[inline]
     pub unsafe fn downs_get_unchecked(&self, idx: usize) -> NodeOffset {
         *self.downs.get_unchecked(idx)
     }
+    #[inline]
     pub fn downs_set(&mut self, idx: usize, val: NodeOffset) {
         self.downs[idx] = val;
     }
+    #[inline]
     pub fn _downs_pop(&mut self) -> Option<NodeOffset> {
         self.downs.pop()
     }
+    #[inline]
     pub fn downs_push(&mut self, val: NodeOffset) {
         self.downs.push(val);
     }
+    #[inline]
     pub fn downs_insert(&mut self, idx: usize, val: NodeOffset) {
         self.downs.insert(idx, val);
     }
+    #[inline]
     pub fn downs_extend_from_node(&mut self, other: &TreeNode, st: usize) {
         self.downs.extend_from_slice(&other.downs[st..])
     }
+    #[inline]
     pub fn downs_remove(&mut self, idx: usize) -> NodeOffset {
         self.downs.remove(idx)
     }
+    #[inline]
     pub fn downs_resize(&mut self, new_size: usize) {
         self.downs.resize(new_size, NodeOffset::new(0));
     }
 }
 
 impl TreeNode {
+    #[inline]
     pub fn is_over_len(&self) -> bool {
         if self.keys.len() < NODE_SLOTS_MAX as usize && self.downs.len() <= NODE_SLOTS_MAX as usize
         {
@@ -199,6 +239,7 @@ impl TreeNode {
         true
     }
     /// convert active node to normal node
+    #[inline]
     pub fn deactivate(&self) -> Self {
         if self.is_active {
             let mut r = Self::new(NodeOffset::new(0));
@@ -210,9 +251,11 @@ impl TreeNode {
             self.clone()
         }
     }
+    #[inline]
     pub fn is_active_on_insert(&self) -> bool {
         self.is_active
     }
+    #[inline]
     pub fn is_active_on_delete(&self) -> bool {
         self.downs.len() < NODE_SLOTS_MAX_HALF as usize
     }

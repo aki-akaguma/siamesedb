@@ -74,6 +74,8 @@ use std::path::Path;
 pub mod filedb;
 pub mod memdb;
 
+pub use filedb::Bytes;
+
 /// Open the memory db. This data is not stored in file.
 pub fn open_memory<'a>() -> memdb::MemoryDb<'a> {
     memdb::MemoryDb::open()
@@ -103,7 +105,10 @@ pub trait DbXxx<KT> {
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized;
 
-    /// flush file buffer, the dirty intermediate buffered content is written
+    /// read and fill buffer.
+    fn read_fill_buffer(&mut self) -> Result<()>;
+
+    /// flush file buffer, the dirty intermediate buffered content is written.
     fn flush(&mut self) -> Result<()>;
 
     /// synchronize all OS-internal metadata to storage.
@@ -180,7 +185,7 @@ pub trait DbXxx<KT> {
         Ok(vec)
         */
         /*
-        */
+         */
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
@@ -214,3 +219,19 @@ pub trait DbMapString: DbXxx<String> {}
 
 /// key-value map store interface. the key type is `u64`.
 pub trait DbMapU64: DbXxx<u64> {}
+
+/// key-value map store interface. the key type is `Vec<u8>`.
+pub trait DbMapBytes: DbXxx<Bytes> {}
+
+/// key type
+pub trait DbXxxKeyType: Ord + Clone + Default {
+    /// Signature of database file.
+    fn signature() -> [u8; 8];
+    fn as_bytes(&self) -> Vec<u8>;
+    /// Converts a KeyType into a byte vector.
+    //fn into_bytes(self) -> Vec<u8>;
+    fn from(bytes: &[u8]) -> Self;
+    fn byte_len(&self) -> usize {
+        self.as_bytes().len()
+    }
+}

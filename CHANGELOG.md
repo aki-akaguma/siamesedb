@@ -2,6 +2,14 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.12 (2021-12-13)
+=====
+
+* refactoring key type source codes.
+* rename `trait FileDbXxxInnerKT` to `trait DbXxxKeyType`.
+* many performance tunings.
+* adds `read_fill_buffer()`.
+* adds DbMapBytes with `Vec<u8>` KEY.
 * adds `node_dm32` to features.
 
 0.1.11 (2021-12-05)

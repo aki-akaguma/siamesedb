@@ -1,5 +1,8 @@
-use super::super::{CountOfPerSize, FileBufSizeParam, FileDbParams};
-use super::dbxxx::{FileDbXxxInner, FileDbXxxInnerKT};
+use super::super::super::DbXxxKeyType;
+use super::super::{
+    CountOfPerSize, FileBufSizeParam, FileDbParams, KeysCountStats, RecordSizeStats,
+};
+use super::dbxxx::FileDbXxxInner;
 use super::semtype::*;
 use super::tr::IdxNode;
 use super::vfile::VarFile;
@@ -10,10 +13,11 @@ use std::io::{Read, Result, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-use super::super::{KeysCountStats, RecordSizeStats};
-
 type HeaderSignature = [u8; 8];
 
+//const CHUNK_SIZE: u32 = 16 * 4 * 1024;
+const CHUNK_SIZE: u32 = 1024 * 1024;
+//const CHUNK_SIZE: u32 = 16 * 1024 * 1024;
 const IDX_HEADER_SZ: u64 = 128;
 const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'1', 0u8];
 const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
@@ -51,7 +55,7 @@ impl IdxFile {
             .open(pb)?;
         let mut file = match params.idx_buf_size {
             FileBufSizeParam::Size(val) => {
-                let idx_buf_chunk_size = 4 * 1024;
+                let idx_buf_chunk_size = CHUNK_SIZE;
                 let idx_buf_num_chunks = val / idx_buf_chunk_size;
                 VarFile::with_capacity(
                     std_file,
@@ -59,10 +63,7 @@ impl IdxFile {
                     idx_buf_num_chunks.try_into().unwrap(),
                 )?
             }
-            FileBufSizeParam::PerMille(val) => {
-                let idx_buf_chunk_size = 4 * 1024;
-                VarFile::with_per_mille(std_file, idx_buf_chunk_size, val)?
-            }
+            FileBufSizeParam::PerMille(val) => VarFile::with_per_mille(std_file, CHUNK_SIZE, val)?,
             FileBufSizeParam::Auto => VarFile::new(std_file)?,
         };
         let file_length: NodeOffset = file.seek_to_end()?;
@@ -84,18 +85,26 @@ impl IdxFile {
         //
         Ok(Self(Rc::new(RefCell::new(file_nc))))
     }
+    #[inline]
+    pub fn read_fill_buffer(&self) -> Result<()> {
+        let mut locked = RefCell::borrow_mut(&self.0);
+        locked.0.read_fill_buffer()
+    }
+    #[inline]
     pub fn flush(&self) -> Result<()> {
         let mut locked = RefCell::borrow_mut(&self.0);
         #[cfg(feature = "node_cache")]
         locked.flush_node_cache()?;
         locked.0.flush()
     }
+    #[inline]
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = RefCell::borrow_mut(&self.0);
         #[cfg(feature = "node_cache")]
         locked.flush_node_cache_clear()?;
         locked.0.sync_all()
     }
+    #[inline]
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = RefCell::borrow_mut(&self.0);
         #[cfg(feature = "node_cache")]
@@ -103,11 +112,13 @@ impl IdxFile {
         locked.0.sync_data()
     }
     #[cfg(feature = "buf_stats")]
+    #[inline]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = RefCell::borrow(&self.0);
         locked.0.buf_stats()
     }
     //
+    #[inline]
     pub fn read_top_node(&self) -> Result<IdxNode> {
         let offset = {
             let mut locked = RefCell::borrow_mut(&self.0);
@@ -141,14 +152,17 @@ impl IdxFile {
         }
     }
     //
+    #[inline]
     pub fn read_node(&self, offset: NodeOffset) -> Result<IdxNode> {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.read_node(offset)
     }
+    #[inline]
     pub fn write_node(&self, node: IdxNode) -> Result<IdxNode> {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.write_node(node, false)
     }
+    #[inline]
     pub fn write_new_node(&self, mut node: IdxNode) -> Result<IdxNode> {
         node.get_mut().set_offset({
             let mut locked = RefCell::borrow_mut(&self.0);
@@ -157,10 +171,12 @@ impl IdxFile {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.write_node(node, true)
     }
+    #[inline]
     pub fn delete_node(&self, node: IdxNode) -> Result<NodeSize> {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.delete_node(node)
     }
+    #[inline]
     pub fn _read_node_only_keys_count(&self, offset: NodeOffset) -> Result<KeysCount> {
         //let mut locked = RefCell::borrow_mut(&self.0);
         //let idx_node = locked.read_node(offset)?;
@@ -169,16 +185,19 @@ impl IdxFile {
         Ok(KeysCount::new(keys_len.try_into().unwrap()))
     }
     #[cfg(feature = "node_dm32")]
+    #[inline]
     pub fn read_node_keys_len(&mut self, offset: NodeOffset) -> Result<usize> {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.read_node_keys_len(offset)
     }
     #[cfg(feature = "node_dm32")]
+    #[inline]
     pub fn read_node_keys_get(&mut self, offset: NodeOffset, idx: usize) -> Result<RecordOffset> {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.read_node_keys_get(offset, idx)
     }
     #[cfg(feature = "node_dm32")]
+    #[inline]
     pub fn read_node_downs_get(&mut self, offset: NodeOffset, idx: usize) -> Result<NodeOffset> {
         let mut locked = RefCell::borrow_mut(&self.0);
         locked.read_node_downs_get(offset, idx)
@@ -194,7 +213,7 @@ impl IdxFile {
     }
     pub fn graph_string_with_key_string<KT>(&self, dbxxx: &FileDbXxxInner<KT>) -> Result<String>
     where
-        KT: FileDbXxxInnerKT + std::fmt::Display,
+        KT: DbXxxKeyType + std::fmt::Display,
     {
         let top_node = self.read_top_node()?;
         let mut locked = RefCell::borrow_mut(&self.0);
@@ -255,7 +274,7 @@ impl IdxFile {
     //
     pub fn is_mst_valid<KT>(&self, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
     where
-        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         if node.get_ref().keys_is_empty() {
             return Ok(true);
@@ -325,7 +344,7 @@ impl IdxFile {
     //
     fn is_small<KT>(&self, key: &KT, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
     where
-        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         for i in 0..node.get_ref().keys_len() {
             let node_offset = node.get_ref().downs_get(i);
@@ -362,7 +381,7 @@ impl IdxFile {
         dbxxx: &FileDbXxxInner<KT>,
     ) -> Result<bool>
     where
-        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         for i in 0..node.get_ref().keys_len() {
             let node_offset = node.get_ref().downs_get(i);
@@ -396,7 +415,7 @@ impl IdxFile {
     }
     fn is_large<KT>(&self, key: &KT, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
     where
-        KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         for i in 0..node.get_ref().keys_len() {
             let node_offset = node.get_ref().downs_get(i);
@@ -1059,241 +1078,17 @@ pub const NODE_SLOTS_MAX_HALF: u16 = NODE_SLOTS_MAX / 2;
  * node_size = 2 + (2 * 256 -1) * 9 = 4601 --> vu64 encoded len: 2
  * node_size = 2 + (2 * 512 -1) * 9 = 9209 --> vu64 encoded len: 2
 */
-/*
-#[derive(Debug, Default, Clone)]
-pub struct IdxNode(Rc<RefCell<TreeNode>>);
-
-impl IdxNode {
-    pub fn new(offset: NodeOffset) -> Self {
-        Self(Rc::new(RefCell::new(TreeNode::new(offset))))
-    }
-    pub fn with_node_size(offset: NodeOffset, size: NodeSize) -> Self {
-        Self(Rc::new(RefCell::new(TreeNode::with_node_size(
-            offset, size,
-        ))))
-    }
-    pub fn new_active(
-        record_offset: RecordOffset,
-        l_node_offset: NodeOffset,
-        r_node_offset: NodeOffset,
-    ) -> Self {
-        Self(Rc::new(RefCell::new(TreeNode::new_active(
-            record_offset,
-            l_node_offset,
-            r_node_offset,
-        ))))
-    }
-    //
-    pub fn get_mut(&mut self) -> RefMut<TreeNode> {
-        RefCell::borrow_mut(&self.0)
-    }
-    pub fn get_ref(&self) -> Ref<TreeNode> {
-        RefCell::borrow(&self.0)
-    }
-    //
-    pub fn is_over_len(&self) -> bool {
-        let locked = RefCell::borrow(&self.0);
-        locked.is_over_len()
-    }
-    pub fn deactivate(&self) -> Self {
-        Self(Rc::new(RefCell::new(RefCell::borrow(&self.0).deactivate())))
-    }
-    pub fn is_active_on_insert(&self) -> bool {
-        let locked = RefCell::borrow(&self.0);
-        locked.is_active_on_insert()
-    }
-    pub fn is_active_on_delete(&self) -> bool {
-        let locked = RefCell::borrow(&self.0);
-        locked.is_active_on_delete()
-    }
-    pub(crate) fn idx_write_node_one(&self, file: &mut VarFile) -> Result<()> {
-        let locked = RefCell::borrow(&self.0);
-        locked.idx_write_node_one(file)
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct TreeNode {
-    /// active node flag is used insert operation. this not store into file.
-    pub is_active: bool,
-    /// offset of IdxNode in idx file.
-    pub offset: NodeOffset,
-    /// size in bytes of IdxNode in idx file.
-    pub size: NodeSize,
-    /// key slot: offset of key-value record in dat file.
-    pub keys: Vec<RecordOffset>,
-    /// down slot: offset of next IdxNode in idx file.
-    pub downs: Vec<NodeOffset>,
-}
-
-impl TreeNode {
-    pub fn new(offset: NodeOffset) -> Self {
-        Self::with_node_size(offset, NodeSize::new(0))
-    }
-    pub fn with_node_size(offset: NodeOffset, size: NodeSize) -> Self {
-        Self {
-            offset,
-            size,
-            keys: Vec::with_capacity((NODE_SLOTS_MAX as usize) - 1),
-            downs: Vec::with_capacity(NODE_SLOTS_MAX as usize),
-            ..Default::default()
-        }
-    }
-    pub fn new_active(
-        record_offset: RecordOffset,
-        l_node_offset: NodeOffset,
-        r_node_offset: NodeOffset,
-    ) -> Self {
-        let mut r = Self {
-            is_active: true,
-            ..Default::default()
-        };
-        r.keys.push(record_offset);
-        r.downs.push(l_node_offset);
-        r.downs.push(r_node_offset);
-        r
-    }
-    pub fn is_over_len(&self) -> bool {
-        if self.keys.len() < NODE_SLOTS_MAX as usize && self.downs.len() <= NODE_SLOTS_MAX as usize
-        {
-            return false;
-        }
-        true
-    }
-    /// convert active node to normal node
-    pub fn deactivate(&self) -> Self {
-        if self.is_active {
-            let mut r = Self::new(NodeOffset::new(0));
-            r.keys.push(self.keys[0]);
-            r.downs.push(self.downs[0]);
-            r.downs.push(self.downs[1]);
-            r
-        } else {
-            self.clone()
-        }
-    }
-    pub fn is_active_on_insert(&self) -> bool {
-        self.is_active
-    }
-    pub fn is_active_on_delete(&self) -> bool {
-        self.downs.len() < NODE_SLOTS_MAX_HALF as usize
-    }
-    //
-    fn encoded_node_size(&self) -> usize {
-        let mut sum_size = 0usize;
-        //
-        let keys_count: u16 = self.keys.len().try_into().unwrap();
-        #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-        {
-            sum_size += 2;
-        }
-        #[cfg(feature = "vf_vu64")]
-        {
-            sum_size += vu64::encoded_len(keys_count as u64) as usize;
-        }
-        //
-        for i in 0..(keys_count as usize) {
-            debug_assert!(!self.keys[i].is_zero());
-            let _offset = self.keys[i];
-            #[cfg(feature = "vf_u32u32")]
-            {
-                sum_size += 4;
-            }
-            #[cfg(feature = "vf_u64u64")]
-            {
-                sum_size += 8;
-            }
-            #[cfg(feature = "vf_vu64")]
-            {
-                sum_size += vu64::encoded_len(_offset.as_value()) as usize;
-            }
-        }
-        for i in 0..((keys_count as usize) + 1) {
-            debug_assert!(
-                keys_count == 0 || i < self.downs.len(),
-                "i: {} < self.downs.len(): {}, keys_count: {}",
-                i,
-                self.downs.len(),
-                keys_count
-            );
-            let _offset = if i < self.downs.len() {
-                self.downs[i]
-            } else {
-                NodeOffset::new(0)
-            };
-            #[cfg(feature = "vf_u32u32")]
-            {
-                sum_size += 4;
-            }
-            #[cfg(feature = "vf_u64u64")]
-            {
-                sum_size += 8;
-            }
-            #[cfg(feature = "vf_vu64")]
-            {
-                sum_size += vu64::encoded_len(_offset.as_value()) as usize;
-            }
-        }
-        //
-        sum_size
-    }
-    //
-    pub(crate) fn idx_write_node_one(&self, file: &mut VarFile) -> Result<()> {
-        debug_assert!(!self.offset.is_zero());
-        debug_assert!(self.offset.as_value() == IDX_HEADER_SZ || !self.size.is_zero());
-        //
-        file.seek_from_start(self.offset)?;
-        file.write_zero(self.size)?;
-        //
-        let _start_pos = file.seek_from_start(self.offset)?;
-        file.write_node_size(self.size)?;
-        let keys_count = self.keys.len();
-        //
-        file.write_keys_count(KeysCount::new(keys_count.try_into().unwrap()))?;
-        debug_assert!(
-            keys_count < NODE_SLOTS_MAX as usize,
-            "keys_count: {} < NODE_SLOTS_MAX as usize - 1",
-            keys_count
-        );
-        debug_assert!(keys_count == 0 || self.downs.len() == keys_count + 1);
-        //
-        for i in 0..keys_count {
-            let offset = self.keys[i];
-            debug_assert!(!offset.is_zero());
-            file.write_record_offset(offset)?;
-        }
-        for i in 0..(keys_count + 1) {
-            let offset = if i < self.downs.len() {
-                self.downs[i]
-            } else {
-                NodeOffset::new(0)
-            };
-            debug_assert!((offset.as_value() & 0x0F) == 0);
-            file.write_node_offset(offset)?;
-        }
-        //
-        let _current_pos = file.seek_position()?;
-        debug_assert!(
-            _start_pos + self.size >= _current_pos,
-            "_start_pos: {} + self.size: {} >= _current_pos: {}",
-            _start_pos,
-            self.size,
-            _current_pos,
-        );
-        //
-        Ok(())
-    }
-}
-*/
 
 impl VarFileNodeCache {
     #[cfg(feature = "node_cache")]
+    #[inline]
     fn flush_node_cache(&mut self) -> Result<()> {
         self.1.flush(&mut self.0)?;
         Ok(())
     }
 
     #[cfg(feature = "node_cache")]
+    #[inline]
     fn flush_node_cache_clear(&mut self) -> Result<()> {
         self.1.clear(&mut self.0)?;
         Ok(())
@@ -1485,7 +1280,7 @@ impl VarFileNodeCache {
             "keys_count: {} < NODE_SLOTS_MAX",
             keys_count
         );
-        let keys_count: usize = keys_count.try_into().unwrap();
+        let keys_count: usize = keys_count.into();
         //
         let mut node_ = IdxNode::with_node_size(offset, node_size);
         {
@@ -1537,8 +1332,8 @@ impl VarFileNodeCache {
             "keys_count: {} < NODE_SLOTS_MAX",
             keys_count
         );
-        let keys_count: usize = keys_count.try_into().unwrap();
-        Ok(keys_count.try_into().unwrap())
+        let keys_count: usize = keys_count.into();
+        Ok(keys_count)
     }
     #[cfg(feature = "node_dm32")]
     fn read_node_keys_get(&mut self, offset: NodeOffset, idx: usize) -> Result<RecordOffset> {
@@ -1564,7 +1359,7 @@ impl VarFileNodeCache {
             "keys_count: {} < NODE_SLOTS_MAX",
             keys_count
         );
-        let keys_count: usize = keys_count.try_into().unwrap();
+        let keys_count: usize = keys_count.into();
         debug_assert!(idx < keys_count);
         if idx >= keys_count {
             return Ok(RecordOffset::new(0));
@@ -1601,7 +1396,7 @@ impl VarFileNodeCache {
             "keys_count: {} < NODE_SLOTS_MAX",
             keys_count
         );
-        let keys_count: usize = keys_count.try_into().unwrap();
+        let keys_count: usize = keys_count.into();
         debug_assert!(idx < keys_count + 1);
         if idx >= keys_count + 1 {
             return Ok(NodeOffset::new(0));
@@ -1670,7 +1465,7 @@ impl VarFileNodeCache {
         dbxxx: &FileDbXxxInner<KT>,
     ) -> Result<String>
     where
-        KT: FileDbXxxInnerKT + std::fmt::Display,
+        KT: DbXxxKeyType + std::fmt::Display,
     {
         let node = node_.get_ref();
         let mut gs = format!(

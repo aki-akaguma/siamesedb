@@ -1,8 +1,8 @@
-use siamesedb::filedb::{FileBufSizeParam, FileDbMapString, FileDbParams};
-use siamesedb::DbXxx;
+use siamesedb::filedb::{FileBufSizeParam, FileDbMapBytes, FileDbParams};
+use siamesedb::{Bytes, DbXxx};
 
 fn main() -> Result<(), std::io::Error> {
-    let db_name = "target/tmp/testA5.siamesedb";
+    let db_name = "target/tmp/testA6.siamesedb";
     //
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
@@ -15,20 +15,20 @@ fn main() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn conv_to_kv_string(i: i64) -> (String, String) {
+fn conv_to_kv_string(i: i64) -> (Bytes, String) {
     let bytes = i.to_le_bytes();
     //let k = format!("key-{}.{}.{}", bytes[0], bytes[1], bytes[2]);
     let k = format!("key-{}.{}.{}", bytes[0], bytes[1], bytes[2]).repeat(4);
     //let v = format!("val-{}", i);
     let v = String::new();
-    (k, v)
+    (k.into(), v)
 }
 
 fn _test_gen(db_name: &str) -> Result<(), std::io::Error> {
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db
-        .db_map_string_with_params(
+        .db_map_bytes_with_params(
             "some_map1",
             FileDbParams {
                 /*
@@ -47,7 +47,7 @@ fn _test_gen(db_name: &str) -> Result<(), std::io::Error> {
     //
     db_map.read_fill_buffer()?;
     //
-    let mut kv_vec: Vec<(String, String)> = Vec::new();
+    let mut kv_vec: Vec<(Bytes, String)> = Vec::new();
     let mut i: i64 = 0;
     loop {
         i += 1;
@@ -69,7 +69,7 @@ fn _test_gen(db_name: &str) -> Result<(), std::io::Error> {
 fn _test_gen_check(db_name: &str) -> Result<(), std::io::Error> {
     let db = siamesedb::open_file(db_name).unwrap();
     let mut db_map = db
-        .db_map_string_with_params(
+        .db_map_bytes_with_params(
             "some_map1",
             FileDbParams {
                 /*
@@ -88,7 +88,7 @@ fn _test_gen_check(db_name: &str) -> Result<(), std::io::Error> {
     //
     db_map.read_fill_buffer()?;
     //
-    let mut key_vec: Vec<String> = Vec::new();
+    let mut key_vec: Vec<Bytes> = Vec::new();
     let mut value_vec: Vec<String> = Vec::new();
     let mut i: i64 = 0;
     loop {
@@ -116,11 +116,11 @@ fn _test_gen_check(db_name: &str) -> Result<(), std::io::Error> {
 }
 
 fn _test_gen_check_one(
-    db_map: &mut FileDbMapString,
-    key_vec: &[String],
+    db_map: &mut FileDbMapBytes,
+    key_vec: &[Bytes],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
-    let keys: Vec<&String> = key_vec.iter().collect();
+    let keys: Vec<&Bytes> = key_vec.iter().collect();
     let result = db_map.bulk_get_string(&keys)?;
     //
     for (idx, answer) in result.iter().enumerate() {

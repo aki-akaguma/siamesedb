@@ -58,17 +58,21 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
         }
         Ok(())
     }
+    #[inline]
     pub fn clear(&mut self, file: &mut VarFile) -> Result<()> {
         self.flush(file)?;
         self.cache.clear();
         Ok(())
     }
+    #[inline]
     pub fn _is_empty(&self) -> bool {
         self._len() == 0
     }
+    #[inline]
     pub fn _len(&self) -> usize {
         self.cache.len()
     }
+    #[inline]
     pub fn get(&mut self, record_offset: &RecordOffset) -> Option<Rc<Record<KT>>> {
         match self
             .cache
@@ -81,6 +85,7 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
             Err(_k) => None,
         }
     }
+    #[inline]
     pub fn get_record_size(&mut self, record_offset: &RecordOffset) -> Option<RecordSize> {
         match self
             .cache
@@ -144,6 +149,7 @@ impl<KT: FileDbXxxInnerKT> RecordCache<KT> {
     }
 }
 
+#[inline]
 fn write_record<KT: FileDbXxxInnerKT>(
     file: &mut VarFile,
     rcb: &mut RecordCacheBean<KT>,

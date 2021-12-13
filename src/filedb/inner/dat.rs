@@ -1,7 +1,8 @@
+use super::super::super::DbXxxKeyType;
 use super::super::{FileBufSizeParam, FileDbParams};
-use super::dbxxx::FileDbXxxInnerKT;
 use super::semtype::*;
 use super::vfile::VarFile;
+use rabuf::SmallRead;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::fs::OpenOptions;
@@ -11,6 +12,9 @@ use std::rc::Rc;
 
 type HeaderSignature = [u8; 8];
 
+//const CHUNK_SIZE: u32 = 16 * 4 * 1024;
+const CHUNK_SIZE: u32 = 1024 * 1024;
+//const CHUNK_SIZE: u32 = 16 * 1024 * 1024;
 const _DAT_HEADER_SZ: u64 = 128;
 const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'0', 0u8];
 
@@ -22,16 +26,16 @@ use super::rc::RecordCache;
 
 #[cfg(not(feature = "record_cache"))]
 #[derive(Debug)]
-struct VarFileRecordCache<KT: FileDbXxxInnerKT>(VarFile, PhantomData<KT>);
+struct VarFileRecordCache<KT: DbXxxKeyType>(VarFile, PhantomData<KT>);
 
 #[cfg(feature = "record_cache")]
 #[derive(Debug)]
-struct VarFileRecordCache<KT: FileDbXxxInnerKT>(VarFile, RecordCache<KT>);
+struct VarFileRecordCache<KT: DbXxxKeyType>(VarFile, RecordCache<KT>);
 
 #[derive(Debug, Clone)]
-pub struct DatFile<KT: FileDbXxxInnerKT>(Rc<RefCell<VarFileRecordCache<KT>>>);
+pub struct DatFile<KT: DbXxxKeyType>(Rc<RefCell<VarFileRecordCache<KT>>>);
 
-impl<KT: FileDbXxxInnerKT> DatFile<KT> {
+impl<KT: DbXxxKeyType> DatFile<KT> {
     pub fn open_with_params<P: AsRef<Path>>(
         path: P,
         ks_name: &str,
@@ -47,7 +51,7 @@ impl<KT: FileDbXxxInnerKT> DatFile<KT> {
             .open(pb)?;
         let mut file = match params.dat_buf_size {
             FileBufSizeParam::Size(val) => {
-                let dat_buf_chunk_size = 4 * 1024;
+                let dat_buf_chunk_size = CHUNK_SIZE;
                 let dat_buf_num_chunks = val / dat_buf_chunk_size;
                 VarFile::with_capacity(
                     std_file,
@@ -55,10 +59,7 @@ impl<KT: FileDbXxxInnerKT> DatFile<KT> {
                     dat_buf_num_chunks.try_into().unwrap(),
                 )?
             }
-            FileBufSizeParam::PerMille(val) => {
-                let dat_buf_chunk_size = 4 * 1024;
-                VarFile::with_per_mille(std_file, dat_buf_chunk_size, val)?
-            }
+            FileBufSizeParam::PerMille(val) => VarFile::with_per_mille(std_file, CHUNK_SIZE, val)?,
             FileBufSizeParam::Auto => VarFile::new(std_file)?,
         };
         let file_length: RecordOffset = file.seek_to_end()?;
@@ -75,18 +76,26 @@ impl<KT: FileDbXxxInnerKT> DatFile<KT> {
         //
         Ok(Self(Rc::new(RefCell::new(file_rc))))
     }
+    #[inline]
+    pub fn read_fill_buffer(&self) -> Result<()> {
+        let mut locked = RefCell::borrow_mut(&self.0);
+        locked.0.read_fill_buffer()
+    }
+    #[inline]
     pub fn flush(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         #[cfg(feature = "record_cache")]
         locked.flush_record_cache()?;
         locked.0.flush()
     }
+    #[inline]
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         #[cfg(feature = "record_cache")]
         locked.flush_record_cache_clear()?;
         locked.0.sync_all()
     }
+    #[inline]
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
         #[cfg(feature = "record_cache")]
@@ -94,35 +103,43 @@ impl<KT: FileDbXxxInnerKT> DatFile<KT> {
         locked.0.sync_data()
     }
     #[cfg(feature = "buf_stats")]
+    #[inline]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
         let locked = self.0.borrow();
         locked.0.buf_stats()
     }
     //
+    #[inline]
     pub(crate) fn read_record_only_size(&self, offset: RecordOffset) -> Result<RecordSize> {
         let mut locked = self.0.borrow_mut();
         locked.read_record_only_size(offset)
     }
+    #[inline]
     pub fn read_record_only_key(&self, offset: RecordOffset) -> Result<KT> {
         let mut locked = self.0.borrow_mut();
         locked.read_record_only_key(offset)
     }
+    #[inline]
     pub fn read_record_only_value(&self, offset: RecordOffset) -> Result<Vec<u8>> {
         let mut locked = self.0.borrow_mut();
         locked.read_record_only_value(offset)
     }
+    #[inline]
     pub fn read_record(&self, offset: RecordOffset) -> Result<Record<KT>> {
         let mut locked = self.0.borrow_mut();
         locked.read_record(offset)
     }
+    #[inline]
     pub fn write_record(&self, record: Record<KT>) -> Result<Record<KT>> {
         let mut locked = self.0.borrow_mut();
         locked.write_record(record, false)
     }
+    #[inline]
     pub fn delete_record(&self, offset: RecordOffset) -> Result<RecordSize> {
         let mut locked = self.0.borrow_mut();
         locked.delete_record(offset)
     }
+    #[inline]
     pub fn add_record(&self, key: &KT, value: &[u8]) -> Result<Record<KT>> {
         let mut locked = self.0.borrow_mut();
         locked.add_record(key, value)
@@ -130,7 +147,7 @@ impl<KT: FileDbXxxInnerKT> DatFile<KT> {
 }
 
 // for debug
-impl<KT: FileDbXxxInnerKT> DatFile<KT> {
+impl<KT: DbXxxKeyType> DatFile<KT> {
     pub fn count_of_free_record(&self) -> Result<Vec<(u32, u64)>> {
         let sz_ary = REC_SIZE_ARY;
         //
@@ -404,7 +421,7 @@ impl VarFile {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Record<KT: FileDbXxxInnerKT> {
+pub struct Record<KT: DbXxxKeyType> {
     /// offset of IdxNode in dat file.
     pub offset: RecordOffset,
     /// size in bytes of Record in dat file.
@@ -415,7 +432,8 @@ pub struct Record<KT: FileDbXxxInnerKT> {
     pub value: Vec<u8>,
 }
 
-impl<KT: FileDbXxxInnerKT> Record<KT> {
+impl<KT: DbXxxKeyType> Record<KT> {
+    #[inline]
     pub fn with(offset: RecordOffset, size: RecordSize, key: KT, value: Vec<u8>) -> Self {
         Self {
             offset,
@@ -424,6 +442,7 @@ impl<KT: FileDbXxxInnerKT> Record<KT> {
             value,
         }
     }
+    #[inline]
     pub fn with_key_value(key: KT, value: &[u8]) -> Self {
         Self {
             key,
@@ -478,14 +497,16 @@ impl<KT: FileDbXxxInnerKT> Record<KT> {
     }
 }
 
-impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
+impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
     #[cfg(feature = "record_cache")]
+    #[inline]
     fn flush_record_cache(&mut self) -> Result<()> {
         self.1.flush(&mut self.0)?;
         Ok(())
     }
 
     #[cfg(feature = "record_cache")]
+    #[inline]
     fn flush_record_cache_clear(&mut self) -> Result<()> {
         self.1.clear(&mut self.0)?;
         Ok(())
@@ -512,6 +533,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         Ok(old_record_size)
     }
 
+    #[inline]
     fn add_record(&mut self, key: &KT, value: &[u8]) -> Result<Record<KT>> {
         self.write_record(Record::with_key_value(key.clone(), value), true)
     }
@@ -599,19 +621,16 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         let record_size = self.0.read_record_size()?;
         debug_assert!(record_size.is_valid());
         let key_len = self.0.read_key_len()?;
-        let key = if key_len.is_zero() {
-            Vec::with_capacity(0)
-        } else {
-            let mut key = vec![0u8; key_len.try_into().unwrap()];
-            let _ = self.0.read_exact(&mut key)?;
-            key
-        };
+        let maybe = self.0.read_exact_maybeslice(key_len.into())?;
+        let key = KT::from(&maybe);
         //
         let val_len = self.0.read_value_len()?;
-        let mut value = vec![0u8; val_len.try_into().unwrap()];
-        let _ = self.0.read_exact(&mut value)?;
+        let mut value = vec![0u8; val_len.into()];
+        if !val_len.is_zero() {
+            let _ = self.0.read_exact_small(&mut value)?;
+        }
         //
-        let record = Record::with(offset, record_size, KT::from(&key), value.to_vec());
+        let record = Record::with(offset, record_size, key, value);
         //
         #[cfg(feature = "record_cache")]
         let record = self.1.put(&mut self.0, record, record_size, false)?;
@@ -619,6 +638,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         Ok(record)
     }
 
+    #[inline]
     fn read_record_only_size(&mut self, offset: RecordOffset) -> Result<RecordSize> {
         debug_assert!(!offset.is_zero());
         //
@@ -637,6 +657,7 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
         }
     }
 
+    #[inline]
     fn read_record_only_key(&mut self, offset: RecordOffset) -> Result<KT> {
         debug_assert!(!offset.is_zero());
         //
@@ -651,18 +672,12 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
             self.0.seek_from_start(offset)?;
             let _record_size = self.0.read_record_size()?;
             let key_len = self.0.read_key_len()?;
-            let key = if key_len.is_zero() {
-                Vec::with_capacity(0)
-            } else {
-                let mut key = vec![0u8; key_len.try_into().unwrap()];
-                let _ = self.0.read_exact(&mut key)?;
-                key
-            };
-            //
-            Ok(KT::from(&key))
+            let maybe = self.0.read_exact_maybeslice(key_len.into())?;
+            Ok(KT::from(&maybe))
         }
     }
 
+    #[inline]
     fn read_record_only_value(&mut self, offset: RecordOffset) -> Result<Vec<u8>> {
         debug_assert!(!offset.is_zero());
         //
@@ -678,24 +693,17 @@ impl<KT: FileDbXxxInnerKT> VarFileRecordCache<KT> {
             let record_size = self.0.read_record_size()?;
             debug_assert!(record_size.is_valid());
             let key_len = self.0.read_key_len()?;
-            /*
-            let _key = if key_len.is_zero() {
-                Vec::with_capacity(0)
-            } else {
-                let mut key = vec![0u8; key_len.try_into().unwrap()];
-                let _ = self.0.read_exact(&mut key)?;
-                key
-            };
-            */
             if !key_len.is_zero() {
                 self.0.seek_skip_length(key_len)?;
             }
             //
             let val_len = self.0.read_value_len()?;
-            let mut value = vec![0u8; val_len.try_into().unwrap()];
-            let _ = self.0.read_exact(&mut value)?;
+            let mut value = vec![0u8; val_len.into()];
+            if !val_len.is_zero() {
+                let _ = self.0.read_exact_small(&mut value)?;
+            }
             //
-            Ok(value.to_vec())
+            Ok(value)
         }
     }
 }

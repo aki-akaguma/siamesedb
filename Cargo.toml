@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.11"
+version = "0.1.12"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -29,6 +29,10 @@ path = "src/test_main4.rs"
 [[bin]]
 name = "test_main5"
 path = "src/test_main5.rs"
+
+[[bin]]
+name = "test_main6"
+path = "src/test_main6.rs"
 
 [[bin]]
 name = "check_main"

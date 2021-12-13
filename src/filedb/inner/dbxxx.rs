@@ -1,14 +1,12 @@
-use super::super::super::DbXxx;
-use super::super::{
-    CheckFileDbMap, CountOfPerSize, FileDbNode, FileDbParams, KeysCountStats, RecordSizeStats,
-};
+use super::super::super::{DbXxx, DbXxxKeyType};
+use super::super::{CheckFileDbMap, CountOfPerSize, FileDbParams, KeysCountStats, RecordSizeStats};
 use super::semtype::*;
 use super::tr::{IdxNode, TreeNode};
 use super::{dat, idx};
 use std::borrow::Borrow;
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::io::Result;
+use std::path::Path;
 use std::rc::Rc;
 
 #[cfg(feature = "key_cache")]
@@ -17,19 +15,8 @@ use super::kc::KeyCacheTrait;
 #[cfg(feature = "key_cache")]
 use super::kc;
 
-pub trait FileDbXxxInnerKT: Ord + Clone + Default {
-    fn signature() -> [u8; 8];
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering;
-    fn as_bytes(&self) -> Vec<u8>;
-    fn from(bytes: &[u8]) -> Self;
-    fn byte_len(&self) -> usize {
-        self.as_bytes().len()
-    }
-}
-
 #[derive(Debug)]
-pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
-    parent: FileDbNode,
+pub struct FileDbXxxInner<KT: DbXxxKeyType> {
     dirty: bool,
     //
     dat_file: dat::DatFile<KT>,
@@ -41,22 +28,16 @@ pub struct FileDbXxxInner<KT: FileDbXxxInnerKT> {
     _phantom: std::marker::PhantomData<KT>,
 }
 
-impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
-    pub(crate) fn open_with_params(
-        parent: FileDbNode,
+impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+    pub(crate) fn open_with_params<P: AsRef<Path>>(
+        path: P,
         ks_name: &str,
         params: FileDbParams,
     ) -> Result<FileDbXxxInner<KT>> {
-        let path = {
-            let rc = parent.0.upgrade().expect("FileDbNode is already disposed");
-            let locked = RefCell::borrow(&rc);
-            locked.path.clone()
-        };
-        //
         let dat_file = dat::DatFile::open_with_params(&path, ks_name, KT::signature(), &params)?;
         let idx_file = idx::IdxFile::open_with_params(&path, ks_name, KT::signature(), &params)?;
+        //
         Ok(Self {
-            parent,
             dat_file,
             idx_file,
             dirty: false,
@@ -71,16 +52,19 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
 }
 
 // for utils
-impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
+impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     #[cfg(feature = "key_cache")]
+    #[inline]
     fn clear_key_cache(&mut self, record_offset: RecordOffset) {
         self.key_cache.delete(&record_offset);
     }
     #[cfg(feature = "key_cache")]
+    #[inline]
     fn _clear_key_cache_all(&mut self) {
         self.key_cache.clear();
     }
     #[cfg(feature = "key_cache")]
+    #[inline]
     pub fn load_key_string(&mut self, record_offset: RecordOffset) -> Result<Rc<KT>> {
         debug_assert!(record_offset != RecordOffset::new(0));
         let string = match self.key_cache.get(&record_offset) {
@@ -93,18 +77,22 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
         Ok(string)
     }
     #[cfg(not(feature = "key_cache"))]
+    #[inline]
     pub fn load_key_string(&mut self, record_offset: RecordOffset) -> Result<Rc<KT>> {
         self.load_key_string_no_cache(record_offset)
             .map(|a| Rc::new(a))
     }
+    #[inline]
     pub fn load_key_string_no_cache(&self, record_offset: RecordOffset) -> Result<KT> {
         debug_assert!(record_offset != RecordOffset::new(0));
         self.dat_file.read_record_only_key(record_offset)
     }
+    #[inline]
     fn load_value(&self, record_offset: RecordOffset) -> Result<Vec<u8>> {
         debug_assert!(record_offset != RecordOffset::new(0));
         self.dat_file.read_record_only_value(record_offset)
     }
+    #[inline]
     fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
         self.dat_file.read_record_only_size(record_offset)
     }
@@ -143,26 +131,29 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
             debug_assert!(key_offset != RecordOffset::new(0));
             let key_string = self.load_key_string(key_offset)?;
             //
-            match key.cmp(key_string.as_ref().borrow()) {
+            match key.borrow().cmp(key_string.as_ref().borrow()) {
                 Ordering::Greater => left = mid + 1,
-                Ordering::Less => right = mid,
                 Ordering::Equal => {
                     return Ok(Ok(mid));
                 }
+                Ordering::Less => right = mid,
             }
         }
         Ok(Err(left))
     }
 
     #[cfg(feature = "node_dm32")]
+    #[inline]
     fn load_node_keys_len(&mut self, node_offset: NodeOffset) -> Result<usize> {
         self.idx_file.read_node_keys_len(node_offset)
     }
     #[cfg(feature = "node_dm32")]
+    #[inline]
     fn load_node_keys_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<RecordOffset> {
         self.idx_file.read_node_keys_get(node_offset, idx)
     }
     #[cfg(feature = "node_dm32")]
+    #[inline]
     fn load_node_downs_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<NodeOffset> {
         self.idx_file.read_node_downs_get(node_offset, idx)
     }
@@ -226,9 +217,7 @@ impl<KT: FileDbXxxInnerKT> FileDbXxxInner<KT> {
 }
 
 // for debug
-impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp::PartialOrd>
-    CheckFileDbMap for FileDbXxxInner<KT>
-{
+impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT> {
     /// convert the index node tree to graph string for debug.
     fn graph_string(&self) -> Result<String> {
         self.idx_file.graph_string()
@@ -290,7 +279,7 @@ impl<KT: FileDbXxxInnerKT + std::fmt::Display + std::default::Default + std::cmp
 }
 
 // insert: NEW
-impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
+impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     fn insert_into_node_tree(
         &mut self,
         mut node_: IdxNode,
@@ -410,7 +399,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
 }
 
 // delete: NEW
-impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
+impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     fn delete_from_node_tree<Q>(&mut self, mut node_: IdxNode, key: &Q) -> Result<IdxNode>
     where
         KT: Borrow<Q> + Ord,
@@ -445,6 +434,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         }
         Ok(node_)
     }
+    #[inline]
     fn delete_at(&mut self, mut node_: IdxNode, i: usize) -> Result<IdxNode> {
         let record_offset = node_.get_ref().keys_get(i);
         debug_assert!(
@@ -472,6 +462,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
             self.balance_left(node_, i)
         }
     }
+    #[inline]
     fn delete_max(&mut self, mut node_: IdxNode) -> Result<(RecordOffset, IdxNode)> {
         let j = node_.get_ref().keys_len();
         let i = j - 1;
@@ -490,6 +481,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
             Ok((key_offset2, new_node_))
         }
     }
+    #[inline]
     fn balance_left(&mut self, mut node_: IdxNode, i: usize) -> Result<IdxNode> {
         let node_offset1 = node_.get_ref().downs_get(i);
         if node_offset1.is_zero() {
@@ -534,6 +526,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         }
         Ok(node_)
     }
+    #[inline]
     fn balance_right(&mut self, mut node_: IdxNode, j: usize) -> Result<IdxNode> {
         let node_offset1 = node_.get_ref().downs_get(j);
         if node_offset1.is_zero() {
@@ -577,6 +570,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
         }
         Ok(node_)
     }
+    #[inline]
     fn move_a_node_from_right_to_left(
         &mut self,
         record_offset: RecordOffset,
@@ -589,6 +583,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
             .downs_push(node_r.get_mut().downs_remove(0));
         node_r.get_mut().keys_remove(0)
     }
+    #[inline]
     fn move_left_right(
         &mut self,
         record_offset: RecordOffset,
@@ -618,7 +613,7 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
 }
 
 // find: NEW
-impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
+impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     #[cfg(not(feature = "node_dm32"))]
     fn find_in_node_tree<Q>(&mut self, node_: &mut IdxNode, key: &Q) -> Result<Option<Vec<u8>>>
     where
@@ -713,7 +708,8 @@ impl<KT: FileDbXxxInnerKT + Ord> FileDbXxxInner<KT> {
     }
 }
 
-impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
+impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
+    #[inline]
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         KT: Borrow<Q> + Ord,
@@ -732,6 +728,7 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
             self.find_in_node_tree_offset(node_offset, key)
         }
     }
+    #[inline]
     fn put(&mut self, key: KT, value: &[u8]) -> Result<()>
     where
         KT: Ord,
@@ -742,6 +739,7 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         self.idx_file.write_top_node(new_top_node)?;
         Ok(())
     }
+    #[inline]
     fn delete<Q>(&mut self, key: &Q) -> Result<()>
     where
         KT: Borrow<Q> + Ord,
@@ -756,6 +754,13 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         }
         Ok(())
     }
+    #[inline]
+    fn read_fill_buffer(&mut self) -> Result<()> {
+        self.dat_file.read_fill_buffer()?;
+        self.idx_file.read_fill_buffer()?;
+        Ok(())
+    }
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data
@@ -765,6 +770,7 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         }
         Ok(())
     }
+    #[inline]
     fn sync_all(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data and meta
@@ -774,6 +780,7 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         }
         Ok(())
     }
+    #[inline]
     fn sync_data(&mut self) -> Result<()> {
         if self.is_dirty() {
             // save all data
@@ -783,6 +790,7 @@ impl<KT: FileDbXxxInnerKT + Ord> DbXxx<KT> for FileDbXxxInner<KT> {
         }
         Ok(())
     }
+    #[inline]
     fn has_key<Q>(&mut self, key: &Q) -> Result<bool>
     where
         KT: Borrow<Q> + Ord,

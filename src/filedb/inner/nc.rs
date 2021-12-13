@@ -4,7 +4,8 @@ use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::io::Result;
 
-const CACHE_SIZE: usize = 128;
+const CACHE_SIZE: usize = 64;
+//const CACHE_SIZE: usize = 128;
 //const CACHE_SIZE: usize = 1024;
 //const CACHE_SIZE: usize = 1024*1024;
 
@@ -78,6 +79,7 @@ impl NodeCache {
             }
         }
     }
+    #[inline]
     pub fn flush(&mut self, file: &mut VarFile) -> Result<()> {
         for &(_, idx) in self.map.vec.iter() {
             let ncb = self.vec.get_mut(idx).unwrap();
@@ -85,18 +87,22 @@ impl NodeCache {
         }
         Ok(())
     }
+    #[inline]
     pub fn clear(&mut self, file: &mut VarFile) -> Result<()> {
         self.flush(file)?;
         self.vec.clear();
         self.map.clear();
         Ok(())
     }
+    #[inline]
     pub fn _is_empty(&self) -> bool {
         self._len() == 0
     }
+    #[inline]
     pub fn _len(&self) -> usize {
         self.vec.len()
     }
+    #[inline]
     pub fn get(&mut self, offset: &NodeOffset) -> Option<IdxNode> {
         match self.map.get(&offset.as_value()) {
             Some(idx) => {
@@ -118,6 +124,7 @@ impl NodeCache {
             None => None,
         }
     }
+    #[inline]
     pub fn get_node_size(&mut self, offset: &NodeOffset) -> Option<NodeSize> {
         match self.map.get(&offset.as_value()) {
             Some(idx) => {
@@ -245,6 +252,7 @@ impl NodeCache {
     }
 }
 
+#[inline]
 fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
     if ncb.dirty {
         //file.write_node_clear(ncb.node_offset, ncb.node_size)?;

@@ -39,11 +39,14 @@ fn test_fixtures_fruits() {
     macro_rules! base_path {
         () => {
             ""
-        }; //("/home/hcc/src/rust/MyJam/rel-github/lib/siamesedb/")
+        };
+        (0) => {
+            "/home/hcc/src/rust/MyJam/rel-github/lib/siamesedb/"
+        };
     }
-    let db_name = concat!(base_path!(), "target/tmp/testAA.siamesedb");
+    let db_name = concat!(base_path!(0), "target/tmp/testAA.siamesedb");
     let _ = std::fs::remove_dir_all(db_name);
-    let data = load_fixtures(concat!(base_path!(), "fixtures/test-fruits.txt"));
+    let data = load_fixtures(concat!(base_path!(0), "fixtures/test-fruits.txt"));
     let data = &data[..5000];
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
