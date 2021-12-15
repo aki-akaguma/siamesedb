@@ -15,7 +15,7 @@ type HeaderSignature = [u8; 8];
 //const CHUNK_SIZE: u32 = 16 * 4 * 1024;
 const CHUNK_SIZE: u32 = 1024 * 1024;
 //const CHUNK_SIZE: u32 = 16 * 1024 * 1024;
-const _DAT_HEADER_SZ: u64 = 128;
+const _DAT_HEADER_SZ: u64 = 192;
 const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'0', 0u8];
 
 #[cfg(not(feature = "record_cache"))]
@@ -168,25 +168,20 @@ write initiale header to file.
 
 ## header map
 
-The db data header size is 128 bytes.
+The db data header size is 192 bytes.
 
 ```text
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 4     | signature1  | [b's', b'h', b'a', b'm']  |
-| 4      | 4     | signature1  | [b'd', b'b', b'1', 0u8]   |
+| 0      | 8     | signature1  | [b"siamdb0\0"]            |
 | 8      | 8     | signature2  | 8 bytes type signature    |
 | 16     | 8     | reserve0    |                           |
-| 24     | 8     | free1 off   | offset of free 1st list   |
-| 32     | 8     | free2 off   | offset of free 2ndlist    |
-| 40     | 8     | free3 off   | offset of free 3rd list   |
-| 48     | 8     | free4 off   | offset of free 4th list   |
-| 56     | 8     | free5 off   | offset of free 5th list   |
-| 64     | 8     | free6 off   | offset of free 6th list   |
-| 72     | 8     | free7 off   | offset of free 7th list   |
-| 80     | 8     | free8 off   | offset of free 8th list   |
-| 88     | 40    | reserve1    |                           |
+| 24     | 8     | reserve1    |                           |
+| 32     | 8     | free1 off   | offset of free 1st list   |
+| ...    | ...   | ...         | ...                       |
+| 152    | 8     | free16 off  | offset of free 16th list  |
+| 160    | 32    | reserve2    |                           |
 +--------+-------+-------------+---------------------------+
 ```
 
@@ -204,8 +199,10 @@ impl VarFile {
         self.write_all(&signature2)?;
         // reserve0
         self.write_u64_le(0)?;
-        // free1 .. rserve1
-        self.write_all(&[0u8; 104])?;
+        // reserve1
+        self.write_u64_le(0)?;
+        // free1 .. reserve2
+        self.write_all(&[0u8; 160])?;
         //
         Ok(())
     }
@@ -231,9 +228,9 @@ impl VarFile {
     }
 }
 
-const REC_SIZE_FREE_OFFSET_1ST: u64 = 24;
+const REC_SIZE_FREE_OFFSET_1ST: u64 = 32;
 
-const REC_SIZE_FREE_OFFSET: [u64; 8] = [
+const REC_SIZE_FREE_OFFSET: [u64; 16] = [
     REC_SIZE_FREE_OFFSET_1ST,
     REC_SIZE_FREE_OFFSET_1ST + 8,
     REC_SIZE_FREE_OFFSET_1ST + 8 * 2,
@@ -242,10 +239,35 @@ const REC_SIZE_FREE_OFFSET: [u64; 8] = [
     REC_SIZE_FREE_OFFSET_1ST + 8 * 5,
     REC_SIZE_FREE_OFFSET_1ST + 8 * 6,
     REC_SIZE_FREE_OFFSET_1ST + 8 * 7,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 8,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 9,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 10,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 11,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 12,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 13,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 14,
+    REC_SIZE_FREE_OFFSET_1ST + 8 * 15,
 ];
 
-pub(crate) const REC_SIZE_ARY: [u32; 8] =
-    [8 * 2, 8 * 3, 8 * 4, 8 * 6, 8 * 8, 8 * 32, 8 * 64, 8 * 256];
+pub(crate) const REC_SIZE_ARY: [u32; 16] = [
+    8 * 2,
+    8 * 3,
+    8 * 4,
+    8 * 6,
+    8 * 8,
+    8 * 10,
+    8 * 12,
+    8 * 14,
+    8 * 8 * 2,
+    8 * 8 * 4,
+    8 * 8 * 6,
+    8 * 8 * 8,
+    8 * 8 * 10,
+    8 * 8 * 12,
+    8 * 8 * 14,
+    8 * 8 * 8 * 2,
+];
+//    [8 * 2, 8 * 3, 8 * 4, 8 * 6, 8 * 8, 8 * 32, 8 * 64, 8 * 256];
 
 impl RecordSize {
     pub(crate) fn is_valid(&self) -> bool {
@@ -292,7 +314,7 @@ impl RecordSize {
                 return RecordSize::new(n_sz);
             }
         }
-        RecordSize::new(((record_size + 511) / 512) * 512)
+        RecordSize::new(((record_size + 128) / 128) * 128)
     }
 }
 
@@ -470,7 +492,7 @@ impl<KT: DbXxxKeyType> Record<KT> {
             let enc_val_len = vu64::encoded_len(value_len.as_value() as u64) as u32;
             let record_len: u32 =
                 enc_key_len + key_len.as_value() + enc_val_len + value_len.as_value();
-            let encorded_record_len = vu64::encoded_len(record_len as u64) as u32;
+            let encorded_record_len = vu64::encoded_len((record_len as u64 + 7) / 8) as u32;
             (encorded_record_len, record_len)
         };
         //

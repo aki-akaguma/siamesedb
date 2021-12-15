@@ -142,68 +142,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
         Ok(Err(left))
     }
 
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    fn load_node_keys_len(&mut self, node_offset: NodeOffset) -> Result<usize> {
-        self.idx_file.read_node_keys_len(node_offset)
-    }
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    fn load_node_keys_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<RecordOffset> {
-        self.idx_file.read_node_keys_get(node_offset, idx)
-    }
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    fn load_node_downs_get(&mut self, node_offset: NodeOffset, idx: usize) -> Result<NodeOffset> {
-        self.idx_file.read_node_downs_get(node_offset, idx)
-    }
-
-    #[cfg(feature = "node_dm32")]
-    fn keys_binary_search_offset<Q>(
-        &mut self,
-        node_offset: NodeOffset,
-        key: &Q,
-    ) -> Result<std::result::Result<usize, usize>>
-    where
-        KT: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        /*
-        match node.keys.binary_search_by(|&key_offset| {
-            debug_assert!(!key_offset.is_zero());
-            let key_string = self.load_key_string(key_offset).unwrap();
-            key_string.as_ref().borrow().cmp(key)
-        }) {
-            Ok(k) => Ok(Ok(k)),
-            Err(k) => Ok(Err(k)),
-        }
-        */
-        /*
-         */
-        let mut left = 0;
-        let mut right = self.load_node_keys_len(node_offset)?;
-        while left < right {
-            //let mid = left + (right - left) / 2;
-            let mid = (left + right) / 2;
-            //
-            // SAFETY: `mid` is limited by `[left; right)` bound.
-            let key_offset = self.load_node_keys_get(node_offset, mid)?;
-            //let key_offset = node.keys[mid];
-            //
-            debug_assert!(key_offset != RecordOffset::new(0));
-            let key_string = self.load_key_string(key_offset)?;
-            //
-            match key.cmp(key_string.as_ref().borrow()) {
-                Ordering::Greater => left = mid + 1,
-                Ordering::Less => right = mid,
-                Ordering::Equal => {
-                    return Ok(Ok(mid));
-                }
-            }
-        }
-        Ok(Err(left))
-    }
-
     #[inline]
     fn write_node(&mut self, node: IdxNode) -> Result<IdxNode> {
         self.dirty = true;
@@ -614,7 +552,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 
 // find: NEW
 impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
-    #[cfg(not(feature = "node_dm32"))]
     fn find_in_node_tree<Q>(&mut self, node_: &mut IdxNode, key: &Q) -> Result<Option<Vec<u8>>>
     where
         KT: Borrow<Q> + Ord,
@@ -640,40 +577,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                 if !node_offset1.is_zero() {
                     let mut node1_ = self.idx_file.read_node(node_offset1)?;
                     self.find_in_node_tree(&mut node1_, key)
-                } else {
-                    Ok(None)
-                }
-            }
-        }
-    }
-    #[cfg(feature = "node_dm32")]
-    fn find_in_node_tree_offset<Q>(
-        &mut self,
-        node_offset: NodeOffset,
-        key: &Q,
-    ) -> Result<Option<Vec<u8>>>
-    where
-        KT: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        let r = {
-            if self.load_node_keys_len(node_offset)? == 0 {
-                return Ok(None);
-            }
-            self.keys_binary_search_offset(node_offset, key)?
-        };
-        match r {
-            Ok(k) => {
-                let key_offset = self.load_node_keys_get(node_offset, k)?;
-                //let key_offset = node_.get_ref().keys[k];
-                debug_assert!(key_offset != RecordOffset::new(0));
-                self.load_value(key_offset).map(Some)
-            }
-            Err(k) => {
-                let node_offset1 = self.load_node_downs_get(node_offset, k)?;
-                //let node_offset1 = node_.get_ref().downs[k];
-                if !node_offset1.is_zero() {
-                    self.find_in_node_tree_offset(node_offset1, key)
                 } else {
                     Ok(None)
                 }
@@ -715,18 +618,8 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
         KT: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        #[cfg(not(feature = "node_dm32"))]
-        {
-            let mut top_node = self.idx_file.read_top_node()?;
-            self.find_in_node_tree(&mut top_node, key)
-        }
-        #[cfg(feature = "node_dm32")]
-        {
-            self.flush()?;
-            let top_node = self.idx_file.read_top_node()?;
-            let node_offset = top_node.get_ref().offset();
-            self.find_in_node_tree_offset(node_offset, key)
-        }
+        let mut top_node = self.idx_file.read_top_node()?;
+        self.find_in_node_tree(&mut top_node, key)
     }
     #[inline]
     fn put(&mut self, key: KT, value: &[u8]) -> Result<()>

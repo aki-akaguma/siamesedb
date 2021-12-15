@@ -2,6 +2,11 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* removes `node_dm32` from features and source codes.
+* changes node offset and node size to 8 bytes boundary.
+* changes record size and record offset to 8 bytes boundary.
+* adds more REC_SIZE_ARY of dat.
+
 0.1.12 (2021-12-13)
 =====
 

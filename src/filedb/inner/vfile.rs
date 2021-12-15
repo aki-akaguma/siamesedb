@@ -1,15 +1,10 @@
 use super::semtype::*;
-use rabuf::BufFile;
-use rabuf::MaybeSlice;
-use rabuf::{FileSetLen, FileSync, SmallWrite};
+use rabuf::{BufFile, FileSetLen, FileSync, MaybeSlice, SmallRead, SmallWrite};
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 
 #[cfg(not(feature = "vf_u64u64"))]
 use std::convert::TryInto;
-
-#[cfg(feature = "vf_vu64")]
-use rabuf::SmallRead;
 
 #[cfg(feature = "vf_vu64")]
 use vu64::io::{ReadVu64, WriteVu64};
@@ -84,9 +79,8 @@ impl VarFile {
         self.seek(SeekFrom::Current(val as i64))
             .map(Offset::<T>::new)
     }
-    #[cfg(feature = "node_dm32")]
     #[inline]
-    pub fn seek_skip_size<T: PartialEq + Copy>(&mut self, size: Size<T>) -> Result<Offset<T>> {
+    pub fn _seek_skip_size<T: PartialEq + Copy>(&mut self, size: Size<T>) -> Result<Offset<T>> {
         let val: u32 = size.into();
         self.seek(SeekFrom::Current(val as i64))
             .map(Offset::<T>::new)
@@ -190,34 +184,63 @@ impl Seek for VarFile {
     }
 }
 
+impl rabuf::SmallRead for VarFile {
+    #[inline]
+    fn read_one_byte(&mut self) -> Result<u8> {
+        self.buf_file.read_one_byte()
+    }
+    #[inline]
+    fn read_max_8_bytes(&mut self, size: usize) -> Result<u64> {
+        self.buf_file.read_max_8_bytes(size)
+    }
+    #[inline]
+    fn read_exact_small(&mut self, buf: &mut [u8]) -> Result<()> {
+        self.buf_file.read_exact_small(buf)
+    }
+    #[inline]
+    fn read_exact_maybeslice(&mut self, size: usize) -> Result<MaybeSlice> {
+        self.buf_file.read_exact_maybeslice(size)
+    }
+}
+
+impl rabuf::SmallWrite for VarFile {
+    #[inline]
+    fn write_all_small(&mut self, buf: &[u8]) -> Result<()> {
+        self.buf_file.write_all_small(buf)
+    }
+    #[inline]
+    fn write_zero(&mut self, size: u32) -> Result<()> {
+        self.buf_file.write_zero(size)
+    }
+}
+
 impl VarFile {
     #[inline]
     pub fn read_u64_le(&mut self) -> Result<u64> {
-        let mut buf = [0; 8];
-        self.read_exact(&mut buf)?;
-        Ok(u64::from_le_bytes(buf))
+        let v = self.read_max_8_bytes(8)?;
+        Ok(u64::from_le(v))
     }
     #[inline]
     pub fn write_u64_le(&mut self, value: u64) -> Result<()> {
         let mut buf = [0; 8];
         buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
+        self.write_all_small(&buf)
     }
 }
 
-#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64", feature = "node_dm32"))]
+#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
 impl VarFile {
     #[inline]
     pub fn read_u32_le(&mut self) -> Result<u32> {
         let mut buf = [0; 4];
-        self.read_exact(&mut buf)?;
+        self.read_exact_small(&mut buf)?;
         Ok(u32::from_le_bytes(buf))
     }
     #[inline]
     pub fn write_u32_le(&mut self, value: u32) -> Result<()> {
         let mut buf = [0; 4];
         buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
+        self.write_all_small(&buf)
     }
 }
 
@@ -226,24 +249,24 @@ impl VarFile {
     #[inline]
     pub fn _read_u8(&mut self) -> Result<u8> {
         let mut buf = [0; 1];
-        self.read_exact(&mut buf)?;
+        self.read_exact_small(&mut buf)?;
         Ok(buf[0])
     }
     #[inline]
     pub fn _write_u8(&mut self, value: u8) -> Result<()> {
-        self.write_all(&[value])
+        self.write_all_small(&[value])
     }
     #[inline]
     pub fn read_u16_le(&mut self) -> Result<u16> {
         let mut buf = [0; 2];
-        self.read_exact(&mut buf)?;
+        self.read_exact_small(&mut buf)?;
         Ok(u16::from_le_bytes(buf))
     }
     #[inline]
     pub fn write_u16_le(&mut self, value: u16) -> Result<()> {
         let mut buf = [0; 2];
         buf[0..].copy_from_slice(&value.to_le_bytes());
-        self.write_all(&buf)
+        self.write_all_small(&buf)
     }
 }
 
@@ -481,26 +504,6 @@ impl ReadVu64 for VarFile {
 impl WriteVu64 for VarFile {}
 
 #[cfg(feature = "vf_vu64")]
-impl rabuf::SmallRead for VarFile {
-    #[inline]
-    fn read_one_byte(&mut self) -> Result<u8> {
-        self.buf_file.read_one_byte()
-    }
-    #[inline]
-    fn read_max_8_bytes(&mut self, size: usize) -> Result<u64> {
-        self.buf_file.read_max_8_bytes(size)
-    }
-    #[inline]
-    fn read_exact_small(&mut self, buf: &mut [u8]) -> Result<()> {
-        self.buf_file.read_exact_small(buf)
-    }
-    #[inline]
-    fn read_exact_maybeslice(&mut self, size: usize) -> Result<MaybeSlice> {
-        self.buf_file.read_exact_maybeslice(size)
-    }
-}
-
-#[cfg(feature = "vf_vu64")]
 impl VarFile {
     #[inline]
     pub fn read_vu64_u16(&mut self) -> Result<u16> {
@@ -516,7 +519,6 @@ impl VarFile {
                 .unwrap_or_else(|err| panic!("n:{} :{}", n, err))
         })
     }
-    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn read_vu64_u64(&mut self) -> Result<u64> {
         self.read_and_decode_vu64()
@@ -529,7 +531,6 @@ impl VarFile {
     pub fn write_vu64_u32(&mut self, value: u32) -> Result<()> {
         self.encode_and_write_vu64(value.into())
     }
-    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
         self.encode_and_write_vu64(value)
@@ -565,31 +566,23 @@ impl VarFile {
     }
     #[inline]
     pub fn read_record_size(&mut self) -> Result<RecordSize> {
-        self.read_vu64_u32().map(RecordSize::new)
+        self.read_vu64_u32().map(|v| RecordSize::new(v * 8))
     }
     #[inline]
     pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
-        self.write_vu64_u32(record_size.into())
+        let v: u32 = record_size.into();
+        debug_assert!(v % 8 == 0);
+        self.write_vu64_u32(v / 8)
     }
-    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
-        self.read_vu64_u64().map(RecordOffset::new)
+        self.read_vu64_u64().map(|v| RecordOffset::new(v * 8))
     }
-    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        self.write_vu64_u64(record_offset.into())
-    }
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
-        self.read_u32_le().map(|a| RecordOffset::new(a.into()))
-    }
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
-        self.write_u32_le(record_offset.as_value().try_into().unwrap())
+        let v: u64 = record_offset.into();
+        debug_assert!(v % 8 == 0);
+        self.write_vu64_u64(v / 8)
     }
     //
     #[inline]
@@ -600,34 +593,26 @@ impl VarFile {
     pub fn write_free_node_offset(&mut self, offset: NodeOffset) -> Result<()> {
         self.write_u64_le(offset.into())
     }
-    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
-        self.read_vu64_u64().map(NodeOffset::new)
+        self.read_vu64_u64().map(|a| NodeOffset::new(a * 8))
     }
-    #[cfg(not(feature = "node_dm32"))]
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        self.write_vu64_u64(node_offset.into())
-    }
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
-        self.read_u64_le().map(NodeOffset::new)
-    }
-    #[cfg(feature = "node_dm32")]
-    #[inline]
-    pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
-        self.write_u64_le(node_offset.into())
+        let v: u64 = node_offset.into();
+        debug_assert!(v % 8 == 0);
+        self.write_vu64_u64(v / 8)
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodeSize> {
-        self.read_vu64_u32().map(NodeSize::new)
+        self.read_vu64_u32().map(|v| NodeSize::new(v * 8))
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: NodeSize) -> Result<()> {
         debug_assert!(!node_size.is_zero());
-        self.write_vu64_u32(node_size.into())
+        let v: u32 = node_size.into();
+        debug_assert!(v % 8 == 0);
+        self.write_vu64_u32(v / 8)
     }
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {

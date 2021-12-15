@@ -4,9 +4,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-use std::convert::TryInto;
-
 mod dbmap;
 mod inner;
 

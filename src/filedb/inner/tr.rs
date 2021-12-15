@@ -286,14 +286,7 @@ impl TreeNode {
             }
             #[cfg(feature = "vf_vu64")]
             {
-                #[cfg(not(feature = "node_dm32"))]
-                {
-                    sum_size += vu64::encoded_len(_offset.as_value()) as usize;
-                }
-                #[cfg(feature = "node_dm32")]
-                {
-                    sum_size += 4;
-                }
+                sum_size += vu64::encoded_len(_offset.as_value() / 8) as usize;
             }
         }
         for i in 0..((keys_count as usize) + 1) {
@@ -319,14 +312,7 @@ impl TreeNode {
             }
             #[cfg(feature = "vf_vu64")]
             {
-                #[cfg(not(feature = "node_dm32"))]
-                {
-                    sum_size += vu64::encoded_len(_offset.as_value()) as usize;
-                }
-                #[cfg(feature = "node_dm32")]
-                {
-                    sum_size += 8;
-                }
+                sum_size += vu64::encoded_len(_offset.as_value() / 8) as usize;
             }
         }
         //

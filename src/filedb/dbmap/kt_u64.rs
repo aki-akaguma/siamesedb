@@ -8,6 +8,9 @@ use std::io::Result;
 use std::path::Path;
 use std::rc::Rc;
 
+#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
+use std::convert::TryInto;
+
 impl DbXxxKeyType for u64 {
     #[inline]
     fn signature() -> [u8; 8] {
