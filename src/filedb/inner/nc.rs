@@ -4,10 +4,11 @@ use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::io::Result;
 
-const CACHE_SIZE: usize = 64;
-//const CACHE_SIZE: usize = 128;
+//const CACHE_SIZE: usize = 64;
+const CACHE_SIZE: usize = 128;
+//const CACHE_SIZE: usize = 256;
 //const CACHE_SIZE: usize = 1024;
-//const CACHE_SIZE: usize = 1024*1024;
+//const CACHE_SIZE: usize = 10*1024*1024;
 
 #[derive(Debug)]
 struct NodeCacheBean {
@@ -38,6 +39,10 @@ pub struct NodeCache {
     vec: Vec<NodeCacheBean>,
     map: OffsetIndex,
     cache_size: usize,
+    #[cfg(feature = "nc_print_hits")]
+    count_of_hits: u64,
+    #[cfg(feature = "nc_print_hits")]
+    count_of_miss: u64,
     #[cfg(feature = "nc_lru")]
     uses_cnt: u32,
 }
@@ -51,6 +56,10 @@ impl NodeCache {
             vec: Vec::with_capacity(cache_size),
             map: OffsetIndex::with_capacity(cache_size),
             cache_size,
+            #[cfg(feature = "nc_print_hits")]
+            count_of_hits: 0,
+            #[cfg(feature = "nc_print_hits")]
+            count_of_miss: 0,
             #[cfg(feature = "nc_lru")]
             uses_cnt: 0,
         }
@@ -106,8 +115,12 @@ impl NodeCache {
     pub fn get(&mut self, offset: &NodeOffset) -> Option<IdxNode> {
         match self.map.get(&offset.as_value()) {
             Some(idx) => {
+                #[cfg(feature = "nc_print_hits")]
+                {
+                    self.count_of_hits += 1;
+                }
                 self.touch(idx);
-                let ncb = self.vec.get_mut(idx).unwrap();
+                let ncb = unsafe { self.vec.get_unchecked_mut(idx) };
                 debug_assert!(
                     ncb.node_offset == *offset,
                     "ncb.node_offset: {} == *offset: {}",
@@ -121,18 +134,34 @@ impl NodeCache {
                     None
                 }
             }
-            None => None,
+            None => {
+                #[cfg(feature = "nc_print_hits")]
+                {
+                    self.count_of_miss += 1;
+                }
+                None
+            }
         }
     }
     #[inline]
     pub fn get_node_size(&mut self, offset: &NodeOffset) -> Option<NodeSize> {
         match self.map.get(&offset.as_value()) {
             Some(idx) => {
+                #[cfg(feature = "nc_print_hits")]
+                {
+                    self.count_of_hits += 1;
+                }
                 self.touch(idx);
                 let ncb = self.vec.get_mut(idx).unwrap();
                 Some(ncb.node_size)
             }
-            None => None,
+            None => {
+                #[cfg(feature = "nc_print_hits")]
+                {
+                    self.count_of_miss += 1;
+                }
+                None
+            }
         }
     }
     pub fn put(
@@ -146,7 +175,7 @@ impl NodeCache {
         match self.map.get(&node_offset.as_value()) {
             Some(idx) => {
                 self.touch(idx);
-                let ncb = self.vec.get_mut(idx).unwrap();
+                let ncb = unsafe { self.vec.get_unchecked_mut(idx) };
                 debug_assert!(ncb.node_offset == node_offset);
                 if ncb.node.is_some() {
                     debug_assert!(ncb.node.as_ref().unwrap().get_ref().offset() == node_offset);
@@ -170,7 +199,7 @@ impl NodeCache {
                 self.vec.push(NodeCacheBean::new(node, node_size, dirty));
                 self.map.insert(&node_offset.as_value(), k);
                 self.touch(k);
-                let ncb = self.vec.get_mut(k).unwrap();
+                let ncb = unsafe { self.vec.get_unchecked_mut(k) };
                 debug_assert!(ncb.node_offset == node_offset);
                 debug_assert!(ncb.node.as_ref().unwrap().get_ref().offset() == node_offset);
                 Ok(ncb.node.as_ref().unwrap().clone())
@@ -266,6 +295,16 @@ fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "nc_print_hits")]
+impl Drop for NodeCache {
+    fn drop(&mut self) {
+        eprintln!(
+            "node cache hits: {}%",
+            self.count_of_hits * 100 / (self.count_of_hits + self.count_of_miss)
+        );
+    }
+}
+
 //--
 #[cfg(test)]
 mod debug {
@@ -275,10 +314,22 @@ mod debug {
     fn test_size_of() {
         #[cfg(target_pointer_width = "64")]
         {
-            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
-            assert_eq!(std::mem::size_of::<NodeCacheBean>(), 32);
             #[cfg(not(any(feture = "nc_lru", feature = "nc_lfu")))]
             assert_eq!(std::mem::size_of::<NodeCacheBean>(), 24);
+            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+            assert_eq!(std::mem::size_of::<NodeCacheBean>(), 32);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            #[cfg(not(any(feture = "nc_lru", feature = "nc_lfu")))]
+            {
+                #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
+                assert_eq!(std::mem::size_of::<NodeCacheBean>(), 20);
+                #[cfg(any(target_arch = "arm", target_arch = "mips"))]
+                assert_eq!(std::mem::size_of::<NodeCacheBean>(), 24);
+            }
+            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+            assert_eq!(std::mem::size_of::<NodeCacheBean>(), 32);
         }
     }
 }

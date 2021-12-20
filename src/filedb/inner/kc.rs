@@ -1,10 +1,9 @@
 use super::semtype::*;
 use std::rc::Rc;
 
-#[cfg(feature = "kc_hash")]
-use std::collections::HashMap;
-
-const CACHE_SIZE: usize = 128;
+const CACHE_SIZE: usize = 256;
+//const CACHE_SIZE: usize = 384;
+//const CACHE_SIZE: usize = 1024;
 //const CACHE_SIZE: usize = 10*1024*1024;
 
 #[derive(Debug)]
@@ -28,13 +27,12 @@ impl<KT> KeyCacheBean<KT> {
 
 #[derive(Debug)]
 pub struct KeyCache<KT> {
-    #[cfg(not(feature = "kc_hash"))]
     cache: Vec<KeyCacheBean<KT>>,
-    #[cfg(feature = "kc_hash")]
-    cache: HashMap<RecordOffset, KeyCacheBean<KT>>,
     cache_size: usize,
-    offset_high: RecordOffset,
-    offset_low: RecordOffset,
+    #[cfg(feature = "kc_print_hits")]
+    count_of_hits: u64,
+    #[cfg(feature = "kc_print_hits")]
+    count_of_miss: u64,
     #[cfg(feature = "kc_lru")]
     uses_cnt: u32,
 }
@@ -45,13 +43,12 @@ impl<KT> KeyCache<KT> {
     }
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
-            #[cfg(not(feature = "kc_hash"))]
             cache: Vec::with_capacity(cache_size),
-            #[cfg(feature = "kc_hash")]
-            cache: HashMap::with_capacity(cache_size),
             cache_size,
-            offset_high: RecordOffset::new(0),
-            offset_low: RecordOffset::new(0),
+            #[cfg(feature = "kc_print_hits")]
+            count_of_hits: 0,
+            #[cfg(feature = "kc_print_hits")]
+            count_of_miss: 0,
             #[cfg(feature = "kc_lru")]
             uses_cnt: 0,
         }
@@ -192,33 +189,27 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
     }
     #[inline]
     fn get(&mut self, offset: &RecordOffset) -> Option<Rc<KT>> {
-        if self.cache.is_empty() {
-            return None;
-        }
-        if *offset > self.offset_high || *offset < self.offset_low {
-            return None;
-        }
-        #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
+                #[cfg(feature = "kc_print_hits")]
+                {
+                    self.count_of_hits += 1;
+                }
                 self.touch(k);
                 //let a = self.cache.get_mut(k).unwrap();
                 let a = unsafe { self.cache.get_unchecked_mut(k) };
                 Some(a.key_string.clone())
             }
-            Err(_k) => None,
-        }
-        #[cfg(feature = "kc_hash")]
-        match self.cache.get(offset) {
-            Some(v) => {
-                //self.touch(k);
-                Some(v.key_string.clone())
+            Err(_k) => {
+                #[cfg(feature = "kc_print_hits")]
+                {
+                    self.count_of_miss += 1;
+                }
+                None
             }
-            None => None,
         }
     }
     fn put(&mut self, offset: &RecordOffset, key: KT) -> Rc<KT> {
-        #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 self.touch(k);
@@ -236,68 +227,36 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
                 self.cache.insert(k, KeyCacheBean::new(*offset, r.clone()));
                 self.touch(k);
                 //
-                if *offset > self.offset_high {
-                    self.offset_high = *offset;
-                }
-                if *offset < self.offset_low {
-                    self.offset_low = *offset;
-                }
-                //
-                r
-            }
-        }
-        #[cfg(feature = "kc_hash")]
-        match self.cache.get(&offset) {
-            Some(v) => {
-                //self.touch(v);
-                v.key_string.clone()
-            }
-            None => {
-                if self.cache.len() > self.cache_size {
-                    // all clear cache algorithm
-                    self.clear();
-                }
-                let r = Rc::new(key);
-                self.cache
-                    .insert(*offset, KeyCacheBean::new(*offset, r.clone()));
-                //lf.touch(k);
                 r
             }
         }
     }
     fn delete(&mut self, offset: &RecordOffset) {
-        if *offset > self.offset_high || *offset < self.offset_low {
-            return;
-        }
-        #[cfg(not(feature = "kc_hash"))]
         match self.cache.binary_search_by_key(offset, |a| a.record_offset) {
             Ok(k) => {
                 let _kcb = self.cache.remove(k);
-                if self.cache.is_empty() {
-                    self.offset_high = RecordOffset::new(0);
-                    self.offset_low = RecordOffset::new(0);
-                } else if *offset == self.offset_high {
-                    self.offset_low = self.cache.last().unwrap().record_offset;
-                } else if *offset == self.offset_low {
-                    self.offset_low = self.cache.first().unwrap().record_offset;
-                }
             }
             Err(_k) => (),
         }
-        #[cfg(feature = "kc_hash")]
-        let _ = self.cache.remove(offset);
     }
     #[inline]
     fn clear(&mut self) {
         self.cache.clear();
         //
-        self.offset_high = RecordOffset::new(0);
-        self.offset_low = RecordOffset::new(0);
-        //
         #[cfg(feature = "kc_lru")]
         {
             self.uses_cnt = 0;
         }
+    }
+}
+
+#[cfg(feature = "kc_print_hits")]
+impl<KT> Drop for KeyCache<KT> {
+    fn drop(&mut self) {
+        eprintln!(
+            "key cache hits: {}%",
+            self.count_of_hits * 100 / (self.count_of_hits + self.count_of_miss)
+        );
     }
 }
 
@@ -311,6 +270,18 @@ mod debug {
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<KeyCacheBean<String>>(), 16);
+            assert_eq!(std::mem::size_of::<KeyCacheBean<u64>>(), 16);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
+            assert_eq!(std::mem::size_of::<KeyCacheBean<String>>(), 12);
+            #[cfg(any(target_arch = "arm", target_arch = "mips"))]
+            assert_eq!(std::mem::size_of::<KeyCacheBean<String>>(), 16);
+            //
+            #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
+            assert_eq!(std::mem::size_of::<KeyCacheBean<u64>>(), 12);
+            #[cfg(any(target_arch = "arm", target_arch = "mips"))]
             assert_eq!(std::mem::size_of::<KeyCacheBean<u64>>(), 16);
         }
     }

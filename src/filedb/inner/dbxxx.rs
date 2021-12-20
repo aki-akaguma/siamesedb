@@ -1,5 +1,7 @@
 use super::super::super::{DbXxx, DbXxxKeyType};
-use super::super::{CheckFileDbMap, CountOfPerSize, FileDbParams, KeysCountStats, RecordSizeStats};
+use super::super::{
+    CheckFileDbMap, CountOfPerSize, FileDbParams, KeysCountStats, LengthStats, RecordSizeStats,
+};
 use super::semtype::*;
 use super::tr::{IdxNode, TreeNode};
 use super::{dat, idx};
@@ -46,6 +48,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             _phantom: std::marker::PhantomData,
         })
     }
+    #[inline]
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
@@ -96,6 +99,14 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     fn load_record_size(&self, record_offset: RecordOffset) -> Result<RecordSize> {
         self.dat_file.read_record_only_size(record_offset)
     }
+    #[inline]
+    fn load_key_length(&self, record_offset: RecordOffset) -> Result<KeyLength> {
+        self.dat_file.read_record_only_key_length(record_offset)
+    }
+    #[inline]
+    fn load_value_length(&self, record_offset: RecordOffset) -> Result<ValueLength> {
+        self.dat_file.read_record_only_value_length(record_offset)
+    }
 
     fn keys_binary_search<Q>(
         &mut self,
@@ -116,12 +127,9 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             Err(k) => Ok(Err(k)),
         }
         */
-        /*
-         */
         let mut left = 0;
         let mut right = node.keys_len();
         while left < right {
-            //let mid = left + (right - left) / 2;
             let mid = (left + right) / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
@@ -213,6 +221,16 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats> {
         self.idx_file.keys_count_stats()
+    }
+    /// key length statistics
+    fn key_length_stats(&self) -> Result<LengthStats<Key>> {
+        self.idx_file
+            .length_stats::<Key, _>(|off| self.load_key_length(off))
+    }
+    /// value length statistics
+    fn value_length_stats(&self) -> Result<LengthStats<Value>> {
+        self.idx_file
+            .length_stats::<Value, _>(|off| self.load_value_length(off))
     }
 }
 

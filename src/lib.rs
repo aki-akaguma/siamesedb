@@ -118,6 +118,7 @@ pub trait DbXxx<KT> {
     fn sync_data(&mut self) -> Result<()>;
 
     /// returns true if the map contains a value for the specified key.
+    #[inline]
     fn has_key<Q>(&mut self, key: &Q) -> Result<bool>
     where
         KT: Borrow<Q> + Ord,
@@ -127,6 +128,7 @@ pub trait DbXxx<KT> {
     }
 
     /// returns the value corresponding to the key. the value is converted to `String`.
+    #[inline]
     fn get_string<Q>(&mut self, key: &Q) -> Result<Option<String>>
     where
         KT: Borrow<Q> + Ord,
@@ -137,6 +139,7 @@ pub trait DbXxx<KT> {
     }
 
     /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
+    #[inline]
     fn put_string(&mut self, key: KT, value: &str) -> Result<()>
     where
         KT: Ord,
@@ -158,6 +161,7 @@ pub trait DbXxx<KT> {
     }
 
     /// inserts bulk key-value pairs into the db.
+    #[inline]
     fn bulk_put_string(&mut self, bulk: &[(KT, String)]) -> Result<()>
     where
         KT: Ord + Clone,
@@ -184,8 +188,6 @@ pub trait DbXxx<KT> {
         }
         Ok(vec)
         */
-        /*
-         */
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
@@ -199,6 +201,7 @@ pub trait DbXxx<KT> {
         Ok(ret)
     }
     /// gets bulk key-value paires from the db.
+    #[inline]
     fn bulk_get_string<Q>(&mut self, bulk_keys: &[&Q]) -> Result<Vec<Option<String>>>
     where
         KT: Borrow<Q> + Ord,

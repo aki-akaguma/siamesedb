@@ -32,7 +32,7 @@ pub struct Node;
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Key;
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Value;
 
 /// The offset in dat/idx file.
@@ -162,7 +162,7 @@ impl<T> From<Size<T>> for u32 {
 }
 
 /// The byte length of key/value
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Length<T> {
     val: u32,
     _phantom: PhantomData<T>,

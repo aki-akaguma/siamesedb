@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 pub(crate) mod dbxxx;
 pub(crate) mod semtype;
 
-mod offidx;
 mod tr;
 
 mod dat;
@@ -19,6 +18,9 @@ mod kc;
 
 #[cfg(feature = "node_cache")]
 mod nc;
+
+#[cfg(feature = "node_cache")]
+mod offidx;
 
 #[cfg(feature = "record_cache")]
 mod rc;
@@ -45,6 +47,7 @@ impl FileDbInner {
             path: path.to_path_buf(),
         })
     }
+    #[inline]
     pub fn path(&self) -> &Path {
         self.path.as_path()
     }

@@ -18,27 +18,37 @@ pub struct VarFile {
 impl VarFile {
     /// Creates a new VarFile.
     #[allow(dead_code)]
-    pub fn new(file: File) -> Result<VarFile> {
+    pub fn new(name: &str, file: File) -> Result<VarFile> {
         Ok(Self {
-            buf_file: BufFile::new(file)?,
+            buf_file: BufFile::new(name, file)?,
         })
     }
     /// Creates a new VarFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
     #[allow(dead_code)]
-    pub fn with_capacity(file: File, chunk_size: u32, max_num_chunks: u16) -> Result<VarFile> {
+    pub fn with_capacity(
+        name: &str,
+        file: File,
+        chunk_size: u32,
+        max_num_chunks: u16,
+    ) -> Result<VarFile> {
         debug_assert!(chunk_size == rabuf::roundup_powerof2(chunk_size));
         Ok(Self {
-            buf_file: BufFile::with_capacity(file, chunk_size, max_num_chunks)?,
+            buf_file: BufFile::with_capacity(name, file, chunk_size, max_num_chunks)?,
         })
     }
     /// Creates a new VarFile with the specified number of chunks.
     /// chunk_size is MUST power of 2.
     #[allow(dead_code)]
-    pub fn with_per_mille(file: File, chunk_size: u32, per_mille: u16) -> Result<VarFile> {
+    pub fn with_per_mille(
+        name: &str,
+        file: File,
+        chunk_size: u32,
+        per_mille: u16,
+    ) -> Result<VarFile> {
         debug_assert!(chunk_size == rabuf::roundup_powerof2(chunk_size));
         Ok(Self {
-            buf_file: BufFile::with_per_mille(file, chunk_size, per_mille)?,
+            buf_file: BufFile::with_per_mille(name, file, chunk_size, per_mille)?,
         })
     }
     ///
@@ -548,12 +558,12 @@ impl VarFile {
         self.write_vu64_u32(key_len.into())
     }
     #[inline]
-    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
-        self.write_vu64_u32(value_len.into())
-    }
-    #[inline]
     pub fn read_value_len(&mut self) -> Result<ValueLength> {
         self.read_vu64_u32().map(ValueLength::new)
+    }
+    #[inline]
+    pub fn write_value_len(&mut self, value_len: ValueLength) -> Result<()> {
+        self.write_vu64_u32(value_len.into())
     }
     //
     #[inline]
@@ -624,6 +634,29 @@ impl VarFile {
     }
 }
 
+#[cfg(feature = "vf_vu64")]
+impl VarFile {
+    #[inline]
+    pub fn seek_skip_to_record_key(&mut self, offset: RecordOffset) -> Result<RecordOffset> {
+        self.seek_from_start(offset)?;
+        let byte_1st = self.buf_file.read_one_byte()?;
+        let record_size_len = vu64::decoded_len(byte_1st);
+        self.seek_skip_length(KeyLength::new((record_size_len - 1).into()))?;
+        //
+        self.seek_position()
+    }
+    #[inline]
+    pub fn seek_skip_to_record_value(&mut self, offset: RecordOffset) -> Result<RecordOffset> {
+        self.seek_skip_to_record_key(offset)?;
+        let key_len = self.read_key_len()?;
+        if !key_len.is_zero() {
+            self.seek_skip_length(key_len)?;
+        }
+        //
+        self.seek_position()
+    }
+}
+
 //--
 #[cfg(test)]
 mod debug {
@@ -634,7 +667,7 @@ mod debug {
         #[cfg(target_pointer_width = "64")]
         {
             #[cfg(not(feature = "buf_stats"))]
-            assert_eq!(std::mem::size_of::<VarFile>(), 120);
+            assert_eq!(std::mem::size_of::<VarFile>(), 144);
             #[cfg(feature = "buf_stats")]
             assert_eq!(std::mem::size_of::<VarFile>(), 128);
         }
@@ -643,9 +676,9 @@ mod debug {
             #[cfg(not(any(feature = "buf_stats", feature = "buf_lru")))]
             {
                 #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
-                assert_eq!(std::mem::size_of::<VarFile>(), 80);
+                assert_eq!(std::mem::size_of::<VarFile>(), 92);
                 #[cfg(any(target_arch = "arm", target_arch = "mips"))]
-                assert_eq!(std::mem::size_of::<VarFile>(), 88);
+                assert_eq!(std::mem::size_of::<VarFile>(), 104);
             }
             #[cfg(all(feature = "buf_stats", feature = "buf_lru"))]
             {

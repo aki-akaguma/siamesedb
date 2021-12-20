@@ -74,6 +74,10 @@ pub trait CheckFileDbMap {
     fn record_size_stats(&self) -> Result<RecordSizeStats>;
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats>;
+    /// key length statistics
+    fn key_length_stats(&self) -> Result<LengthStats<Key>>;
+    /// value length statistics
+    fn value_length_stats(&self) -> Result<LengthStats<Value>>;
 }
 
 pub type CountOfPerSize = Vec<(u32, u64)>;
@@ -137,6 +141,44 @@ impl KeysCountStats {
 }
 
 impl std::fmt::Display for KeysCountStats {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("[")?;
+        if self.0.len() > 1 {
+            for (a, b) in self.0.iter().take(self.0.len() - 1) {
+                formatter.write_fmt(format_args!("({}, {})", a, b))?;
+                formatter.write_str(", ")?;
+            }
+        }
+        if !self.0.is_empty() {
+            let (a, b) = self.0[self.0.len() - 1];
+            formatter.write_fmt(format_args!("({}, {})", a, b))?;
+        }
+        formatter.write_str("]")?;
+        Ok(())
+    }
+}
+
+/// key or value length statistics.
+#[derive(Debug, Default)]
+pub struct LengthStats<T: Default>(Vec<(Length<T>, u64)>);
+
+impl<T: Ord + Default + Copy> LengthStats<T> {
+    pub fn new(vec: Vec<(Length<T>, u64)>) -> Self {
+        Self(vec)
+    }
+    pub fn touch_length(&mut self, key_length: Length<T>) {
+        match self.0.binary_search_by_key(&key_length, |&(a, _b)| a) {
+            Ok(sz_idx) => {
+                self.0[sz_idx].1 += 1;
+            }
+            Err(sz_idx) => {
+                self.0.insert(sz_idx, (key_length, 1));
+            }
+        }
+    }
+}
+
+impl<T: Default + Copy> std::fmt::Display for LengthStats<T> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("[")?;
         if self.0.len() > 1 {

@@ -1,6 +1,6 @@
 use super::super::super::DbXxxKeyType;
 use super::super::{
-    CountOfPerSize, FileBufSizeParam, FileDbParams, KeysCountStats, RecordSizeStats,
+    CountOfPerSize, FileBufSizeParam, FileDbParams, KeysCountStats, LengthStats, RecordSizeStats,
 };
 use super::dbxxx::FileDbXxxInner;
 use super::semtype::*;
@@ -15,9 +15,10 @@ use std::rc::Rc;
 
 type HeaderSignature = [u8; 8];
 
+const CHUNK_SIZE: u32 = 4 * 1024;
+//const CHUNK_SIZE: u32 = 2 * 4 * 1024;
 //const CHUNK_SIZE: u32 = 16 * 4 * 1024;
-const CHUNK_SIZE: u32 = 1024 * 1024;
-//const CHUNK_SIZE: u32 = 16 * 1024 * 1024;
+//const CHUNK_SIZE: u32 = 1024 * 1024;
 const IDX_HEADER_SZ: u64 = 128;
 const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'1', 0u8];
 const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
@@ -58,13 +59,16 @@ impl IdxFile {
                 let idx_buf_chunk_size = CHUNK_SIZE;
                 let idx_buf_num_chunks = val / idx_buf_chunk_size;
                 VarFile::with_capacity(
+                    "idx",
                     std_file,
                     idx_buf_chunk_size,
                     idx_buf_num_chunks.try_into().unwrap(),
                 )?
             }
-            FileBufSizeParam::PerMille(val) => VarFile::with_per_mille(std_file, CHUNK_SIZE, val)?,
-            FileBufSizeParam::Auto => VarFile::new(std_file)?,
+            FileBufSizeParam::PerMille(val) => {
+                VarFile::with_per_mille("idx", std_file, CHUNK_SIZE, val)?
+            }
+            FileBufSizeParam::Auto => VarFile::new("idx", std_file)?,
         };
         let file_length: NodeOffset = file.seek_to_end()?;
         //
@@ -541,6 +545,21 @@ impl IdxFile {
         //
         Ok(keys_count_stats)
     }
+    pub fn length_stats<KV: Default + Copy + Ord, F>(
+        &self,
+        read_key_length_func: F,
+    ) -> Result<LengthStats<KV>>
+    where
+        F: Fn(RecordOffset) -> Result<Length<KV>> + std::marker::Copy,
+    {
+        let mut kv_length_stats = LengthStats::<KV>::default();
+        //
+        let top_node = self.read_top_node()?;
+        let mut locked = RefCell::borrow_mut(&self.0);
+        locked.idx_kv_length_stats(&top_node, &mut kv_length_stats, read_key_length_func)?;
+        //
+        Ok(kv_length_stats)
+    }
 }
 
 /**
@@ -594,18 +613,18 @@ impl VarFile {
         // signature1
         let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
         let _sz = self.read_exact(&mut sig1)?;
-        assert!(!(sig1 != IDX_HEADER_SIGNATURE), "invalid header signature1");
+        assert!(sig1 == IDX_HEADER_SIGNATURE, "invalid header signature1");
         // signature2
         let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
         let _sz = self.read_exact(&mut sig2)?;
         assert!(
-            !(sig2 != signature2),
+            sig2 == signature2,
             "invalid header signature2, type signature: {:?}",
             sig2
         );
         // top node offset
         let _top_node_offset = self.read_u64_le()?;
-        assert!(!(_top_node_offset == 0), "invalid root offset");
+        assert!(_top_node_offset != 0, "invalid root offset");
         //
         Ok(())
     }
@@ -1498,6 +1517,45 @@ impl VarFileNodeCache {
                 let keys_count = node.get_ref().keys_len();
                 keys_vec.touch_size(KeysCount::new(keys_count.try_into().unwrap()));
                 self.idx_keys_count_stats(&node, keys_vec)?;
+            }
+        }
+        //
+        Ok(())
+    }
+
+    fn idx_kv_length_stats<KV: Default + Copy + Ord, F>(
+        &mut self,
+        node_: &IdxNode,
+        length_vec: &mut LengthStats<KV>,
+        read_kv_length_func: F,
+    ) -> Result<()>
+    where
+        F: Fn(RecordOffset) -> Result<Length<KV>> + Copy,
+    {
+        let node = node_.get_ref();
+        let mut i = node.downs_len() - 1;
+        let node_offset = node.downs_get(i);
+        if !node_offset.is_zero() {
+            let node = self
+                .read_node(node_offset)
+                .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
+            self.idx_kv_length_stats(&node, length_vec, read_kv_length_func)?;
+        }
+        while i > 0 {
+            i -= 1;
+            //
+            let record_offset = node.keys_get(i);
+            if !record_offset.is_zero() {
+                let key_length = read_kv_length_func(record_offset)?;
+                length_vec.touch_length(key_length);
+            }
+            //
+            let node_offset = node.downs_get(i);
+            if !node_offset.is_zero() {
+                let node = self
+                    .read_node(node_offset)
+                    .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
+                self.idx_kv_length_stats(&node, length_vec, read_kv_length_func)?;
             }
         }
         //

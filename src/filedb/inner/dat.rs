@@ -12,8 +12,9 @@ use std::rc::Rc;
 
 type HeaderSignature = [u8; 8];
 
+const CHUNK_SIZE: u32 = 4 * 1024;
 //const CHUNK_SIZE: u32 = 16 * 4 * 1024;
-const CHUNK_SIZE: u32 = 1024 * 1024;
+//const CHUNK_SIZE: u32 = 1024 * 1024;
 //const CHUNK_SIZE: u32 = 16 * 1024 * 1024;
 const _DAT_HEADER_SZ: u64 = 192;
 const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'0', 0u8];
@@ -54,13 +55,16 @@ impl<KT: DbXxxKeyType> DatFile<KT> {
                 let dat_buf_chunk_size = CHUNK_SIZE;
                 let dat_buf_num_chunks = val / dat_buf_chunk_size;
                 VarFile::with_capacity(
+                    "dat",
                     std_file,
                     dat_buf_chunk_size,
                     dat_buf_num_chunks.try_into().unwrap(),
                 )?
             }
-            FileBufSizeParam::PerMille(val) => VarFile::with_per_mille(std_file, CHUNK_SIZE, val)?,
-            FileBufSizeParam::Auto => VarFile::new(std_file)?,
+            FileBufSizeParam::PerMille(val) => {
+                VarFile::with_per_mille("dat", std_file, CHUNK_SIZE, val)?
+            }
+            FileBufSizeParam::Auto => VarFile::new("dat", std_file)?,
         };
         let file_length: RecordOffset = file.seek_to_end()?;
         if file_length.is_zero() {
@@ -113,6 +117,16 @@ impl<KT: DbXxxKeyType> DatFile<KT> {
     pub(crate) fn read_record_only_size(&self, offset: RecordOffset) -> Result<RecordSize> {
         let mut locked = self.0.borrow_mut();
         locked.read_record_only_size(offset)
+    }
+    #[inline]
+    pub fn read_record_only_key_length(&self, offset: RecordOffset) -> Result<KeyLength> {
+        let mut locked = self.0.borrow_mut();
+        locked.read_record_only_key_length(offset)
+    }
+    #[inline]
+    pub fn read_record_only_value_length(&self, offset: RecordOffset) -> Result<ValueLength> {
+        let mut locked = self.0.borrow_mut();
+        locked.read_record_only_value_length(offset)
     }
     #[inline]
     pub fn read_record_only_key(&self, offset: RecordOffset) -> Result<KT> {
@@ -211,18 +225,18 @@ impl VarFile {
         // signature1
         let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
         let _sz = self.read_exact(&mut sig1)?;
-        assert!(!(sig1 != DAT_HEADER_SIGNATURE), "invalid header signature1");
+        assert!(sig1 == DAT_HEADER_SIGNATURE, "invalid header signature1");
         // signature2
         let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
         let _sz = self.read_exact(&mut sig2)?;
         assert!(
-            !(sig2 != signature2),
+            sig2 == signature2,
             "invalid header signature2, type signature: {:?}",
             sig2
         );
         // reserve0
         let _reserve0 = self.read_u64_le()?;
-        assert!(!(_reserve0 != 0), "invalid reserve0");
+        assert!(_reserve0 == 0, "invalid reserve0");
         //
         Ok(())
     }
@@ -647,10 +661,8 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
         let key = KT::from(&maybe);
         //
         let val_len = self.0.read_value_len()?;
-        let mut value = vec![0u8; val_len.into()];
-        if !val_len.is_zero() {
-            let _ = self.0.read_exact_small(&mut value)?;
-        }
+        let maybe_slice = self.0.read_exact_maybeslice(val_len.into())?;
+        let value = maybe_slice.to_vec();
         //
         let record = Record::with(offset, record_size, key, value);
         //
@@ -680,6 +692,43 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
     }
 
     #[inline]
+    fn read_record_only_key_length(&mut self, offset: RecordOffset) -> Result<KeyLength> {
+        debug_assert!(!offset.is_zero());
+        //
+        #[cfg(feature = "record_cache")]
+        {
+            let record = self.read_record(offset)?;
+            Ok(KeyLength::new(record.key.len()))
+        }
+        //
+        #[cfg(not(feature = "record_cache"))]
+        {
+            self.0.seek_skip_to_record_key(offset)?;
+            let key_len = self.0.read_key_len()?;
+            Ok(key_len)
+        }
+    }
+
+    #[inline]
+    fn read_record_only_value_length(&mut self, offset: RecordOffset) -> Result<ValueLength> {
+        debug_assert!(!offset.is_zero());
+        //
+        #[cfg(feature = "record_cache")]
+        {
+            let record = self.read_record(offset)?;
+            Ok(ValueLength::new(record.value.len()))
+        }
+        //
+        #[cfg(not(feature = "record_cache"))]
+        {
+            self.0.seek_skip_to_record_value(offset)?;
+            let val_len = self.0.read_value_len()?;
+            //
+            Ok(val_len)
+        }
+    }
+
+    #[inline]
     fn read_record_only_key(&mut self, offset: RecordOffset) -> Result<KT> {
         debug_assert!(!offset.is_zero());
         //
@@ -691,11 +740,10 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
         //
         #[cfg(not(feature = "record_cache"))]
         {
-            self.0.seek_from_start(offset)?;
-            let _record_size = self.0.read_record_size()?;
+            self.0.seek_skip_to_record_key(offset)?;
             let key_len = self.0.read_key_len()?;
-            let maybe = self.0.read_exact_maybeslice(key_len.into())?;
-            Ok(KT::from(&maybe))
+            let maybe_slice = self.0.read_exact_maybeslice(key_len.into())?;
+            Ok(KT::from(&maybe_slice))
         }
     }
 
@@ -711,19 +759,11 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
         //
         #[cfg(not(feature = "record_cache"))]
         {
-            self.0.seek_from_start(offset)?;
-            let record_size = self.0.read_record_size()?;
-            debug_assert!(record_size.is_valid());
-            let key_len = self.0.read_key_len()?;
-            if !key_len.is_zero() {
-                self.0.seek_skip_length(key_len)?;
-            }
+            self.0.seek_skip_to_record_value(offset)?;
             //
             let val_len = self.0.read_value_len()?;
-            let mut value = vec![0u8; val_len.into()];
-            if !val_len.is_zero() {
-                let _ = self.0.read_exact_small(&mut value)?;
-            }
+            let maybe_slice = self.0.read_exact_maybeslice(val_len.into())?;
+            let value = maybe_slice.to_vec();
             //
             Ok(value)
         }

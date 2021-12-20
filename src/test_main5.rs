@@ -2,6 +2,8 @@ use siamesedb::filedb::{FileBufSizeParam, FileDbMapString, FileDbParams};
 use siamesedb::DbXxx;
 use std::str::FromStr;
 
+const LOOP_MAX: i64 = 2_000_000;
+
 fn main() -> Result<(), std::io::Error> {
     let db_name = "target/tmp/testA5.siamesedb";
     //
@@ -17,13 +19,17 @@ fn main() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn conv_to_kv_string(ki: i64, vi: i64) -> (String, String) {
+fn conv_to_kv_string(ki: i64, _vi: i64) -> (String, String) {
     let bytes = ki.to_le_bytes();
-    let k = format!("{}.{}.{}.{}", bytes[0], bytes[1], bytes[2], bytes[3]);
+    //let k = format!("{}.{}", bytes[0], bytes[1]);
+    //let k = format!("{}.{}.{}.{}", bytes[0], bytes[1], bytes[2], bytes[3]);
     //let k = format!("key-{}.{}.{}", bytes[0], bytes[1], bytes[2]);
-    //let k = format!("key-{}.{}.{}", bytes[0], bytes[1], bytes[2]).repeat(4);
-    let v = format!("{}", vi);
-    (k.into(), v)
+    let k = format!("key-{}.{}.{}", bytes[0], bytes[1], bytes[2]).repeat(2);
+    let v = format!("value-{}", ki).repeat(4);
+    //let v = format!("value-{}", ki);
+    //let v = format!("{}", _vi);
+    //let v = String::new();
+    (k, v)
 }
 
 fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
@@ -55,7 +61,7 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
     let mut ki: i64 = 0;
     loop {
         ki += 1;
-        if ki > 2_000_000 {
+        if ki > LOOP_MAX {
             break;
         }
         if ki % 10_000 == 0 {
@@ -109,7 +115,7 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
     let mut ki: i64 = 0;
     loop {
         ki += 1;
-        if ki > 2_000_000 {
+        if ki > LOOP_MAX {
             break;
         }
         if ki % 10_000 == 0 {
@@ -150,10 +156,7 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
     let (k, _v) = conv_to_kv_string(1, 0);
     let vi: i64 = {
         if let Some(s) = db_map.get_string(&k)? {
-            match i64::from_str(&s) {
-                Ok(i) => i,
-                Err(_) => 0,
-            }
+            i64::from_str(&s).unwrap_or(0)
         } else {
             0
         }
@@ -164,7 +167,7 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
     let mut ki: i64 = 0;
     loop {
         ki += 1;
-        if ki > 2_000_000 {
+        if ki > LOOP_MAX {
             break;
         }
         if ki % 10_000 == 0 {

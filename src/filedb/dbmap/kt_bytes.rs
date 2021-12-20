@@ -1,6 +1,7 @@
 use super::super::super::{Bytes, DbMapBytes, DbXxx, DbXxxKeyType};
 use super::super::{
-    CheckFileDbMap, CountOfPerSize, FileDbParams, FileDbXxxInner, KeysCountStats, RecordSizeStats,
+    CheckFileDbMap, CountOfPerSize, FileDbParams, FileDbXxxInner, Key, KeysCountStats, LengthStats,
+    RecordSizeStats, Value,
 };
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -97,6 +98,14 @@ impl CheckFileDbMap for FileDbMapBytes {
     fn keys_count_stats(&self) -> Result<KeysCountStats> {
         RefCell::borrow(&self.0).keys_count_stats()
     }
+    /// key length statistics
+    fn key_length_stats(&self) -> Result<LengthStats<Key>> {
+        RefCell::borrow(&self.0).key_length_stats()
+    }
+    /// value length statistics
+    fn value_length_stats(&self) -> Result<LengthStats<Value>> {
+        RefCell::borrow(&self.0).value_length_stats()
+    }
 }
 
 impl DbXxx<Bytes> for FileDbMapBytes {
@@ -163,16 +172,11 @@ mod debug {
         {
             //
             #[cfg(not(feature = "key_cache"))]
-            assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 32);
+            assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 24);
             #[cfg(feature = "key_cache")]
             {
                 #[cfg(not(feature = "kc_lru"))]
-                {
-                    #[cfg(not(feature = "kc_hash"))]
-                    assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 72);
-                    #[cfg(feature = "kc_hash")]
-                    assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 96);
-                }
+                assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 56);
                 #[cfg(feature = "kc_lru")]
                 assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 72);
             }
@@ -182,14 +186,9 @@ mod debug {
         {
             //
             #[cfg(not(feature = "key_cache"))]
-            assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 16);
+            assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 12);
             #[cfg(feature = "key_cache")]
-            {
-                #[cfg(not(feature = "kc_hash"))]
-                assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 44);
-                #[cfg(feature = "kc_hash")]
-                assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 64);
-            }
+            assert_eq!(std::mem::size_of::<FileDbXxxInner<Bytes>>(), 28);
         }
     }
 }

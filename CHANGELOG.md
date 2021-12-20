@@ -1,7 +1,15 @@
-TBD
+TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.13 (2021-12-20)
+=====
+
+* remove `kc_btree` and `kc_hash` from features.
+* remove `offidx_btreemap` from features.
+* remove `buf_idx_btreemap` from features.
+* adds `kc_print_hits` and `nc_print_hits`  to features.
+* adds key_length_stats() and value_length_stats() into trait CheckFileDbMap.
 * removes `node_dm32` from features and source codes.
 * changes node offset and node size to 8 bytes boundary.
 * changes record size and record offset to 8 bytes boundary.
