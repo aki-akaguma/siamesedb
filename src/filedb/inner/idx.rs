@@ -59,16 +59,25 @@ impl IdxFile {
                 let idx_buf_chunk_size = CHUNK_SIZE;
                 let idx_buf_num_chunks = val / idx_buf_chunk_size;
                 VarFile::with_capacity(
+                    &NODE_SIZE_FREE_OFFSET,
+                    &NODE_SIZE_ARY,
                     "idx",
                     std_file,
                     idx_buf_chunk_size,
                     idx_buf_num_chunks.try_into().unwrap(),
                 )?
             }
-            FileBufSizeParam::PerMille(val) => {
-                VarFile::with_per_mille("idx", std_file, CHUNK_SIZE, val)?
+            FileBufSizeParam::PerMille(val) => VarFile::with_per_mille(
+                &NODE_SIZE_FREE_OFFSET,
+                &NODE_SIZE_ARY,
+                "idx",
+                std_file,
+                CHUNK_SIZE,
+                val,
+            )?,
+            FileBufSizeParam::Auto => {
+                VarFile::new(&NODE_SIZE_FREE_OFFSET, &NODE_SIZE_ARY, "idx", std_file)?
             }
-            FileBufSizeParam::Auto => VarFile::new("idx", std_file)?,
         };
         let file_length: NodeOffset = file.seek_to_end()?;
         //
@@ -489,7 +498,9 @@ impl IdxFile {
         let mut vec = Vec::new();
         let mut locked = RefCell::borrow_mut(&self.0);
         for node_size in sz_ary {
-            let cnt = locked.0.count_of_free_node_list(NodeSize::new(node_size))?;
+            let cnt = locked
+                .0
+                .count_of_free_piece_list(NodeSize::new(node_size))?;
             vec.push((node_size, cnt));
         }
         Ok(vec)
@@ -652,200 +663,6 @@ const NODE_SIZE_FREE_OFFSET: [u64; 8] = [
     NODE_SIZE_FREE_OFFSET_1ST + 8 * 7,
 ];
 
-impl NodeSize {
-    fn free_node_list_offset_of_header(&self) -> u64 {
-        let node_size = self.as_value();
-        debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
-        match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&node_size) {
-            Ok(k) => {
-                return NODE_SIZE_FREE_OFFSET[k];
-            }
-            Err(_k) => {}
-        }
-        debug_assert!(
-            node_size > NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2],
-            "node_size: {} > NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2]: {}",
-            node_size,
-            NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2]
-        );
-        NODE_SIZE_FREE_OFFSET[NODE_SIZE_FREE_OFFSET.len() - 1]
-    }
-    fn is_large_node_size(&self) -> bool {
-        let node_size = self.as_value();
-        node_size >= NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 1]
-    }
-    fn roundup(&self) -> NodeSize {
-        let node_size = self.as_value();
-        debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
-        match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&node_size) {
-            Ok(k) => {
-                let n_sz = NODE_SIZE_ARY[k];
-                return NodeSize::new(n_sz);
-            }
-            Err(k) => {
-                if k < NODE_SIZE_ARY.len() - 1 {
-                    let n_sz = NODE_SIZE_ARY[k];
-                    return NodeSize::new(n_sz);
-                }
-            }
-        }
-        NodeSize::new(((node_size + 63) / 64) * 64)
-    }
-    fn can_down(&self, need: NodeSize) -> bool {
-        let node_size = self.as_value();
-        let need_size = need.as_value();
-        debug_assert!(node_size > 0, "node_size: {} > 0", node_size);
-        match NODE_SIZE_ARY[..(NODE_SIZE_ARY.len() - 1)].binary_search(&need_size) {
-            Ok(k) => {
-                let n_sz = NODE_SIZE_ARY[k];
-                return n_sz < node_size;
-            }
-            Err(k) => {
-                if k < NODE_SIZE_ARY.len() - 1 {
-                    let n_sz = NODE_SIZE_ARY[k];
-                    return n_sz < node_size;
-                }
-            }
-        }
-        false
-    }
-}
-
-impl VarFile {
-    fn read_free_node_offset_on_header(&mut self, node_size: NodeSize) -> Result<NodeOffset> {
-        let free_offset = node_size.free_node_list_offset_of_header();
-        self.seek_from_start(NodeOffset::new(free_offset))?;
-        self.read_free_node_offset()
-    }
-
-    fn write_free_node_offset_on_header(
-        &mut self,
-        node_size: NodeSize,
-        offset: NodeOffset,
-    ) -> Result<()> {
-        debug_assert!(offset.is_zero() || offset.as_value() >= IDX_HEADER_SZ);
-        let free_offset = node_size.free_node_list_offset_of_header();
-        self.seek_from_start(NodeOffset::new(free_offset))?;
-        self.write_free_node_offset(offset)
-    }
-
-    fn count_of_free_node_list(&mut self, node_size: NodeSize) -> Result<u64> {
-        let mut count = 0;
-        let free_1st = self.read_free_node_offset_on_header(node_size)?;
-        if !free_1st.is_zero() {
-            let mut free_next_offset = free_1st;
-            while !free_next_offset.is_zero() {
-                count += 1;
-                free_next_offset = {
-                    self.seek_from_start(free_next_offset)?;
-                    let _node_len = self.read_node_size()?;
-                    let _keys_count = self.read_keys_count()?;
-                    debug_assert!(_keys_count.is_zero());
-                    let _node_offset = self.read_node_offset()?;
-                    debug_assert!(_node_offset.is_zero());
-                    self.read_free_node_offset()?
-                };
-            }
-        }
-        Ok(count)
-    }
-
-    fn pop_free_node_list(&mut self, new_node_size: NodeSize) -> Result<NodeOffset> {
-        let free_1st = self.read_free_node_offset_on_header(new_node_size)?;
-        if !new_node_size.is_large_node_size() {
-            if !free_1st.is_zero() {
-                let free_next = {
-                    let (free_next, node_size) = {
-                        self.seek_from_start(free_1st)?;
-                        let node_size = self.read_node_size()?;
-                        debug_assert!(!node_size.is_zero());
-                        debug_assert!(node_size == new_node_size);
-                        let _keys_count = self.read_keys_count()?;
-                        debug_assert!(_keys_count.is_zero());
-                        let _node_offset = self.read_node_offset()?;
-                        debug_assert!(_node_offset.is_zero());
-                        let node_offset = self.read_free_node_offset()?;
-                        (node_offset, node_size)
-                    };
-                    //
-                    self.write_node_clear(free_1st, node_size)?;
-                    //
-                    free_next
-                };
-                self.write_free_node_offset_on_header(new_node_size, free_next)?;
-            }
-            Ok(free_1st)
-        } else {
-            self.pop_free_node_list_large(new_node_size, free_1st)
-        }
-    }
-
-    fn pop_free_node_list_large(
-        &mut self,
-        new_node_size: NodeSize,
-        free_1st: NodeOffset,
-    ) -> Result<NodeOffset> {
-        let mut free_prev = NodeOffset::new(0);
-        let mut free_curr = free_1st;
-        while !free_curr.is_zero() {
-            let (free_next, node_size) = {
-                self.seek_from_start(free_curr)?;
-                let node_size = self.read_node_size()?;
-                debug_assert!(!node_size.is_zero());
-                let _keys_count = self.read_keys_count()?;
-                debug_assert!(_keys_count.is_zero());
-                let _node_offset = self.read_node_offset()?;
-                debug_assert!(_node_offset.is_zero());
-                let node_offset = self.read_free_node_offset()?;
-                (node_offset, node_size)
-            };
-            if new_node_size <= node_size {
-                if !free_prev.is_zero() {
-                    self.seek_from_start(free_prev)?;
-                    let _node_size = self.read_node_size()?;
-                    debug_assert!(!_node_size.is_zero());
-                    let _keys_count = self.read_keys_count()?;
-                    debug_assert!(_keys_count.is_zero());
-                    let _node_offset = self.read_node_offset()?;
-                    debug_assert!(_node_offset.is_zero());
-                    self.write_free_node_offset(free_next)?;
-                } else {
-                    self.write_free_node_offset_on_header(new_node_size, free_next)?;
-                }
-                //
-                self.write_node_clear(free_curr, node_size)?;
-                return Ok(free_curr);
-            }
-            free_prev = free_curr;
-            free_curr = free_next;
-        }
-        Ok(free_curr)
-    }
-
-    fn push_free_node_list(
-        &mut self,
-        old_node_offset: NodeOffset,
-        old_node_size: NodeSize,
-    ) -> Result<()> {
-        if old_node_offset.is_zero() {
-            return Ok(());
-        }
-        debug_assert!(!old_node_size.is_zero());
-        //
-        let free_1st = self.read_free_node_offset_on_header(old_node_size)?;
-        {
-            self.write_node_clear(old_node_offset, old_node_size)?;
-            self.seek_from_start(old_node_offset)?;
-            self.write_node_size(old_node_size)?;
-            self.write_keys_count(KeysCount::new(0))?;
-            self.write_node_offset(NodeOffset::new(0))?;
-            self.write_free_node_offset(free_1st)?;
-        }
-        self.write_free_node_offset_on_header(old_node_size, old_node_offset)?;
-        Ok(())
-    }
-}
-
 #[cfg(feature = "small_node_slots")]
 pub const NODE_SLOTS_MAX: u16 = 6;
 
@@ -863,12 +680,11 @@ const NODE_SIZE_ARY: [u32; 8] = [
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u32u32")]
-pub const NODE_SLOTS_MAX: u16 = 64;
-//pub const NODE_SLOTS_MAX: u16 = 15;
+pub const NODE_SLOTS_MAX: u16 = 12;
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u64u64")]
-pub const NODE_SLOTS_MAX: u16 = 7;
+pub const NODE_SLOTS_MAX: u16 = 6;
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_vu64")]
@@ -1102,7 +918,7 @@ impl VarFileNodeCache {
             }
         };
         //
-        self.0.push_free_node_list(node_offset, old_node_size)?;
+        self.0.push_free_piece_list(node_offset, old_node_size)?;
         Ok(old_node_size)
     }
 
@@ -1120,7 +936,9 @@ impl VarFileNodeCache {
             //let encoded_len = vu64::encoded_len(buf_len as u64);
             //
             // buggy: size operation for node size.
-            NodeSize::new(buf_len + encoded_len).roundup()
+            self.0
+                .piece_mgr
+                .roundup(NodeSize::new(buf_len + encoded_len))
         };
         //
         if !is_new {
@@ -1138,7 +956,9 @@ impl VarFileNodeCache {
                     self.0.read_node_size()?
                 }
             };
-            if new_node_size <= old_node_size && !old_node_size.can_down(new_node_size) {
+            if new_node_size <= old_node_size
+                && !self.0.piece_mgr.can_down(old_node_size, new_node_size)
+            {
                 // over writes.
                 #[cfg(not(feature = "node_cache"))]
                 {
@@ -1157,23 +977,24 @@ impl VarFileNodeCache {
                 self.1.delete(&node_.get_ref().offset());
                 // old
                 self.0
-                    .push_free_node_list(node_.get_ref().offset(), old_node_size)?;
+                    .push_free_piece_list(node_.get_ref().offset(), old_node_size)?;
             }
         }
         // add new.
         {
-            let free_node_offset = self.0.pop_free_node_list(new_node_size)?;
+            let free_node_offset = self.0.pop_free_piece_list(new_node_size)?;
             let (new_node_offset, new_node_size) = if !free_node_offset.is_zero() {
                 self.0.seek_from_start(free_node_offset)?;
                 let node_size = self.0.read_node_size()?;
-                debug_assert!(
-                    (new_node_size.as_value() > NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 1]
-                        && node_size >= new_node_size)
-                        || node_size == new_node_size,
-                    "node_size: {} == new_node_size: {}",
-                    node_size.as_value(),
-                    new_node_size.as_value()
-                );
+                #[cfg(debug_assertions)]
+                if node_size != new_node_size {
+                    debug_assert!(
+                        new_node_size.as_value() > NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2],
+                        "new_node_size: {} == NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2]: {}",
+                        new_node_size.as_value(),
+                        NODE_SIZE_ARY[NODE_SIZE_ARY.len() - 2]
+                    );
+                }
                 //self.0.write_node_clear(free_node_offset, node_size)?;
                 (free_node_offset, node_size)
             } else {

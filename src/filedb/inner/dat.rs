@@ -55,16 +55,25 @@ impl<KT: DbXxxKeyType> DatFile<KT> {
                 let dat_buf_chunk_size = CHUNK_SIZE;
                 let dat_buf_num_chunks = val / dat_buf_chunk_size;
                 VarFile::with_capacity(
+                    &REC_SIZE_FREE_OFFSET,
+                    &REC_SIZE_ARY,
                     "dat",
                     std_file,
                     dat_buf_chunk_size,
                     dat_buf_num_chunks.try_into().unwrap(),
                 )?
             }
-            FileBufSizeParam::PerMille(val) => {
-                VarFile::with_per_mille("dat", std_file, CHUNK_SIZE, val)?
+            FileBufSizeParam::PerMille(val) => VarFile::with_per_mille(
+                &REC_SIZE_FREE_OFFSET,
+                &REC_SIZE_ARY,
+                "dat",
+                std_file,
+                CHUNK_SIZE,
+                val,
+            )?,
+            FileBufSizeParam::Auto => {
+                VarFile::new(&REC_SIZE_FREE_OFFSET, &REC_SIZE_ARY, "dat", std_file)?
             }
-            FileBufSizeParam::Auto => VarFile::new("dat", std_file)?,
         };
         let file_length: RecordOffset = file.seek_to_end()?;
         if file_length.is_zero() {
@@ -170,7 +179,7 @@ impl<KT: DbXxxKeyType> DatFile<KT> {
         for record_size in sz_ary {
             let cnt = locked
                 .0
-                .count_of_free_record_list(RecordSize::new(record_size))?;
+                .count_of_free_piece_list(RecordSize::new(record_size))?;
             vec.push((record_size, cnt));
         }
         Ok(vec)
@@ -300,160 +309,6 @@ impl RecordSize {
         );
         true
     }
-    fn free_record_list_offset_of_header(&self) -> u64 {
-        let record_size = self.as_value();
-        debug_assert!(record_size > 0, "record_size: {} > 0", record_size);
-        for i in 0..REC_SIZE_ARY.len() {
-            if REC_SIZE_ARY[i] == record_size {
-                return REC_SIZE_FREE_OFFSET[i];
-            }
-        }
-        debug_assert!(
-            record_size > REC_SIZE_ARY[REC_SIZE_ARY.len() - 2],
-            "record_size: {} > REC_SIZE_ARY[REC_SIZE_ARY.len() - 2]: {}",
-            record_size,
-            REC_SIZE_ARY[REC_SIZE_ARY.len() - 2]
-        );
-        REC_SIZE_FREE_OFFSET[REC_SIZE_FREE_OFFSET.len() - 1]
-    }
-    fn is_large_record_size(&self) -> bool {
-        let record_size = self.as_value();
-        record_size >= REC_SIZE_ARY[REC_SIZE_ARY.len() - 1]
-    }
-    fn roundup(&self) -> RecordSize {
-        let record_size = self.as_value();
-        debug_assert!(record_size > 0, "record_size: {} > 0", record_size);
-        for &n_sz in REC_SIZE_ARY.iter().take(REC_SIZE_ARY.len() - 1) {
-            if record_size <= n_sz {
-                return RecordSize::new(n_sz);
-            }
-        }
-        RecordSize::new(((record_size + 128) / 128) * 128)
-    }
-}
-
-impl VarFile {
-    fn read_free_record_offset_on_header(
-        &mut self,
-        record_size: RecordSize,
-    ) -> Result<RecordOffset> {
-        let free_offset = record_size.free_record_list_offset_of_header();
-        self.seek_from_start(RecordOffset::new(free_offset))?;
-        self.read_u64_le().map(RecordOffset::new)
-    }
-
-    fn write_free_record_offset_on_header(
-        &mut self,
-        record_size: RecordSize,
-        offset: RecordOffset,
-    ) -> Result<()> {
-        let free_offset = record_size.free_record_list_offset_of_header();
-        self.seek_from_start(RecordOffset::new(free_offset))?;
-        self.write_u64_le(offset.into())
-    }
-
-    fn count_of_free_record_list(&mut self, new_record_size: RecordSize) -> Result<u64> {
-        let mut count = 0;
-        let free_1st = self.read_free_record_offset_on_header(new_record_size)?;
-        if !free_1st.is_zero() {
-            let mut free_next_offset = free_1st;
-            while !free_next_offset.is_zero() {
-                count += 1;
-                free_next_offset = {
-                    self.seek_from_start(free_next_offset)?;
-                    let _record_size = self.read_record_size()?;
-                    let _key_len = self.read_key_len()?;
-                    debug_assert!(_key_len.is_zero());
-                    self.read_free_record_offset()?
-                };
-            }
-        }
-        Ok(count)
-    }
-
-    fn pop_free_record_list(&mut self, new_record_size: RecordSize) -> Result<RecordOffset> {
-        let free_1st = self.read_free_record_offset_on_header(new_record_size)?;
-        if !new_record_size.is_large_record_size() {
-            if !free_1st.is_zero() {
-                let free_next = {
-                    self.seek_from_start(free_1st)?;
-                    let (free_next, record_size) = {
-                        let record_size = self.read_record_size()?;
-                        let _key_len = self.read_key_len()?;
-                        debug_assert!(_key_len.is_zero());
-                        let record_offset = self.read_free_record_offset()?;
-                        (record_offset, record_size)
-                    };
-                    //
-                    self.write_record_clear(free_1st, record_size)?;
-                    //
-                    free_next
-                };
-                self.write_free_record_offset_on_header(new_record_size, free_next)?;
-            }
-            Ok(free_1st)
-        } else {
-            self.pop_free_record_list_large(new_record_size, free_1st)
-        }
-    }
-
-    fn pop_free_record_list_large(
-        &mut self,
-        new_record_size: RecordSize,
-        free_1st: RecordOffset,
-    ) -> Result<RecordOffset> {
-        let mut free_prev = RecordOffset::new(0);
-        let mut free_curr = free_1st;
-        while !free_curr.is_zero() {
-            self.seek_from_start(free_curr)?;
-            let (free_next, record_size) = {
-                let record_size = self.read_record_size()?;
-                let _key_len = self.read_key_len()?;
-                debug_assert!(_key_len.is_zero());
-                let record_offset = self.read_free_record_offset()?;
-                (record_offset, record_size)
-            };
-            if new_record_size >= record_size {
-                if !free_prev.is_zero() {
-                    self.seek_from_start(free_prev)?;
-                    let _record_size = self.read_record_size()?;
-                    let _key_len = self.read_key_len()?;
-                    debug_assert!(_key_len.is_zero());
-                    self.write_free_record_offset(free_next)?;
-                } else {
-                    self.write_free_record_offset_on_header(new_record_size, free_next)?;
-                }
-                //
-                self.write_record_clear(free_curr, record_size)?;
-                return Ok(free_curr);
-            }
-            free_prev = free_curr;
-            free_curr = free_next;
-        }
-        Ok(free_curr)
-    }
-
-    fn push_free_record_list(
-        &mut self,
-        old_record_offset: RecordOffset,
-        old_record_size: RecordSize,
-    ) -> Result<()> {
-        if old_record_offset.is_zero() {
-            return Ok(());
-        }
-        debug_assert!(!old_record_size.is_zero());
-        //
-        let free_1st = self.read_free_record_offset_on_header(old_record_size)?;
-        {
-            let start_offset = self.seek_from_start(old_record_offset)?;
-            self.write_record_size(old_record_size)?;
-            self.write_key_len(KeyLength::new(0))?;
-            self.write_free_record_offset(free_1st)?;
-            self.write_zero_to_offset(start_offset + old_record_size)?;
-        }
-        self.write_free_record_offset_on_header(old_record_size, old_record_offset)?;
-        Ok(())
-    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -565,7 +420,7 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
             }
         };
         //
-        self.0.push_free_record_list(offset, old_record_size)?;
+        self.0.push_free_piece_list(offset, old_record_size)?;
         Ok(old_record_size)
     }
 
@@ -578,7 +433,10 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
         debug_assert!(is_new || !record.offset.is_zero());
         //
         let (encorded_record_len, record_len, _key_len, _value_len) = record.encoded_record_size();
-        let new_record_size = RecordSize::new(encorded_record_len + record_len).roundup();
+        let new_record_size = self
+            .0
+            .piece_mgr
+            .roundup(RecordSize::new(encorded_record_len + record_len));
         //
         if !is_new {
             #[cfg(not(feature = "record_cache"))]
@@ -616,12 +474,12 @@ impl<KT: DbXxxKeyType> VarFileRecordCache<KT> {
                 self.1.delete(&record.offset);
                 // old
                 self.0
-                    .push_free_record_list(record.offset, old_record_size)?;
+                    .push_free_piece_list(record.offset, old_record_size)?;
             }
         }
         // add new.
         {
-            let free_record_offset = self.0.pop_free_record_list(new_record_size)?;
+            let free_record_offset = self.0.pop_free_piece_list(new_record_size)?;
             let new_record_offset = if !free_record_offset.is_zero() {
                 self.0.seek_from_start(free_record_offset)?;
                 free_record_offset

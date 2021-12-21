@@ -2,6 +2,8 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* adds `piece.rs` source code.
+
 0.1.13 (2021-12-20)
 =====
 

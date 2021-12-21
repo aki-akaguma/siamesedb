@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 pub(crate) mod dbxxx;
 pub(crate) mod semtype;
 
+mod piece;
 mod tr;
 
 mod dat;
