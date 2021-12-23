@@ -6,7 +6,9 @@ use super::semtype::*;
 use super::tr::{IdxNode, TreeNode};
 use super::{dat, idx};
 use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::convert::TryInto;
 use std::io::Result;
 use std::path::Path;
 use std::rc::Rc;
@@ -629,6 +631,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     }
 }
 
+// impl trait: DbXxx<KT>
 impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
     #[inline]
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
@@ -709,5 +712,186 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
     {
         let mut top_node = self.idx_file.read_top_node()?;
         self.has_key_in_node_tree(&mut top_node, &(*key.borrow()))
+    }
+}
+
+// for Iterator
+//
+#[derive(Debug)]
+pub struct DbXxxIterMut<KT: DbXxxKeyType> {
+    db_map: Rc<RefCell<FileDbXxxInner<KT>>>,
+    /// node depth of top node to leaf node.
+    depth_nodes: Vec<(IdxNode, i32, i32)>,
+}
+
+impl<KT: DbXxxKeyType> DbXxxIterMut<KT> {
+    pub fn new(db_map: Rc<RefCell<FileDbXxxInner<KT>>>) -> Result<Self> {
+        let depth_nodes = {
+            let db_map_inner = RefCell::borrow(&db_map);
+            let top_node = db_map_inner.idx_file.read_top_node()?;
+            let mut depth_nodes = vec![(top_node.clone(), 0, 0)];
+            let mut node = top_node;
+            //
+            loop {
+                let node_offset = node.get_ref().downs_get(0);
+                if node_offset.is_zero() {
+                    break;
+                }
+                let down_node = db_map_inner.idx_file.read_node(node_offset).unwrap();
+                depth_nodes.push((down_node.clone(), 0, 0));
+                node = down_node;
+            }
+            depth_nodes
+        };
+        //
+        Ok(Self {
+            db_map,
+            depth_nodes,
+        })
+    }
+    fn next_record_offset(&mut self) -> Option<RecordOffset> {
+        if self.depth_nodes.is_empty() {
+            return None;
+        }
+        /*
+        {
+            let depth = self.depth_nodes.len();
+            let (_, keys_idx, downs_idx) = self.depth_nodes.last_mut().unwrap();
+            eprintln!("CHECK 001: {}, {}, {}", depth, *keys_idx, *downs_idx);
+        }
+        */
+        //
+        let (rec_offset, sw) = {
+            let (idx_node, keys_idx, downs_idx) = self.depth_nodes.last_mut().unwrap();
+            let rec_offset = if *keys_idx < *downs_idx {
+                if *keys_idx < idx_node.get_ref().keys_len().try_into().unwrap() {
+                    idx_node.get_ref().keys_get((*keys_idx).try_into().unwrap())
+                } else {
+                    return None;
+                }
+            } else {
+                let node_offset = idx_node
+                    .get_ref()
+                    .downs_get((*downs_idx).try_into().unwrap());
+                if node_offset.is_zero() {
+                    idx_node.get_ref().keys_get((*keys_idx).try_into().unwrap())
+                } else {
+                    {
+                        let db_map_inner = RefCell::borrow(&self.db_map);
+                        let down_node = db_map_inner.idx_file.read_node(node_offset).unwrap();
+                        self.depth_nodes.push((down_node, 0, 0));
+                    }
+                    return self.next_record_offset();
+                }
+            };
+            *keys_idx += 1;
+            if *keys_idx >= idx_node.get_ref().keys_len().try_into().unwrap() {
+                //eprintln!("CHECK 002");
+                if *downs_idx < idx_node.get_ref().downs_len().try_into().unwrap() {
+                    let node_offset = idx_node
+                        .get_ref()
+                        .downs_get((*downs_idx).try_into().unwrap());
+                    if !node_offset.is_zero() {
+                        //eprintln!("CHECK 002.1");
+                        let db_map_inner = RefCell::borrow(&self.db_map);
+                        let down_node = db_map_inner.idx_file.read_node(node_offset).unwrap();
+                        self.depth_nodes.push((down_node, 0, 0));
+                        (rec_offset, 1)
+                    } else {
+                        //eprintln!("CHECK 002.2");
+                        (rec_offset, 2)
+                    }
+                } else {
+                    //eprintln!("CHECK 002.3");
+                    let (_, _, _) = self.depth_nodes.pop().unwrap();
+                    let (_, _keys_idx, downs_idx) = self.depth_nodes.last_mut().unwrap();
+                    *downs_idx += 1;
+                    (rec_offset, 3)
+                }
+            } else {
+                (rec_offset, 0)
+            }
+        };
+        if sw == 2 {
+            loop {
+                if self.depth_nodes.is_empty() {
+                    break;
+                }
+                let (_, _, _) = self.depth_nodes.pop().unwrap();
+                if self.depth_nodes.is_empty() {
+                    break;
+                }
+                let (idx_node, _keys_idx, downs_idx) = self.depth_nodes.last_mut().unwrap();
+                *downs_idx += 1;
+                if *downs_idx < idx_node.get_ref().downs_len().try_into().unwrap() {
+                    break;
+                }
+            }
+        }
+        //
+        Some(rec_offset)
+    }
+}
+
+// impl trait: Iterator
+impl<KT: DbXxxKeyType> Iterator for DbXxxIterMut<KT> {
+    type Item = (KT, Vec<u8>);
+    fn next(&mut self) -> Option<(KT, Vec<u8>)> {
+        if let Some(key_offset) = self.next_record_offset() {
+            let mut db_map_inner = RefCell::borrow_mut(&self.db_map);
+            let key_rc = db_map_inner.load_key_string(key_offset).unwrap();
+            let value_vec = db_map_inner.load_value(key_offset).unwrap();
+            Some((key_rc.as_ref().clone(), value_vec))
+        } else {
+            None
+        }
+    }
+}
+
+//
+#[derive(Debug)]
+pub struct DbXxxIter<KT: DbXxxKeyType> {
+    iter: DbXxxIterMut<KT>,
+}
+
+impl<KT: DbXxxKeyType> DbXxxIter<KT> {
+    #[inline]
+    pub fn new(db_map: Rc<RefCell<FileDbXxxInner<KT>>>) -> Result<Self> {
+        Ok(Self {
+            iter: DbXxxIterMut::new(db_map)?,
+        })
+    }
+}
+
+// impl trait: Iterator
+impl<KT: DbXxxKeyType> Iterator for DbXxxIter<KT> {
+    type Item = (KT, Vec<u8>);
+    #[inline]
+    fn next(&mut self) -> Option<(KT, Vec<u8>)> {
+        self.iter.next()
+    }
+}
+
+//
+#[derive(Debug)]
+pub struct DbXxxIntoIter<KT: DbXxxKeyType> {
+    iter: DbXxxIterMut<KT>,
+}
+
+impl<KT: DbXxxKeyType> DbXxxIntoIter<KT> {
+    #[inline]
+    pub fn new(db_map: Rc<RefCell<FileDbXxxInner<KT>>>) -> Result<Self> {
+        Ok(Self {
+            iter: DbXxxIterMut::new(db_map)?,
+        })
+    }
+}
+
+// impl trait: Iterator
+impl<KT: DbXxxKeyType> Iterator for DbXxxIntoIter<KT> {
+    type Item = (KT, Vec<u8>);
+    #[inline]
+    fn next(&mut self) -> Option<(KT, Vec<u8>)> {
+        self.iter.next()
     }
 }

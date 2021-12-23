@@ -1,13 +1,16 @@
 use siamesedb::filedb::CheckFileDbMap;
 use siamesedb::filedb::FileDbMapString;
 use siamesedb::filedb::FileDbMapU64;
+use siamesedb::DbMap;
 use siamesedb::DbXxx;
 
 fn main() {
-    //_test_a1();
-    _test_a2();
+    _test_a1();
+    //_test_a2();
 }
 fn _test_a1() {
+    //_test00_map_iter();
+    _test00_map_iter2();
     //_test00_map();
     //_test00_list();
     //
@@ -267,6 +270,121 @@ fn _test00_map() {
     );
 }
 
+fn _test00_map_iter() {
+    let db_name = "target/tmp/testA.siamesedb";
+    let _ = std::fs::remove_dir_all(db_name);
+    let db = siamesedb::open_file(db_name).unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
+    //
+    {
+        // insert
+        db_map.put_string("key01".to_string(), "value1").unwrap();
+        db_map.put_string("key02".to_string(), "value2").unwrap();
+        db_map.put_string("key03".to_string(), "value3").unwrap();
+        db_map.put_string("key04".to_string(), "value4").unwrap();
+        db_map.put_string("key05".to_string(), "value5").unwrap();
+        db_map.put_string("key06".to_string(), "value6").unwrap();
+        db_map.put_string("key07".to_string(), "value7").unwrap();
+        db_map.put_string("key08".to_string(), "value8").unwrap();
+        db_map.put_string("key09".to_string(), "value9").unwrap();
+        db_map.put_string("key10".to_string(), "value10").unwrap();
+        db_map.put_string("key11".to_string(), "value11").unwrap();
+        db_map.put_string("key12".to_string(), "value12").unwrap();
+        db_map.put_string("key13".to_string(), "value13").unwrap();
+        db_map.put_string("key14".to_string(), "value14").unwrap();
+        db_map.put_string("key15".to_string(), "value15").unwrap();
+        db_map.put_string("key16".to_string(), "value16").unwrap();
+        db_map.put_string("key17".to_string(), "value17").unwrap();
+        db_map.put_string("key18".to_string(), "value18").unwrap();
+        //
+        println!("{}", db_map.graph_string_with_key_string().unwrap());
+        //
+        // iterator
+        let mut iter = db_map.iter_mut();
+        assert_eq!(iter.next(), Some(("key01".to_string(), b"value1".to_vec())));
+        assert_eq!(iter.next(), Some(("key02".to_string(), b"value2".to_vec())));
+        assert_eq!(iter.next(), Some(("key03".to_string(), b"value3".to_vec())));
+        assert_eq!(iter.next(), Some(("key04".to_string(), b"value4".to_vec())));
+        assert_eq!(iter.next(), Some(("key05".to_string(), b"value5".to_vec())));
+        //
+        assert_eq!(iter.next(), Some(("key06".to_string(), b"value6".to_vec())));
+        //
+        assert_eq!(iter.next(), Some(("key07".to_string(), b"value7".to_vec())));
+        assert_eq!(iter.next(), Some(("key08".to_string(), b"value8".to_vec())));
+        assert_eq!(iter.next(), Some(("key09".to_string(), b"value9".to_vec())));
+        assert_eq!(
+            iter.next(),
+            Some(("key10".to_string(), b"value10".to_vec()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("key11".to_string(), b"value11".to_vec()))
+        );
+        //
+        assert_eq!(
+            iter.next(),
+            Some(("key12".to_string(), b"value12".to_vec()))
+        );
+        //
+        assert_eq!(
+            iter.next(),
+            Some(("key13".to_string(), b"value13".to_vec()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("key14".to_string(), b"value14".to_vec()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("key15".to_string(), b"value15".to_vec()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("key16".to_string(), b"value16".to_vec()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("key17".to_string(), b"value17".to_vec()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("key18".to_string(), b"value18".to_vec()))
+        );
+        assert_eq!(iter.next(), None);
+        //
+        db_map.sync_data().unwrap();
+    }
+}
+
+fn _test00_map_iter2() {
+    let db_name = "target/tmp/testA.siamesedb";
+    let _ = std::fs::remove_dir_all(db_name);
+    let db = siamesedb::open_file(db_name).unwrap();
+    let mut db_map = db.db_map_string("some_map1").unwrap();
+    //
+    {
+        // insert
+        for i in 0..100 {
+            let key = format!("key{:02}", i);
+            let value = format!("value{}", i);
+            db_map.put_string(key, &value).unwrap();
+        }
+        //
+        println!("{}", db_map.graph_string_with_key_string().unwrap());
+        //
+        // iterator
+        let mut iter = db_map.iter_mut();
+        for i in 0..100 {
+            let key = format!("key{:02}", i);
+            let value = format!("value{}", i);
+            assert_eq!(iter.next(), Some((key, value.as_bytes().to_vec())));
+        }
+        assert_eq!(iter.next(), None);
+        //
+        db_map.sync_data().unwrap();
+    }
+}
+
 fn _test00_list() {
     let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
@@ -459,6 +577,7 @@ fn _test02() {
     assert_eq!(r, None);
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
 struct TestC {
     max_cnt: usize,
@@ -467,6 +586,7 @@ struct TestC {
     f_repeat: usize,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Clone, Copy)]
 struct CheckC {
     check: bool,

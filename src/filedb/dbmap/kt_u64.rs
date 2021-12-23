@@ -1,7 +1,55 @@
+use super::super::super::DbXxxKeyType;
+use super::FileDbMap;
+
+#[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
+use std::convert::TryInto;
+
+impl DbXxxKeyType for u64 {
+    #[inline]
+    fn signature() -> [u8; 8] {
+        [b'u', b'6', b'4', 0u8, 0u8, 0u8, 0u8, 0u8]
+    }
+    #[cfg(feature = "vf_u32u32")]
+    #[inline]
+    fn as_bytes(&self) -> Vec<u8> {
+        (*self as u32).to_le_bytes().to_vec()
+    }
+    #[cfg(feature = "vf_u32u32")]
+    #[inline]
+    fn from(bytes: &[u8]) -> Self {
+        debug_assert!(bytes.len() == 4, "bytes.len():{} == 4", bytes.len());
+        u32::from_le_bytes(bytes.try_into().unwrap()) as u64
+    }
+    #[cfg(feature = "vf_u64u64")]
+    #[inline]
+    fn as_bytes(&self) -> Vec<u8> {
+        self.to_le_bytes().to_vec()
+    }
+    #[cfg(feature = "vf_u64u64")]
+    #[inline]
+    fn from(bytes: &[u8]) -> Self {
+        u64::from_le_bytes(bytes.try_into().unwrap())
+    }
+    #[cfg(feature = "vf_vu64")]
+    #[inline]
+    fn as_bytes(&self) -> Vec<u8> {
+        vu64::encode(*self).as_ref().to_vec()
+    }
+    #[cfg(feature = "vf_vu64")]
+    #[inline]
+    fn from(bytes: &[u8]) -> Self {
+        vu64::decode(bytes).unwrap()
+    }
+}
+
+/// List in a file databse.
+pub type FileDbMapU64 = FileDbMap<u64>;
+
+/*
 use super::super::super::{DbMapU64, DbXxx, DbXxxKeyType};
 use super::super::{
     CheckFileDbMap, CountOfPerSize, FileDbParams, FileDbXxxInner, Key, KeysCountStats, LengthStats,
-    RecordSizeStats, Value,
+    RecordSizeStats, Value, DbXxxIterMut
 };
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -202,3 +250,4 @@ mod debug {
         }
     }
 }
+*/

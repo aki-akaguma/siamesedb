@@ -1,7 +1,32 @@
+use super::super::super::{Bytes, DbXxxKeyType};
+use super::FileDbMap;
+
+impl DbXxxKeyType for Bytes {
+    #[inline]
+    fn signature() -> [u8; 8] {
+        [b'b', b'y', b't', b'e', b's', 0u8, 0u8, 0u8]
+    }
+    #[inline]
+    fn as_bytes(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+    #[inline]
+    fn from(bytes: &[u8]) -> Self {
+        Bytes(bytes.to_vec())
+    }
+    fn byte_len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+/// Bytes Map in a file databse.
+pub type FileDbMapBytes = FileDbMap<Bytes>;
+
+/*
 use super::super::super::{Bytes, DbMapBytes, DbXxx, DbXxxKeyType};
 use super::super::{
     CheckFileDbMap, CountOfPerSize, FileDbParams, FileDbXxxInner, Key, KeysCountStats, LengthStats,
-    RecordSizeStats, Value,
+    RecordSizeStats, Value, DbXxxIterMut
 };
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -192,3 +217,4 @@ mod debug {
         }
     }
 }
+*/

@@ -1,13 +1,5 @@
-use super::super::super::{DbMapString, DbXxx, DbXxxKeyType};
-use super::super::{
-    CheckFileDbMap, CountOfPerSize, FileDbParams, FileDbXxxInner, Key, KeysCountStats, LengthStats,
-    RecordSizeStats, Value,
-};
-use std::borrow::Borrow;
-use std::cell::RefCell;
-use std::io::Result;
-use std::path::Path;
-use std::rc::Rc;
+use super::super::super::DbXxxKeyType;
+use super::FileDbMap;
 
 impl DbXxxKeyType for String {
     #[inline]
@@ -29,6 +21,20 @@ impl DbXxxKeyType for String {
 }
 
 /// String Map in a file database.
+pub type FileDbMapString = FileDbMap<String>;
+
+/*
+use super::super::super::{DbMapString, DbXxx, DbXxxKeyType};
+use super::super::{
+    CheckFileDbMap, CountOfPerSize, FileDbParams, FileDbXxxInner, Key, KeysCountStats, LengthStats,
+    RecordSizeStats, Value, DbXxxIterMut, DbXxxIntoIter
+};
+use std::borrow::Borrow;
+use std::cell::RefCell;
+use std::io::Result;
+use std::path::Path;
+use std::rc::Rc;
+
 #[derive(Debug, Clone)]
 pub struct FileDbMapString(Rc<RefCell<FileDbXxxInner<String>>>);
 
@@ -161,6 +167,46 @@ impl DbXxx<String> for FileDbMapString {
 }
 impl DbMapString for FileDbMapString {}
 
+// for iter
+impl FileDbMapString {
+    pub fn iter(&mut self) -> DbXxxIterMut<String> {
+        DbXxxIterMut::new(self.0.clone()).unwrap()
+    }
+    pub fn iter_mut(&mut self) -> DbXxxIterMut<String> {
+        DbXxxIterMut::new(self.0.clone()).unwrap()
+    }
+}
+
+// impl trait: IntoIterator
+impl IntoIterator for FileDbMapString {
+    type Item = (String, Vec<u8>);
+    type IntoIter = DbXxxIntoIter<String>;
+    //
+    fn into_iter(self) -> DbXxxIntoIter<String> {
+        DbXxxIntoIter::new(self.0.clone()).unwrap()
+    }
+}
+
+impl IntoIterator for &FileDbMapString {
+    type Item = (String, Vec<u8>);
+    type IntoIter = DbXxxIterMut<String>;
+    //
+    fn into_iter(self) -> DbXxxIterMut<String> {
+        DbXxxIterMut::new(self.0.clone()).unwrap()
+    }
+}
+
+impl IntoIterator for &mut FileDbMapString {
+    type Item = (String, Vec<u8>);
+    type IntoIter = DbXxxIterMut<String>;
+    //
+    fn into_iter(self) -> DbXxxIterMut<String> {
+        DbXxxIterMut::new(self.0.clone()).unwrap()
+    }
+}
+*/
+
+/*
 //--
 #[cfg(test)]
 mod debug {
@@ -192,3 +238,4 @@ mod debug {
         }
     }
 }
+*/

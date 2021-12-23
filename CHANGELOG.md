@@ -2,6 +2,11 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.14 (2021-12-23)
+=====
+
+* adds `iter()`, `iter_mut()` into `trait DbMap`.
+* adds a basic iterator.
 * adds `piece.rs` source code.
 
 0.1.13 (2021-12-20)

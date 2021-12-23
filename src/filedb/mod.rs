@@ -12,7 +12,7 @@ pub use dbmap::FileDbMapBytes;
 pub use dbmap::FileDbMapString;
 pub use dbmap::FileDbMapU64;
 
-pub use inner::dbxxx::FileDbXxxInner;
+pub use inner::dbxxx::{DbXxxIntoIter, DbXxxIter, DbXxxIterMut, FileDbXxxInner};
 use inner::semtype::*;
 use inner::FileDbInner;
 

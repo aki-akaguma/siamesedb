@@ -66,6 +66,36 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+## Example Iterator:
+
+```
+use siamesedb::{DbMapString, DbMap, DbXxx};
+
+fn main() -> std::io::Result<()> {
+    let db_name = "target/tmp/doc-test3.siamesedb";
+    // remove database
+    let _ = std::fs::remove_dir_all(db_name);
+    // create or open database
+    let db = siamesedb::open_file(db_name)?;
+    // create or get db map
+    let mut db_map = db.db_map_string("some_map1")?;
+    //
+    // insert
+    db_map.put_string("key01".into(), "value1").unwrap();
+    db_map.put_string("key02".into(), "value2").unwrap();
+    db_map.put_string("key03".into(), "value3").unwrap();
+    //
+    // iterator
+    let mut iter = db_map.iter();
+    assert_eq!(iter.next(), Some(("key01".into(), "value1".into())));
+    assert_eq!(iter.next(), Some(("key02".into(), "value2".into())));
+    assert_eq!(iter.next(), Some(("key03".into(), "value3".into())));
+    assert_eq!(iter.next(), None);
+    //
+    db_map.sync_data()?;
+    Ok(())
+}
+```
 */
 use std::borrow::Borrow;
 use std::io::Result;
@@ -75,6 +105,7 @@ pub mod filedb;
 pub mod memdb;
 
 pub use filedb::Bytes;
+pub use filedb::{DbXxxIter, DbXxxIterMut};
 
 /// Open the memory db. This data is not stored in file.
 pub fn open_memory<'a>() -> memdb::MemoryDb<'a> {
@@ -87,7 +118,7 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<filedb::FileDb> {
 }
 
 /// generic key-value map store interface. the key type is `KT`.
-pub trait DbXxx<KT> {
+pub trait DbXxx<KT: DbXxxKeyType> {
     /// returns the value corresponding to the key.
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
@@ -215,6 +246,12 @@ pub trait DbXxx<KT> {
         }
         Ok(ret)
     }
+}
+
+/// key-value db map store interface.
+pub trait DbMap<KT: DbXxxKeyType>: DbXxx<KT> {
+    fn iter(&self) -> DbXxxIter<KT>;
+    fn iter_mut(&mut self) -> DbXxxIterMut<KT>;
 }
 
 /// key-value map store interface. the key type is `String`.

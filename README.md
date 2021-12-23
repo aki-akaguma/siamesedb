@@ -67,6 +67,36 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+### Example Iterator:
+
+```rust
+use siamesedb::{DbMapString, DbMap, DbXxx};
+
+fn main() -> std::io::Result<()> {
+    let db_name = "target/tmp/doc-test3.siamesedb";
+    // remove database
+    let _ = std::fs::remove_dir_all(db_name);
+    // create or open database
+    let db = siamesedb::open_file(db_name)?;
+    // create or get db map
+    let mut db_map = db.db_map_string("some_map1")?;
+    //
+    // insert
+    db_map.put_string("key01".into(), "value1").unwrap();
+    db_map.put_string("key02".into(), "value2").unwrap();
+    db_map.put_string("key03".into(), "value3").unwrap();
+    //
+    // iterator
+    let mut iter = db_map.iter();
+    assert_eq!(iter.next(), Some(("key01".into(), "value1".into())));
+    assert_eq!(iter.next(), Some(("key02".into(), "value2".into())));
+    assert_eq!(iter.next(), Some(("key03".into(), "value3".into())));
+    assert_eq!(iter.next(), None);
+    //
+    db_map.sync_data()?;
+    Ok(())
+}
+```
 
 # Changelogs
 
