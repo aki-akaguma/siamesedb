@@ -42,7 +42,7 @@ impl PieceMgr {
     pub fn roundup<T>(&self, piece_size: Size<T>) -> Size<T> {
         let piece_size = piece_size.as_value();
         debug_assert!(piece_size > 0, "piece_size: {} > 0", piece_size);
-        for &n_sz in self.size_ary.iter().take(self.size_ary.len() - 1) {
+        for &n_sz in self.size_ary.iter().take(self.size_ary.len() - 2) {
             if piece_size <= n_sz {
                 return Size::<T>::new(n_sz);
             }
@@ -245,7 +245,7 @@ impl VarFile {
                 let record_offset = self.read_free_piece_offset()?;
                 (record_offset, record_size)
             };
-            if new_piece_size >= record_size {
+            if new_piece_size <= record_size {
                 if !free_prev.is_zero() {
                     self.seek_from_start(free_prev)?;
                     let _piece_size: Size<T> = self.read_piece_size()?;

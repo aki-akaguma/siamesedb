@@ -1,5 +1,5 @@
+use super::offidx::OffsetIndex;
 use super::semtype::*;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 //const CACHE_SIZE: usize = 32;
@@ -32,7 +32,8 @@ impl<KT> KeyCacheBean<KT> {
 
 #[derive(Debug)]
 pub struct KeyCache<KT> {
-    map: HashMap<KeyRecordOffset, KeyCacheBean<KT>>,
+    vec: Vec<KeyCacheBean<KT>>,
+    map: OffsetIndex,
     cache_size: usize,
     #[cfg(feature = "kc_print_hits")]
     count_of_hits: u64,
@@ -48,7 +49,8 @@ impl<KT> KeyCache<KT> {
     }
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
-            map: HashMap::new(),
+            vec: Vec::with_capacity(cache_size),
+            map: OffsetIndex::with_capacity(cache_size),
             cache_size,
             #[cfg(feature = "kc_print_hits")]
             count_of_hits: 0,
@@ -176,6 +178,7 @@ impl<KT> KeyCache<KT> {
     }
     #[inline]
     pub fn clear(&mut self) {
+        self.vec.clear();
         self.map.clear();
         //
         #[cfg(feature = "kc_lru")]
@@ -198,16 +201,19 @@ pub trait KeyCacheTrait<KT> {
 impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
     #[inline]
     fn len(&self) -> usize {
-        self.map.len()
+        self.vec.len()
     }
     #[inline]
     fn get(&mut self, offset: &KeyRecordOffset) -> Option<Rc<KT>> {
-        match self.map.get(offset) {
-            Some(kcb) => {
+        match self.map.get(&offset.as_value()) {
+            Some(idx) => {
                 #[cfg(feature = "kc_print_hits")]
                 {
                     self.count_of_hits += 1;
                 }
+                self.touch(idx);
+                let kcb = self.vec.get_mut(idx).unwrap();
+                //let kcb = unsafe { self.vec.get_unchecked_mut(idx) };
                 debug_assert!(
                     kcb.key_record_offset == *offset,
                     "kcb.key_record_offset: {} == *offset: {}",
@@ -230,29 +236,40 @@ impl<KT> KeyCacheTrait<KT> for KeyCache<KT> {
         }
     }
     fn put(&mut self, offset: &KeyRecordOffset, key: KT) -> Rc<KT> {
-        match self.map.get_mut(offset) {
-            Some(kcb) => {
+        match self.map.get(&offset.as_value()) {
+            Some(idx) => {
+                self.touch(idx);
+                let kcb = unsafe { self.vec.get_unchecked_mut(idx) };
                 debug_assert!(kcb.key_record_offset == *offset);
                 kcb.key = Some(Rc::new(key));
                 kcb.key.as_ref().unwrap().clone()
             }
             None => {
-                if self.map.len() > self.cache_size {
+                if self.vec.len() > self.cache_size {
                     // all clear cache algorithm
                     self.clear();
                     /*
                      */
                     //self.detach_cache(k, file)?
                 }
-                let key = Rc::new(key);
-                self.map
-                    .insert(*offset, KeyCacheBean::new(*offset, key.clone()));
-                key
+                let k = self.vec.len();
+                self.vec.push(KeyCacheBean::new(*offset, Rc::new(key)));
+                self.map.insert(&offset.as_value(), k);
+                self.touch(k);
+                let kcb = unsafe { self.vec.get_unchecked_mut(k) };
+                debug_assert!(kcb.key_record_offset == *offset);
+                kcb.key.as_ref().unwrap().clone()
             }
         }
     }
     fn delete(&mut self, offset: &KeyRecordOffset) {
-        let _ = self.map.remove(offset);
+        match self.map.remove(&offset.as_value()) {
+            Some(idx) => {
+                let kcb = self.vec.get_mut(idx).unwrap();
+                kcb.key = None;
+            }
+            None => (),
+        }
     }
 }
 

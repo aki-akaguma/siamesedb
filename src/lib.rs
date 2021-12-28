@@ -98,6 +98,7 @@ fn main() -> std::io::Result<()> {
 ```
 */
 use std::borrow::Borrow;
+use std::hash::Hash;
 use std::io::Result;
 use std::path::Path;
 
@@ -246,6 +247,43 @@ pub trait DbXxx<KT: DbXxxKeyType> {
         }
         Ok(ret)
     }
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+    #[inline]
+    fn get_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
+        self.get_k8(key)
+            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
+    }
+    fn bulk_get_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+        /*
+        let mut vec = Vec::with_capacity(bulk_keys.len());
+        for a in bulk_keys {
+            let value = self.get_k8(a)?;
+            vec.push(value);
+        }
+        Ok(vec)
+        */
+        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
+        let mut vec: Vec<(usize, &[u8])> =
+            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
+        vec.sort_by(|a, b| b.1.cmp(a.1));
+        while let Some(ik) = vec.pop() {
+            let result_value = self.get_k8(ik.1)?;
+            result.push((ik.0, result_value));
+        }
+        result.sort_by(|a, b| a.0.cmp(&(b.0)));
+        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
+        Ok(ret)
+    }
+    #[inline]
+    fn bulk_get_string_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<String>>> {
+        let vec = self.bulk_get_k8(bulk_keys)?;
+        let mut ret = Vec::new();
+        for opt in vec {
+            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
+            ret.push(b);
+        }
+        Ok(ret)
+    }
 }
 
 /// key-value db map store interface.
@@ -264,7 +302,7 @@ pub trait DbMapU64: DbXxx<u64> {}
 pub trait DbMapBytes: DbXxx<Bytes> {}
 
 /// key type
-pub trait DbXxxKeyType: Ord + Clone + Default {
+pub trait DbXxxKeyType: Ord + Clone + Default + HashValue {
     /// Signature of database file.
     fn signature() -> [u8; 8];
     fn as_bytes(&self) -> Vec<u8>;
@@ -274,4 +312,15 @@ pub trait DbXxxKeyType: Ord + Clone + Default {
     fn byte_len(&self) -> usize {
         self.as_bytes().len()
     }
+    fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering;
 }
+
+pub trait HashValue: Hash {
+    fn hash_value(&self) -> u64 {
+        use std::hash::Hasher;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+impl HashValue for &[u8] {}

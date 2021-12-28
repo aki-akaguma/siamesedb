@@ -20,7 +20,7 @@ const CHUNK_SIZE: u32 = 4 * 1024;
 //const CHUNK_SIZE: u32 = 16 * 4 * 1024;
 //const CHUNK_SIZE: u32 = 1024 * 1024;
 const IDX_HEADER_SZ: u64 = 128;
-const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'1', 0u8];
+const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'T', 0u8];
 const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
 
 #[cfg(not(feature = "node_cache"))]
@@ -31,14 +31,14 @@ use super::nc::NodeCache;
 
 #[cfg(not(feature = "node_cache"))]
 #[derive(Debug)]
-struct VarFileNodeCache(VarFile, PhantomData<i32>);
+pub struct VarFileNodeCache(pub VarFile, PhantomData<i32>);
 
 #[cfg(feature = "node_cache")]
 #[derive(Debug)]
-struct VarFileNodeCache(VarFile, NodeCache);
+pub struct VarFileNodeCache(pub VarFile, NodeCache);
 
 #[derive(Debug, Clone)]
-pub struct IdxFile(Rc<RefCell<VarFileNodeCache>>);
+pub struct IdxFile(pub Rc<RefCell<VarFileNodeCache>>);
 
 impl IdxFile {
     pub fn open_with_params<P: AsRef<Path>>(
@@ -510,7 +510,7 @@ impl IdxFile {
         read_record_size_func: F,
     ) -> Result<(CountOfPerSize, CountOfPerSize)>
     where
-        F: Fn(RecordOffset) -> Result<RecordSize> + std::marker::Copy,
+        F: Fn(KeyRecordOffset) -> Result<KeyRecordSize> + std::marker::Copy,
     {
         let mut node_vec = Vec::new();
         for node_size in NODE_SIZE_ARY {
@@ -519,7 +519,7 @@ impl IdxFile {
         }
         //
         let mut record_vec = Vec::new();
-        for record_size in super::dat::REC_SIZE_ARY {
+        for record_size in super::key::REC_SIZE_ARY {
             let cnt = 0;
             record_vec.push((record_size, cnt));
         }
@@ -535,9 +535,10 @@ impl IdxFile {
         //
         Ok((record_vec, node_vec))
     }
-    pub fn record_size_stats<F>(&self, read_record_size_func: F) -> Result<RecordSizeStats>
+    pub fn record_size_stats<KV, F>(&self, read_record_size_func: F) -> Result<RecordSizeStats<KV>>
     where
-        F: Fn(RecordOffset) -> Result<RecordSize> + std::marker::Copy,
+        F: Fn(KeyRecordOffset) -> Result<RecordSize<KV>> + std::marker::Copy,
+        KV: Default + Copy + Ord,
     {
         let mut record_size_stats = RecordSizeStats::default();
         //
@@ -561,7 +562,7 @@ impl IdxFile {
         read_key_length_func: F,
     ) -> Result<LengthStats<KV>>
     where
-        F: Fn(RecordOffset) -> Result<Length<KV>> + std::marker::Copy,
+        F: Fn(KeyRecordOffset) -> Result<Length<KV>> + std::marker::Copy,
     {
         let mut kv_length_stats = LengthStats::<KV>::default();
         //
@@ -639,7 +640,7 @@ impl VarFile {
         //
         Ok(())
     }
-    fn read_top_node_offset(&mut self) -> Result<NodeOffset> {
+    pub fn read_top_node_offset(&mut self) -> Result<NodeOffset> {
         self.seek_from_start(NodeOffset::new(IDX_HEADER_TOP_NODE_OFFSET))?;
         self.read_u64_le().map(NodeOffset::new)
     }
@@ -680,11 +681,44 @@ const NODE_SIZE_ARY: [u32; 8] = [
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u32u32")]
+//pub const NODE_SLOTS_MAX: u16 = 1023;
+//pub const NODE_SLOTS_MAX: u16 = 511;
+//pub const NODE_SLOTS_MAX: u16 = 255;
+//pub const NODE_SLOTS_MAX: u16 = 127;
+//pub const NODE_SLOTS_MAX: u16 = 63;
+//pub const NODE_SLOTS_MAX: u16 = 31;
+//pub const NODE_SLOTS_MAX: u16 = 24;
+pub const NODE_SLOTS_MAX: u16 = 12;
+
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "vf_u32u32")]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 2 * 2,
+    16 * 2 * 3,
+    16 * 2 * 4,
+    16 * 2 * 5,
+    16 * 2 * 6,
+    16 * 2 * 7,
+    16 * 2 * 8,
+    16 * 2 * 9,
+];
+
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "vf_u64u64")]
 pub const NODE_SLOTS_MAX: u16 = 12;
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u64u64")]
-pub const NODE_SLOTS_MAX: u16 = 6;
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 3,
+    16 * 4,
+    16 * 6,
+    16 * 8,
+    16 * 10,
+    16 * 14,
+    16 * 16,
+    16 * 18,
+];
 
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_vu64")]
@@ -695,6 +729,7 @@ pub const NODE_SLOTS_MAX: u16 = 6;
 db_map.depth_of_node_tree(): 4
 
 pub const NODE_SLOTS_MAX: u16 = 256;
+
 #[cfg(not(feature = "small_node_slots"))]
 const NODE_SIZE_ARY: [u32; 8] = [
     16 * 40,
@@ -732,7 +767,8 @@ const NODE_SIZE_ARY: [u32; 8] = [
 3824inputs+2171664outputs (4major+41444minor)pagefaults 0swaps
 383M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 5
-
+*/
+/*
 pub const NODE_SLOTS_MAX: u16 = 64;
 
 #[cfg(not(feature = "small_node_slots"))]
@@ -805,18 +841,20 @@ const NODE_SIZE_ARY: [u32; 8] = [
 381M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 8
 */
+/* ** */
 pub const NODE_SLOTS_MAX: u16 = 12;
 
 #[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "vf_vu64")]
 const NODE_SIZE_ARY: [u32; 8] = [
-    16 * 2,
     16 * 3,
     16 * 4,
-    16 * 5,
     16 * 6,
-    16 * 7,
     16 * 8,
-    16 * 9,
+    16 * 10,
+    16 * 14,
+    16 * 16,
+    16 * 18,
 ];
 
 /*
@@ -894,7 +932,7 @@ impl VarFileNodeCache {
 
     #[cfg(feature = "node_cache")]
     #[inline]
-    fn flush_node_cache_clear(&mut self) -> Result<()> {
+    pub fn flush_node_cache_clear(&mut self) -> Result<()> {
         self.1.clear(&mut self.0)?;
         Ok(())
     }
@@ -1027,6 +1065,7 @@ impl VarFileNodeCache {
             "!node_size.is_zero(), offset: {}",
             offset
         );
+        let is_leaf = self.0.read_u8()?;
         let keys_count = self.0.read_keys_count()?;
         debug_assert!(
             keys_count.as_value() < NODE_SLOTS_MAX,
@@ -1039,25 +1078,53 @@ impl VarFileNodeCache {
         {
             let mut node = node_.get_mut();
             for _i in 0..keys_count {
+                #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
                 let record_offset = self
                     .0
                     .read_record_offset()
                     .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                #[cfg(feature = "vf_node_u32")]
+                let record_offset = self
+                    .0
+                    .read_record_offset_u32()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                #[cfg(feature = "vf_node_u64")]
+                let record_offset = self
+                    .0
+                    .read_record_offset_u64()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
                 debug_assert!(!record_offset.is_zero());
                 node.keys_push(record_offset);
             }
-            for _i in 0..(keys_count + 1) {
-                let node_offset = self
-                    .0
-                    .read_node_offset()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                debug_assert!(
-                    (node_offset.as_value() & 0x0F) == 0,
-                    "(node_offset.as_value(): {} & 0x0F) == 0, offset: {}",
-                    node_offset,
-                    offset.as_value()
-                );
-                node.downs_push(node_offset);
+            if is_leaf == 0 {
+                for _i in 0..(keys_count + 1) {
+                    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
+                    let node_offset = self
+                        .0
+                        .read_node_offset()
+                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                    #[cfg(feature = "vf_node_u32")]
+                    let node_offset = self
+                        .0
+                        .read_node_offset_u32()
+                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                    #[cfg(feature = "vf_node_u64")]
+                    let node_offset = self
+                        .0
+                        .read_node_offset_u64()
+                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                    debug_assert!(
+                        (node_offset.as_value() & 0x0F) == 0,
+                        "(node_offset.as_value(): {} & 0x0F) == 0, offset: {}",
+                        node_offset,
+                        offset.as_value()
+                    );
+                    node.downs_push(node_offset);
+                }
+            } else {
+                for _i in 0..(keys_count + 1) {
+                    node.downs_push(NodeOffset::new(0));
+                }
             }
         }
         debug_assert!(_start_pos + node_size >= self.0.seek_position()?);
@@ -1081,6 +1148,7 @@ impl VarFileNodeCache {
             "!node_size.is_zero(), offset: {}",
             offset
         );
+        let is_leaf = self.0.read_u8()?;
         let keys_count = self.0.read_keys_count()?;
         debug_assert!(
             keys_count.as_value() < NODE_SLOTS_MAX,
@@ -1093,20 +1161,48 @@ impl VarFileNodeCache {
         {
             let mut node = node_.get_mut();
             for _i in 0..keys_count {
+                #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
                 let record_offset = self
                     .0
                     .read_record_offset()
                     .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                #[cfg(feature = "vf_node_u32")]
+                let record_offset = self
+                    .0
+                    .read_record_offset_u32()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                #[cfg(feature = "vf_node_u64")]
+                let record_offset = self
+                    .0
+                    .read_record_offset_u64()
+                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
                 debug_assert!(!record_offset.is_zero());
                 node.keys_push(record_offset);
             }
-            for _i in 0..(keys_count + 1) {
-                let node_offset = self
-                    .0
-                    .read_node_offset()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                debug_assert!((node_offset.as_value() & 0x0F) == 0);
-                node.downs_push(node_offset);
+            if is_leaf == 0 {
+                for _i in 0..(keys_count + 1) {
+                    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
+                    let node_offset = self
+                        .0
+                        .read_node_offset()
+                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                    #[cfg(feature = "vf_node_u32")]
+                    let node_offset = self
+                        .0
+                        .read_node_offset_u32()
+                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                    #[cfg(feature = "vf_node_u64")]
+                    let node_offset = self
+                        .0
+                        .read_node_offset_u64()
+                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
+                    debug_assert!((node_offset.as_value() & 0x0F) == 0);
+                    node.downs_push(node_offset);
+                }
+            } else {
+                for _i in 0..(keys_count + 1) {
+                    node.downs_push(NodeOffset::new(0));
+                }
             }
         }
         //
@@ -1221,7 +1317,7 @@ impl VarFileNodeCache {
         read_record_size_func: F,
     ) -> Result<()>
     where
-        F: Fn(RecordOffset) -> Result<RecordSize> + Copy,
+        F: Fn(KeyRecordOffset) -> Result<KeyRecordSize> + Copy,
     {
         let node = node_.get_ref();
         match node_vec.iter().position(|v| v.0 == node.size().as_value()) {
@@ -1274,14 +1370,15 @@ impl VarFileNodeCache {
         Ok(())
     }
 
-    fn idx_record_size_stats<F>(
+    fn idx_record_size_stats<KV, F>(
         &mut self,
         node_: &IdxNode,
-        record_vec: &mut RecordSizeStats,
+        record_vec: &mut RecordSizeStats<KV>,
         read_record_size_func: F,
     ) -> Result<()>
     where
-        F: Fn(RecordOffset) -> Result<RecordSize> + Copy,
+        F: Fn(KeyRecordOffset) -> Result<RecordSize<KV>> + Copy,
+        KV: Copy + Ord,
     {
         let node = node_.get_ref();
         let mut i = node.downs_len() - 1;
@@ -1351,7 +1448,7 @@ impl VarFileNodeCache {
         read_kv_length_func: F,
     ) -> Result<()>
     where
-        F: Fn(RecordOffset) -> Result<Length<KV>> + Copy,
+        F: Fn(KeyRecordOffset) -> Result<Length<KV>> + Copy,
     {
         let node = node_.get_ref();
         let mut i = node.downs_len() - 1;

@@ -22,7 +22,7 @@ impl IdxNode {
     }
     #[inline]
     pub fn new_active(
-        record_offset: RecordOffset,
+        record_offset: KeyRecordOffset,
         l_node_offset: NodeOffset,
         r_node_offset: NodeOffset,
     ) -> Self {
@@ -77,7 +77,7 @@ pub struct TreeNode {
     /// size in bytes of IdxNode in idx file.
     size: NodeSize,
     /// key slot: offset of key-value record in dat file.
-    keys: Vec<RecordOffset>,
+    keys: Vec<KeyRecordOffset>,
     /// down slot: offset of next IdxNode in idx file.
     downs: Vec<NodeOffset>,
 }
@@ -99,7 +99,7 @@ impl TreeNode {
     }
     #[inline]
     pub fn new_active(
-        record_offset: RecordOffset,
+        record_offset: KeyRecordOffset,
         l_node_offset: NodeOffset,
         r_node_offset: NodeOffset,
     ) -> Self {
@@ -136,6 +136,10 @@ impl TreeNode {
 // keys
 impl TreeNode {
     #[inline]
+    pub fn keys(&self) -> &[KeyRecordOffset] {
+        &self.keys
+    }
+    #[inline]
     pub fn keys_is_empty(&self) -> bool {
         self.keys.is_empty()
     }
@@ -144,27 +148,27 @@ impl TreeNode {
         self.keys.len()
     }
     #[inline]
-    pub fn keys_get(&self, idx: usize) -> RecordOffset {
+    pub fn keys_get(&self, idx: usize) -> KeyRecordOffset {
         self.keys[idx]
     }
     #[inline]
-    pub unsafe fn keys_get_unchecked(&self, idx: usize) -> RecordOffset {
+    pub unsafe fn keys_get_unchecked(&self, idx: usize) -> KeyRecordOffset {
         *self.keys.get_unchecked(idx)
     }
     #[inline]
-    pub fn keys_set(&mut self, idx: usize, val: RecordOffset) {
+    pub fn keys_set(&mut self, idx: usize, val: KeyRecordOffset) {
         self.keys[idx] = val;
     }
     #[inline]
-    pub fn keys_pop(&mut self) -> Option<RecordOffset> {
+    pub fn keys_pop(&mut self) -> Option<KeyRecordOffset> {
         self.keys.pop()
     }
     #[inline]
-    pub fn keys_push(&mut self, val: RecordOffset) {
+    pub fn keys_push(&mut self, val: KeyRecordOffset) {
         self.keys.push(val);
     }
     #[inline]
-    pub fn keys_insert(&mut self, idx: usize, val: RecordOffset) {
+    pub fn keys_insert(&mut self, idx: usize, val: KeyRecordOffset) {
         self.keys.insert(idx, val);
     }
     #[inline]
@@ -172,12 +176,12 @@ impl TreeNode {
         self.keys.extend_from_slice(&other.keys[st..])
     }
     #[inline]
-    pub fn keys_remove(&mut self, idx: usize) -> RecordOffset {
+    pub fn keys_remove(&mut self, idx: usize) -> KeyRecordOffset {
         self.keys.remove(idx)
     }
     #[inline]
     pub fn keys_resize(&mut self, new_size: usize) {
-        self.keys.resize(new_size, RecordOffset::new(0));
+        self.keys.resize(new_size, KeyRecordOffset::new(0));
     }
 }
 
@@ -259,12 +263,23 @@ impl TreeNode {
     pub fn is_active_on_delete(&self) -> bool {
         self.downs.len() < NODE_SLOTS_MAX_HALF as usize
     }
+    #[inline]
+    pub fn is_leaf(&self) -> bool {
+        let mut is_leaf = true;
+        for i in 0..(self.keys.len() + 1) {
+            if i < self.downs.len() && !self.downs[i].is_zero() {
+                is_leaf = false;
+                break;
+            }
+        }
+        is_leaf
+    }
     //
     pub fn encoded_node_size(&self) -> usize {
         let mut sum_size = 0usize;
         //
         let keys_count: u16 = self.keys.len().try_into().unwrap();
-        #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
+        #[cfg(any(feature = "vf_node_u32", feature = "vf_node_u64"))]
         {
             sum_size += 2;
         }
@@ -272,47 +287,54 @@ impl TreeNode {
         {
             sum_size += vu64::encoded_len(keys_count as u64) as usize;
         }
+        // node or leaf
+        sum_size += 1;
         //
         for i in 0..(keys_count as usize) {
             debug_assert!(!self.keys[i].is_zero());
             let _offset = self.keys[i];
-            #[cfg(feature = "vf_u32u32")]
+            #[cfg(feature = "vf_node_u32")]
             {
                 sum_size += 4;
             }
-            #[cfg(feature = "vf_u64u64")]
+            #[cfg(feature = "vf_node_u64")]
             {
                 sum_size += 8;
             }
+            #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
             #[cfg(feature = "vf_vu64")]
             {
                 sum_size += vu64::encoded_len(_offset.as_value() / 8) as usize;
             }
         }
-        for i in 0..((keys_count as usize) + 1) {
-            debug_assert!(
-                keys_count == 0 || i < self.downs.len(),
-                "i: {} < self.downs.len(): {}, keys_count: {}",
-                i,
-                self.downs.len(),
-                keys_count
-            );
-            let _offset = if i < self.downs.len() {
-                self.downs[i]
-            } else {
-                NodeOffset::new(0)
-            };
-            #[cfg(feature = "vf_u32u32")]
-            {
-                sum_size += 4;
-            }
-            #[cfg(feature = "vf_u64u64")]
-            {
-                sum_size += 8;
-            }
-            #[cfg(feature = "vf_vu64")]
-            {
-                sum_size += vu64::encoded_len(_offset.as_value() / 8) as usize;
+        let is_leaf = self.is_leaf();
+        if !is_leaf {
+            for i in 0..((keys_count as usize) + 1) {
+                debug_assert!(
+                    keys_count == 0 || i < self.downs.len(),
+                    "i: {} < self.downs.len(): {}, keys_count: {}",
+                    i,
+                    self.downs.len(),
+                    keys_count
+                );
+                let _offset = if i < self.downs.len() {
+                    self.downs[i]
+                } else {
+                    NodeOffset::new(0)
+                };
+                #[cfg(feature = "vf_node_u32")]
+                {
+                    sum_size += 4;
+                }
+                #[cfg(feature = "vf_node_u64")]
+                {
+                    sum_size += 8;
+                }
+                #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
+                #[cfg(feature = "vf_vu64")]
+                {
+                    sum_size += vu64::encoded_len(_offset.as_value() / 8) as usize;
+                }
             }
         }
         //
@@ -328,8 +350,11 @@ impl TreeNode {
         //
         let _start_pos = file.seek_from_start(self.offset)?;
         file.write_node_size(self.size)?;
-        let keys_count = self.keys.len();
         //
+        let is_leaf = if self.is_leaf() { 1u8 } else { 0u8 };
+        file.write_u8(is_leaf)?;
+        //
+        let keys_count = self.keys.len();
         file.write_keys_count(KeysCount::new(keys_count.try_into().unwrap()))?;
         debug_assert!(
             keys_count < NODE_SLOTS_MAX as usize,
@@ -341,25 +366,38 @@ impl TreeNode {
         for i in 0..keys_count {
             let offset = self.keys[i];
             debug_assert!(!offset.is_zero());
+            #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
             file.write_record_offset(offset)?;
+            #[cfg(feature = "vf_node_u32")]
+            file.write_record_offset_u32(offset)?;
+            #[cfg(feature = "vf_node_u64")]
+            file.write_record_offset_u64(offset)?;
         }
-        for i in 0..(keys_count + 1) {
-            let offset = if i < self.downs.len() {
-                self.downs[i]
-            } else {
-                NodeOffset::new(0)
-            };
-            debug_assert!((offset.as_value() & 0x0F) == 0);
-            file.write_node_offset(offset)?;
+        if is_leaf == 0u8 {
+            for i in 0..(keys_count + 1) {
+                let offset = if i < self.downs.len() {
+                    self.downs[i]
+                } else {
+                    NodeOffset::new(0)
+                };
+                debug_assert!((offset.as_value() & 0x0F) == 0);
+                #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
+                file.write_node_offset(offset)?;
+                #[cfg(feature = "vf_node_u32")]
+                file.write_node_offset_u32(offset)?;
+                #[cfg(feature = "vf_node_u64")]
+                file.write_node_offset_u64(offset)?;
+            }
         }
         //
         let _current_pos = file.seek_position()?;
         debug_assert!(
             _start_pos + self.size >= _current_pos,
-            "_start_pos: {} + self.size: {} >= _current_pos: {}",
+            "_start_pos: {} + self.size: {} >= _current_pos: {}, have keys: {}",
             _start_pos,
             self.size,
             _current_pos,
+            keys_count,
         );
         //
         Ok(())

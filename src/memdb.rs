@@ -126,6 +126,9 @@ impl<'a> MemoryDbMapString<'a> {
 }
 
 impl<'a> DbXxx<String> for MemoryDbMapString<'a> {
+    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         String: Borrow<Q>,
@@ -166,6 +169,9 @@ impl<'a> MemoryDbMapU64<'a> {
 }
 
 impl<'a> DbXxx<u64> for MemoryDbMapU64<'a> {
+    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         u64: Borrow<Q>,
@@ -206,6 +212,9 @@ impl<'a> MemoryDbMapBytes<'a> {
 }
 
 impl<'a> DbXxx<Bytes> for MemoryDbMapBytes<'a> {
+    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         Bytes: Borrow<Q>,
@@ -274,6 +283,9 @@ impl<'a> MemoryDbMapStringInner<'a> {
 }
 
 impl<'a> DbXxx<String> for MemoryDbMapStringInner<'a> {
+    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         String: Borrow<Q>,
@@ -337,6 +349,9 @@ impl<'a> MemoryDbMapU64Inner<'a> {
 }
 
 impl<'a> DbXxx<u64> for MemoryDbMapU64Inner<'a> {
+    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         u64: Borrow<Q>,
@@ -399,6 +414,10 @@ impl<'a> MemoryDbMapBytesInner<'a> {
 }
 
 impl<'a> DbXxx<Bytes> for MemoryDbMapBytesInner<'a> {
+    #[inline]
+    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where
         Bytes: Borrow<Q>,

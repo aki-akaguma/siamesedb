@@ -4,8 +4,10 @@ use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::io::Result;
 
-//const CACHE_SIZE: usize = 64;
-const CACHE_SIZE: usize = 128;
+//const CACHE_SIZE: usize = 32;
+const CACHE_SIZE: usize = 64;
+
+//const CACHE_SIZE: usize = 128;
 //const CACHE_SIZE: usize = 256;
 //const CACHE_SIZE: usize = 1024;
 //const CACHE_SIZE: usize = 10*1024*1024;

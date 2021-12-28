@@ -32,23 +32,31 @@ pub enum FileBufSizeParam {
 /// chunk_size is MUST power of 2.
 #[derive(Debug, Clone)]
 pub struct FileDbParams {
-    /// buffer size of dat file buffer. None is auto buffer size.
-    pub dat_buf_size: FileBufSizeParam,
+    /// buffer size of key file buffer. None is auto buffer size.
+    pub key_buf_size: FileBufSizeParam,
+    /// buffer size of val file buffer. None is auto buffer size.
+    pub val_buf_size: FileBufSizeParam,
     /// buffer size of idx file buffer. None is auto buffer size.
     pub idx_buf_size: FileBufSizeParam,
+    /// buffer size of htx file buffer. None is auto buffer size.
+    pub htx_buf_size: FileBufSizeParam,
 }
 
 impl std::default::Default for FileDbParams {
     fn default() -> Self {
         Self {
-            dat_buf_size: FileBufSizeParam::Auto,
+            key_buf_size: FileBufSizeParam::Auto,
+            val_buf_size: FileBufSizeParam::Auto,
             idx_buf_size: FileBufSizeParam::Auto,
+            htx_buf_size: FileBufSizeParam::Auto,
         }
     }
 }
 
 /// Checks the file db map for debug.
 pub trait CheckFileDbMap {
+    #[cfg(feature = "htx")]
+    fn ht_size_and_count(&self) -> Result<(u64, u64)>;
     /// convert the index node tree to graph string for debug.
     fn graph_string(&self) -> Result<String>;
     /// convert the index node tree to graph string for debug.
@@ -70,8 +78,10 @@ pub trait CheckFileDbMap {
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
     fn buf_stats(&self) -> Vec<(String, i64)>;
-    /// record size statistics
-    fn record_size_stats(&self) -> Result<RecordSizeStats>;
+    /// key record size statistics
+    fn key_record_size_stats(&self) -> Result<RecordSizeStats<Key>>;
+    /// value record size statistics
+    fn value_record_size_stats(&self) -> Result<RecordSizeStats<Value>>;
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats>;
     /// key length statistics
@@ -84,13 +94,13 @@ pub type CountOfPerSize = Vec<(u32, u64)>;
 
 /// record size statistics.
 #[derive(Debug, Default)]
-pub struct RecordSizeStats(Vec<(RecordSize, u64)>);
+pub struct RecordSizeStats<T>(Vec<(RecordSize<T>, u64)>);
 
-impl RecordSizeStats {
-    pub fn new(vec: Vec<(RecordSize, u64)>) -> Self {
+impl<T: Copy + Ord> RecordSizeStats<T> {
+    pub fn new(vec: Vec<(RecordSize<T>, u64)>) -> Self {
         Self(vec)
     }
-    pub fn touch_size(&mut self, record_size: RecordSize) {
+    pub fn touch_size(&mut self, record_size: RecordSize<T>) {
         match self.0.binary_search_by_key(&record_size, |&(a, _b)| a) {
             Ok(sz_idx) => {
                 self.0[sz_idx].1 += 1;
@@ -102,7 +112,7 @@ impl RecordSizeStats {
     }
 }
 
-impl std::fmt::Display for RecordSizeStats {
+impl<T: Copy> std::fmt::Display for RecordSizeStats<T> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("[")?;
         if self.0.len() > 1 {
@@ -119,6 +129,9 @@ impl std::fmt::Display for RecordSizeStats {
         Ok(())
     }
 }
+
+pub type KeyRecordSizeStats = RecordSizeStats<Key>;
+pub type ValueRecordSizeStats = RecordSizeStats<Value>;
 
 /// record size statistics.
 #[derive(Debug, Default)]
@@ -266,8 +279,8 @@ impl FileDb {
 #[cfg(test)]
 mod debug {
     use super::FileDbInner;
-    use super::RecordSizeStats;
     use super::{FileDb, FileDbMapString, FileDbMapU64};
+    use super::{KeyRecordSizeStats, ValueRecordSizeStats};
     //
     #[test]
     fn test_size_of() {
@@ -279,7 +292,8 @@ mod debug {
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 96);
             //
-            assert_eq!(std::mem::size_of::<RecordSizeStats>(), 24);
+            assert_eq!(std::mem::size_of::<KeyRecordSizeStats>(), 24);
+            assert_eq!(std::mem::size_of::<ValueRecordSizeStats>(), 24);
         }
         //
         #[cfg(target_pointer_width = "32")]
@@ -290,7 +304,8 @@ mod debug {
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 48);
             //
-            assert_eq!(std::mem::size_of::<RecordSizeStats>(), 12);
+            assert_eq!(std::mem::size_of::<KeyRecordSizeStats>(), 12);
+            assert_eq!(std::mem::size_of::<ValueRecordSizeStats>(), 12);
         }
     }
 }

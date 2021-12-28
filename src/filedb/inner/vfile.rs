@@ -231,6 +231,16 @@ impl rabuf::SmallWrite for VarFile {
 
 impl VarFile {
     #[inline]
+    pub fn read_u8(&mut self) -> Result<u8> {
+        let mut buf = [0; 1];
+        self.read_exact_small(&mut buf)?;
+        Ok(buf[0])
+    }
+    #[inline]
+    pub fn write_u8(&mut self, value: u8) -> Result<()> {
+        self.write_all_small(&[value])
+    }
+    #[inline]
     pub fn read_u64_le(&mut self) -> Result<u64> {
         let v = self.read_max_8_bytes(8)?;
         Ok(u64::from_le(v))
@@ -262,16 +272,6 @@ impl VarFile {
 #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
 impl VarFile {
     #[inline]
-    pub fn _read_u8(&mut self) -> Result<u8> {
-        let mut buf = [0; 1];
-        self.read_exact_small(&mut buf)?;
-        Ok(buf[0])
-    }
-    #[inline]
-    pub fn _write_u8(&mut self, value: u8) -> Result<()> {
-        self.write_all_small(&[value])
-    }
-    #[inline]
     pub fn read_u16_le(&mut self) -> Result<u16> {
         let mut buf = [0; 2];
         self.read_exact_small(&mut buf)?;
@@ -282,6 +282,56 @@ impl VarFile {
         let mut buf = [0; 2];
         buf[0..].copy_from_slice(&value.to_le_bytes());
         self.write_all_small(&buf)
+    }
+}
+
+#[cfg(feature = "vf_node_u32")]
+impl VarFile {
+    #[inline]
+    pub fn read_record_offset_u32<T>(&mut self) -> Result<RecordOffset<T>> {
+        self.read_u32_le().map(|o| RecordOffset::new(o as u64))
+    }
+    #[inline]
+    pub fn write_record_offset_u32<T: Copy>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+        debug_assert!(record_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(
+            record_offset.try_into().unwrap_or_else(|err| {
+                panic!("record_offset: {}: {}", record_offset.as_value(), err)
+            }),
+        )
+    }
+    #[inline]
+    pub fn read_node_offset_u32(&mut self) -> Result<NodeOffset> {
+        self.read_u32_le().map(|n| NodeOffset::new(n as u64))
+    }
+    #[inline]
+    pub fn write_node_offset_u32(&mut self, node_offset: NodeOffset) -> Result<()> {
+        debug_assert!(node_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(
+            node_offset
+                .try_into()
+                .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err)),
+        )
+    }
+}
+
+#[cfg(feature = "vf_node_u64")]
+impl VarFile {
+    #[inline]
+    pub fn read_record_offset_u64<T>(&mut self) -> Result<RecordOffset<T>> {
+        self.read_u64_le().map(RecordOffset::new)
+    }
+    #[inline]
+    pub fn write_record_offset_u64<T: Copy>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+        self.write_u64_le(record_offset.into())
+    }
+    #[inline]
+    pub fn read_node_offset_u64(&mut self) -> Result<NodeOffset> {
+        self.read_u64_le().map(NodeOffset::new)
+    }
+    #[inline]
+    pub fn write_node_offset_u64(&mut self, node_offset: NodeOffset) -> Result<()> {
+        self.write_u64_le(node_offset.into())
     }
 }
 
@@ -327,19 +377,19 @@ impl VarFile {
     }
     //
     #[inline]
-    pub fn read_record_size(&mut self) -> Result<RecordSize> {
+    pub fn read_record_size<T>(&mut self) -> Result<RecordSize<T>> {
         self.read_u32_le().map(RecordSize::new)
     }
     #[inline]
-    pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
+    pub fn write_record_size<T>(&mut self, record_size: RecordSize<T>) -> Result<()> {
         self.write_u32_le(record_size.into())
     }
     #[inline]
-    pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
+    pub fn read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
         self.read_u32_le().map(|o| RecordOffset::new(o as u64))
     }
     #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+    pub fn write_record_offset<T: Copy>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
         debug_assert!(record_offset.as_value() <= u32::MAX as u64);
         self.write_u32_le(
             record_offset.try_into().unwrap_or_else(|err| {
@@ -416,19 +466,19 @@ impl VarFile {
     }
     //
     #[inline]
-    pub fn read_record_size(&mut self) -> Result<RecordSize> {
+    pub fn read_record_size<T>(&mut self) -> Result<RecordSize<T>> {
         self.read_u32_le().map(RecordSize::new)
     }
     #[inline]
-    pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
+    pub fn write_record_size<T>(&mut self, record_size: RecordSize<T>) -> Result<()> {
         self.write_u32_le(record_size.into())
     }
     #[inline]
-    pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
+    pub fn read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
         self.read_u64_le().map(RecordOffset::new)
     }
     #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+    pub fn write_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
         self.write_u64_le(record_offset.into())
     }
     //
@@ -588,30 +638,32 @@ impl VarFile {
     }
     //
     #[inline]
-    pub fn read_record_size(&mut self) -> Result<RecordSize> {
+    pub fn read_record_size<T>(&mut self) -> Result<RecordSize<T>> {
         self.read_vu64_u32().map(|v| RecordSize::new(v * 8))
     }
     #[inline]
-    pub fn write_record_size(&mut self, record_size: RecordSize) -> Result<()> {
+    pub fn write_record_size<T>(&mut self, record_size: RecordSize<T>) -> Result<()> {
         let v: u32 = record_size.into();
         debug_assert!(v % 8 == 0);
         self.write_vu64_u32(v / 8)
     }
     #[inline]
-    pub fn read_record_offset(&mut self) -> Result<RecordOffset> {
+    pub fn read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
         self.read_vu64_u64().map(|v| RecordOffset::new(v * 8))
     }
     #[inline]
-    pub fn write_record_offset(&mut self, record_offset: RecordOffset) -> Result<()> {
+    pub fn write_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
         let v: u64 = record_offset.into();
         debug_assert!(v % 8 == 0);
         self.write_vu64_u64(v / 8)
     }
     //
+    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodeOffset> {
         self.read_vu64_u64().map(|a| NodeOffset::new(a * 8))
     }
+    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodeOffset) -> Result<()> {
         let v: u64 = node_offset.into();
@@ -642,7 +694,10 @@ impl VarFile {
 #[cfg(feature = "vf_vu64")]
 impl VarFile {
     #[inline]
-    pub fn seek_skip_to_record_key(&mut self, offset: RecordOffset) -> Result<RecordOffset> {
+    pub fn seek_skip_to_record_key<T: Copy + PartialEq>(
+        &mut self,
+        offset: RecordOffset<T>,
+    ) -> Result<RecordOffset<T>> {
         self.seek_from_start(offset)?;
         let byte_1st = self.buf_file.read_one_byte()?;
         let record_size_len = vu64::decoded_len(byte_1st);
@@ -651,12 +706,14 @@ impl VarFile {
         self.seek_position()
     }
     #[inline]
-    pub fn seek_skip_to_record_value(&mut self, offset: RecordOffset) -> Result<RecordOffset> {
-        self.seek_skip_to_record_key(offset)?;
-        let key_len = self.read_key_len()?;
-        if !key_len.is_zero() {
-            self.seek_skip_length(key_len)?;
-        }
+    pub fn seek_skip_to_record_value<T: Copy + PartialEq>(
+        &mut self,
+        offset: RecordOffset<T>,
+    ) -> Result<RecordOffset<T>> {
+        self.seek_from_start(offset)?;
+        let byte_1st = self.buf_file.read_one_byte()?;
+        let record_size_len = vu64::decoded_len(byte_1st);
+        self.seek_skip_length(KeyLength::new((record_size_len - 1).into()))?;
         //
         self.seek_position()
     }
@@ -665,19 +722,22 @@ impl VarFile {
 #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
 impl VarFile {
     #[inline]
-    pub fn seek_skip_to_record_key(&mut self, offset: RecordOffset) -> Result<RecordOffset> {
+    pub fn seek_skip_to_record_key<T: Copy + PartialEq>(
+        &mut self,
+        offset: RecordOffset<T>,
+    ) -> Result<RecordOffset<T>> {
         self.seek_from_start(offset)?;
         self.seek_skip_length(KeyLength::new(4))?;
         //
         self.seek_position()
     }
     #[inline]
-    pub fn seek_skip_to_record_value(&mut self, offset: RecordOffset) -> Result<RecordOffset> {
-        self.seek_skip_to_record_key(offset)?;
-        let key_len = self.read_key_len()?;
-        if !key_len.is_zero() {
-            self.seek_skip_length(key_len)?;
-        }
+    pub fn seek_skip_to_record_value<T: Copy + PartialEq>(
+        &mut self,
+        offset: RecordOffset<T>,
+    ) -> Result<RecordOffset<T>> {
+        self.seek_from_start(offset)?;
+        self.seek_skip_length(KeyLength::new(4))?;
         //
         self.seek_position()
     }

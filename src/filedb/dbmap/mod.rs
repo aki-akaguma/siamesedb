@@ -41,6 +41,10 @@ impl<KT: DbXxxKeyType> FileDbMap<KT> {
 
 /// for debug
 impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
+    #[cfg(feature = "htx")]
+    fn ht_size_and_count(&self) -> Result<(u64, u64)> {
+        RefCell::borrow(&self.0).ht_size_and_count()
+    }
     /// convert the index node tree to graph string for debug.
     fn graph_string(&self) -> Result<String> {
         RefCell::borrow(&self.0).graph_string()
@@ -82,9 +86,13 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
     fn buf_stats(&self) -> Vec<(String, i64)> {
         RefCell::borrow(&self.0).buf_stats()
     }
-    /// record size statistics
-    fn record_size_stats(&self) -> Result<RecordSizeStats> {
-        RefCell::borrow(&self.0).record_size_stats()
+    /// key record size statistics
+    fn key_record_size_stats(&self) -> Result<RecordSizeStats<Key>> {
+        RefCell::borrow(&self.0).key_record_size_stats()
+    }
+    /// value record size statistics
+    fn value_record_size_stats(&self) -> Result<RecordSizeStats<Value>> {
+        RefCell::borrow(&self.0).value_record_size_stats()
     }
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats> {
@@ -101,6 +109,10 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
 }
 
 impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbMap<KT> {
+    #[inline]
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_k8(key)
+    }
     #[inline]
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
     where

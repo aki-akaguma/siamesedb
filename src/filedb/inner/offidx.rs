@@ -13,18 +13,18 @@ impl OffsetIndex {
     }
     #[inline]
     pub(crate) fn get(&mut self, offset: &u64) -> Option<usize> {
-        if let Some((x_offset, _)) = self.vec.first() {
-            if offset < x_offset {
-                return None;
-            }
+        let slice = &self.vec;
+        if slice.is_empty() {
+            return None;
         }
-        if let Some((x_offset, _)) = self.vec.last() {
-            if offset > x_offset {
-                return None;
-            }
+        if *offset < slice[0].0 {
+            return None;
         }
-        if let Ok(x) = self.vec.binary_search_by(|a| a.0.cmp(offset)) {
-            Some(self.vec[x].1)
+        if *offset > slice[slice.len() - 1].0 {
+            return None;
+        }
+        if let Ok(x) = slice.binary_search_by(|a| a.0.cmp(offset)) {
+            Some(slice[x].1)
         } else {
             None
         }

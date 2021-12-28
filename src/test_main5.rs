@@ -40,15 +40,16 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
             "some_map1",
             FileDbParams {
                 /*
-                dat_buf_size: FileBufSizeParam::PerMille(100),
+                key_buf_size: FileBufSizeParam::PerMille(100),
                 idx_buf_size: FileBufSizeParam::PerMille(300),
                 */
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
-                dat_buf_size: FileBufSizeParam::Auto,
+                key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
+                .. Default::default()
             },
         )
         .unwrap();
@@ -84,15 +85,16 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
             "some_map1",
             FileDbParams {
                 /*
-                dat_buf_size: FileBufSizeParam::PerMille(100),
+                key_buf_size: FileBufSizeParam::PerMille(100),
                 idx_buf_size: FileBufSizeParam::PerMille(300),
                 */
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
-                dat_buf_size: FileBufSizeParam::Auto,
+                key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
+                .. Default::default()
             },
         )
         .unwrap();
@@ -138,15 +140,16 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
             "some_map1",
             FileDbParams {
                 /*
-                dat_buf_size: FileBufSizeParam::PerMille(333),
+                key_buf_size: FileBufSizeParam::PerMille(333),
                 idx_buf_size: FileBufSizeParam::PerMille(430),
                  */
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
-                dat_buf_size: FileBufSizeParam::Auto,
+                key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
+                .. Default::default()
             },
         )
         .unwrap();

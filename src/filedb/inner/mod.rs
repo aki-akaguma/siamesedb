@@ -10,8 +10,11 @@ pub(crate) mod semtype;
 mod piece;
 mod tr;
 
-mod dat;
+//mod dat;
+mod htx;
 mod idx;
+mod key;
+mod val;
 mod vfile;
 
 #[cfg(feature = "key_cache")]

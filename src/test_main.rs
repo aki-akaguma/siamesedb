@@ -748,8 +748,12 @@ fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
     println!(
-        "record_size_stats(): {}",
-        db_map.record_size_stats().unwrap()
+        "key_record_size_stats(): {}",
+        db_map.key_record_size_stats().unwrap()
+    );
+    println!(
+        "value_record_size_stats(): {}",
+        db_map.value_record_size_stats().unwrap()
     );
 }
 
@@ -774,8 +778,12 @@ fn _print_check_db_list(db_list: &FileDbMapU64, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_list.buf_stats(): {:?}", db_list.buf_stats());
     println!(
-        "record_size_stats(): {}",
-        db_list.record_size_stats().unwrap()
+        "key_record_size_stats(): {}",
+        db_list.key_record_size_stats().unwrap()
+    );
+    println!(
+        "value_record_size_stats(): {}",
+        db_list.value_record_size_stats().unwrap()
     );
 }
 

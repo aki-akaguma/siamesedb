@@ -12,10 +12,14 @@ use std::num::TryFromIntError;
 #[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
 use std::convert::Infallible;
 
-pub type RecordOffset = Offset<Record>;
+pub type RecordOffset<T> = Offset<Record<T>>;
+pub type KeyRecordOffset = Offset<Record<Key>>;
+pub type ValueRecordOffset = Offset<Record<Value>>;
 pub type NodeOffset = Offset<Node>;
 
-pub type RecordSize = Size<Record>;
+pub type RecordSize<T> = Size<Record<T>>;
+pub type KeyRecordSize = Size<Record<Key>>;
+pub type ValueRecordSize = Size<Record<Value>>;
 pub type NodeSize = Size<Node>;
 
 pub type KeyLength = Length<Key>;
@@ -24,15 +28,17 @@ pub type ValueLength = Length<Value>;
 pub type KeysCount = Count<Key>;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct Record;
+pub struct Record<T> {
+    _phantom: std::marker::PhantomData<T>,
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Node;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Key;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Value;
 
 /// The offset in dat/idx file.
@@ -275,14 +281,17 @@ impl<T> From<Count<T>> for u16 {
 #[cfg(test)]
 mod debug {
     use super::{
-        KeyLength, KeysCount, NodeOffset, NodeSize, RecordOffset, RecordSize, ValueLength,
+        KeyLength, KeyRecordOffset, KeyRecordSize, KeysCount, NodeOffset, NodeSize, ValueLength,
+        ValueRecordOffset, ValueRecordSize,
     };
     //
     #[test]
     fn test_size_of() {
-        assert_eq!(std::mem::size_of::<RecordOffset>(), 8);
+        assert_eq!(std::mem::size_of::<KeyRecordOffset>(), 8);
+        assert_eq!(std::mem::size_of::<ValueRecordOffset>(), 8);
         assert_eq!(std::mem::size_of::<NodeOffset>(), 8);
-        assert_eq!(std::mem::size_of::<RecordSize>(), 4);
+        assert_eq!(std::mem::size_of::<KeyRecordSize>(), 4);
+        assert_eq!(std::mem::size_of::<ValueRecordSize>(), 4);
         assert_eq!(std::mem::size_of::<NodeSize>(), 4);
         assert_eq!(std::mem::size_of::<KeyLength>(), 4);
         assert_eq!(std::mem::size_of::<ValueLength>(), 4);

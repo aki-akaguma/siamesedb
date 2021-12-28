@@ -40,15 +40,16 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
             "some_map1",
             FileDbParams {
                 /*
-                dat_buf_size: FileBufSizeParam::PerMille(100),
+                key_buf_size: FileBufSizeParam::PerMille(100),
                 idx_buf_size: FileBufSizeParam::PerMille(300),
                 */
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
-                dat_buf_size: FileBufSizeParam::Auto,
+                key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
+                .. Default::default()
             },
         )
         .unwrap();
@@ -84,15 +85,16 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
             "some_map1",
             FileDbParams {
                 /*
-                dat_buf_size: FileBufSizeParam::PerMille(100),
+                key_buf_size: FileBufSizeParam::PerMille(100),
                 idx_buf_size: FileBufSizeParam::PerMille(300),
                 */
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
-                dat_buf_size: FileBufSizeParam::Auto,
+                key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
+                .. Default::default()
             },
         )
         .unwrap();
@@ -138,15 +140,16 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
             "some_map1",
             FileDbParams {
                 /*
-                dat_buf_size: FileBufSizeParam::PerMille(333),
+                key_buf_size: FileBufSizeParam::PerMille(333),
                 idx_buf_size: FileBufSizeParam::PerMille(430),
                  */
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
-                dat_buf_size: FileBufSizeParam::Auto,
+                key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
+                .. Default::default()
             },
         )
         .unwrap();
@@ -194,8 +197,13 @@ fn _test_read_one(
     key_vec: &[Bytes],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
+    /*
     let keys: Vec<&Bytes> = key_vec.iter().collect();
     let result = db_map.bulk_get_string(&keys)?;
+    */
+    use std::ops::Deref;
+    let keys: Vec<&[u8]> = key_vec.iter().map(|a| a.deref()).collect();
+    let result = db_map.bulk_get_string_k8(&keys)?;
     //
     for (idx, answer) in result.iter().enumerate() {
         if let Some(answer) = answer {

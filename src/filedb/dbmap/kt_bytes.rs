@@ -1,4 +1,4 @@
-use super::super::super::{Bytes, DbXxxKeyType};
+use super::super::super::{Bytes, DbXxxKeyType, HashValue};
 use super::FileDbMap;
 
 impl DbXxxKeyType for Bytes {
@@ -17,7 +17,11 @@ impl DbXxxKeyType for Bytes {
     fn byte_len(&self) -> usize {
         self.0.len()
     }
+    fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering {
+        self.0.as_slice().cmp(other)
+    }
 }
+impl HashValue for Bytes {}
 
 /// Bytes Map in a file databse.
 pub type FileDbMapBytes = FileDbMap<Bytes>;

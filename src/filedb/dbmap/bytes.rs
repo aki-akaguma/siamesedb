@@ -1,9 +1,10 @@
+//use std::borrow::Borrow;
 use std::fmt::{Display, Error, Formatter};
 use std::ops::Deref;
 
 /// Bytes
 /// New type pattern of `Vec<u8>`.
-#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Bytes(pub(crate) Vec<u8>);
 
 impl Display for Bytes {
@@ -20,7 +21,13 @@ impl Deref for Bytes {
         &self.0
     }
 }
-
+/*
+impl Borrow<[u8]> for Bytes {
+    fn borrow(&self) -> &[u8] {
+        &self.0
+    }
+}
+*/
 impl From<&[u8]> for Bytes {
     #[inline]
     fn from(a: &[u8]) -> Self {

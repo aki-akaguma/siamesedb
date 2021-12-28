@@ -26,8 +26,9 @@ fn check_string(db_name: &str) -> std::io::Result<()> {
         .db_map_string_with_params(
             "some_map1",
             FileDbParams {
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
+                .. Default::default()
             },
         )
         .unwrap();
@@ -54,8 +55,9 @@ fn check_bytes(db_name: &str) -> std::io::Result<()> {
         .db_map_bytes_with_params(
             "some_map1",
             FileDbParams {
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
+                .. Default::default()
             },
         )
         .unwrap();
@@ -82,8 +84,9 @@ fn check_u64(db_name: &str) -> std::io::Result<()> {
         .db_map_u64_with_params(
             "some_map1",
             FileDbParams {
-                dat_buf_size: FileBufSizeParam::PerMille(1000),
+                key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
+                .. Default::default()
             },
         )
         .unwrap();
@@ -109,6 +112,11 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     if check_cnf.check {
+        #[cfg(feature = "htx")]
+        {
+            let (ht_size, count) = db_map.ht_size_and_count().unwrap();
+            println!("count / ht: {}/{}", count, ht_size);
+        }
         //
         println!("record free: {:?}", db_map.count_of_free_record().unwrap());
         let (rec_v, node_v) = db_map.count_of_used_node().unwrap();
@@ -126,8 +134,12 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
         println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
         //
         println!(
-            "record_size_stats(): {}",
-            db_map.record_size_stats().unwrap()
+            "key_record_size_stats(): {}",
+            db_map.key_record_size_stats().unwrap()
+        );
+        println!(
+            "value_record_size_stats(): {}",
+            db_map.value_record_size_stats().unwrap()
         );
         println!("keys_count_stats(): {}", db_map.keys_count_stats().unwrap());
         println!("key_length_stats(): {}", db_map.key_length_stats().unwrap());

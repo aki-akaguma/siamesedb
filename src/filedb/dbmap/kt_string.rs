@@ -1,4 +1,4 @@
-use super::super::super::DbXxxKeyType;
+use super::super::super::{DbXxxKeyType, HashValue};
 use super::FileDbMap;
 
 impl DbXxxKeyType for String {
@@ -18,7 +18,11 @@ impl DbXxxKeyType for String {
     fn byte_len(&self) -> usize {
         self.as_bytes().len()
     }
+    fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering {
+        self.as_str().as_bytes().cmp(other)
+    }
 }
+impl HashValue for String {}
 
 /// String Map in a file database.
 pub type FileDbMapString = FileDbMap<String>;

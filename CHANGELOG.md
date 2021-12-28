@@ -2,6 +2,8 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* change separates dat-file to key-file and val-file.
+
 0.1.14 (2021-12-23)
 =====
 

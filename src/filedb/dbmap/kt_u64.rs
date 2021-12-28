@@ -1,4 +1,4 @@
-use super::super::super::DbXxxKeyType;
+use super::super::super::{DbXxxKeyType, HashValue};
 use super::FileDbMap;
 
 #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
@@ -40,7 +40,12 @@ impl DbXxxKeyType for u64 {
     fn from(bytes: &[u8]) -> Self {
         vu64::decode(bytes).unwrap()
     }
+    //
+    fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering {
+        self.cmp(&<u64 as DbXxxKeyType>::from(other))
+    }
 }
+impl HashValue for u64 {}
 
 /// List in a file databse.
 pub type FileDbMapU64 = FileDbMap<u64>;
