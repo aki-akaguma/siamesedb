@@ -300,9 +300,12 @@ fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
 #[cfg(feature = "nc_print_hits")]
 impl Drop for NodeCache {
     fn drop(&mut self) {
+        let total = self.count_of_hits + self.count_of_miss;
         eprintln!(
-            "node cache hits: {}%",
-            self.count_of_hits * 100 / (self.count_of_hits + self.count_of_miss)
+            "node cache hits: {}/{} [{:.2}%]",
+            self.count_of_hits,
+            total,
+            self.count_of_hits as f64 * 100.0 / total as f64
         );
     }
 }

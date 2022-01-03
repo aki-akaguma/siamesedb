@@ -10,7 +10,6 @@ pub(crate) mod semtype;
 mod piece;
 mod tr;
 
-//mod dat;
 mod htx;
 mod idx;
 mod key;
@@ -25,9 +24,6 @@ mod nc;
 
 #[cfg(feature = "node_cache")]
 mod offidx;
-
-#[cfg(feature = "record_cache")]
-mod rc;
 
 #[derive(Debug)]
 pub struct FileDbInner {

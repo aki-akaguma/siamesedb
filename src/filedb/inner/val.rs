@@ -1,6 +1,5 @@
 use super::super::super::DbXxxKeyType;
-use super::super::FileBufSizeParam;
-use super::super::FileDbParams;
+use super::super::{FileBufSizeParam, FileDbParams};
 use super::semtype::*;
 use super::vfile::VarFile;
 use rabuf::SmallRead;
@@ -13,26 +12,15 @@ use std::rc::Rc;
 
 type HeaderSignature = [u8; 8];
 
-const CHUNK_SIZE: u32 = 4 * 1024;
-//const CHUNK_SIZE: u32 = 16 * 4 * 1024;
-//const CHUNK_SIZE: u32 = 1024 * 1024;
-//const CHUNK_SIZE: u32 = 16 * 1024 * 1024;
+//const CHUNK_SIZE: u32 = 4 * 1024;
+const CHUNK_SIZE: u32 = 4 * 4 * 1024;
 const _DAT_HEADER_SZ: u64 = 192;
 const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'V', 0u8];
 
-#[cfg(not(feature = "record_cache"))]
 use std::marker::PhantomData;
 
-#[cfg(feature = "record_cache")]
-use super::rc::ValueRecordCache;
-
-#[cfg(not(feature = "record_cache"))]
 #[derive(Debug)]
 struct VarFileValueCache<KT: DbXxxKeyType>(VarFile, PhantomData<KT>);
-
-#[cfg(feature = "record_cache")]
-#[derive(Debug)]
-struct VarFileValueCache<KT: DbXxxKeyType>(VarFile, ValueRecordCache<KT>);
 
 #[derive(Debug, Clone)]
 pub struct ValueFile<KT: DbXxxKeyType>(Rc<RefCell<VarFileValueCache<KT>>>);
@@ -76,7 +64,6 @@ impl<KT: DbXxxKeyType> ValueFile<KT> {
                 VarFile::new(&REC_SIZE_FREE_OFFSET, &REC_SIZE_ARY, "val", std_file)?
             }
         };
-        //let mut file = VarFile::new(&REC_SIZE_FREE_OFFSET, &REC_SIZE_ARY, "val", std_file)?;
         let file_length: ValueRecordOffset = file.seek_to_end()?;
         if file_length.is_zero() {
             file.write_valrecf_init_header(sig2)?;
@@ -84,10 +71,7 @@ impl<KT: DbXxxKeyType> ValueFile<KT> {
             file.check_valrecf_header(sig2)?;
         }
         //
-        #[cfg(not(feature = "record_cache"))]
         let file_rc = VarFileValueCache(file, PhantomData);
-        #[cfg(feature = "record_cache")]
-        let file_rc = VarFileValueCache(file, ValueRecordCache::new());
         //
         Ok(Self(Rc::new(RefCell::new(file_rc))))
     }
@@ -99,22 +83,16 @@ impl<KT: DbXxxKeyType> ValueFile<KT> {
     #[inline]
     pub fn flush(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        #[cfg(feature = "record_cache")]
-        locked.flush_record_cache()?;
         locked.0.flush()
     }
     #[inline]
     pub fn sync_all(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        #[cfg(feature = "record_cache")]
-        locked.flush_record_cache_clear()?;
         locked.0.sync_all()
     }
     #[inline]
     pub fn sync_data(&self) -> Result<()> {
         let mut locked = self.0.borrow_mut();
-        #[cfg(feature = "record_cache")]
-        locked.flush_record_cache_clear()?;
         locked.0.sync_data()
     }
     #[cfg(feature = "buf_stats")]
@@ -166,7 +144,7 @@ impl<KT: DbXxxKeyType> ValueFile<KT> {
 
 // for debug
 impl<KT: DbXxxKeyType> ValueFile<KT> {
-    pub fn count_of_free_record(&self) -> Result<Vec<(u32, u64)>> {
+    pub fn count_of_free_value_record(&self) -> Result<Vec<(u32, u64)>> {
         let sz_ary = REC_SIZE_ARY;
         //
         let mut vec = Vec::new();
@@ -192,7 +170,7 @@ The db data header size is 192 bytes.
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 8     | signature1  | [b"siamdb0\0"]            |
+| 0      | 8     | signature1  | b"siamdbV\0"              |
 | 8      | 8     | signature2  | 8 bytes type signature    |
 | 16     | 8     | reserve0    |                           |
 | 24     | 8     | reserve1    |                           |
@@ -377,35 +355,10 @@ impl<KT: DbXxxKeyType> ValueRecord<KT> {
 }
 
 impl<KT: DbXxxKeyType> VarFileValueCache<KT> {
-    #[cfg(feature = "record_cache")]
-    #[inline]
-    fn flush_record_cache(&mut self) -> Result<()> {
-        self.1.flush(&mut self.0)?;
-        Ok(())
-    }
-
-    #[cfg(feature = "record_cache")]
-    #[inline]
-    fn flush_record_cache_clear(&mut self) -> Result<()> {
-        self.1.clear(&mut self.0)?;
-        Ok(())
-    }
-
     fn delete_record(&mut self, offset: ValueRecordOffset) -> Result<ValueRecordSize> {
-        #[cfg(not(feature = "record_cache"))]
         let old_record_size = {
             self.0.seek_from_start(offset)?;
             self.0.read_record_size()?
-        };
-        #[cfg(feature = "record_cache")]
-        let old_record_size = {
-            match self.1.delete(&offset) {
-                Some(record_size) => record_size,
-                None => {
-                    self.0.seek_from_start(offset)?;
-                    self.0.read_record_size()?
-                }
-            }
         };
         //
         self.0.push_free_piece_list(offset, old_record_size)?;
@@ -431,39 +384,19 @@ impl<KT: DbXxxKeyType> VarFileValueCache<KT> {
             .roundup(ValueRecordSize::new(encorded_record_len + record_len));
         //
         if !is_new {
-            #[cfg(not(feature = "record_cache"))]
             let old_record_size = {
                 self.0.seek_from_start(record.offset)?;
                 self.0.read_record_size()?
             };
-            #[cfg(feature = "record_cache")]
-            let old_record_size = {
-                if let Some(record_size) = self.1.get_record_size(&record.offset) {
-                    record_size
-                } else {
-                    self.0.seek_from_start(record.offset)?;
-                    self.0.read_record_size()?
-                }
-            };
             debug_assert!(old_record_size.is_valid_value());
             if new_record_size <= old_record_size {
                 // over writes.
-                #[cfg(not(feature = "record_cache"))]
-                {
-                    self.0.seek_from_start(record.offset)?;
-                    record.size = old_record_size;
-                    record.dat_write_record_one(&mut self.0)?;
-                    return Ok(record);
-                }
-                #[cfg(feature = "record_cache")]
-                {
-                    let record = self.1.put(&mut self.0, record, old_record_size, true)?;
-                    return Ok(record);
-                }
+                self.0.seek_from_start(record.offset)?;
+                record.size = old_record_size;
+                record.dat_write_record_one(&mut self.0)?;
+                return Ok(record);
             } else {
                 // delete old and add new
-                #[cfg(feature = "record_cache")]
-                self.1.delete(&record.offset);
                 // old
                 self.0
                     .push_free_piece_list(record.offset, old_record_size)?;
@@ -498,11 +431,6 @@ impl<KT: DbXxxKeyType> VarFileValueCache<KT> {
     fn read_record(&mut self, offset: ValueRecordOffset) -> Result<ValueRecord<KT>> {
         debug_assert!(!offset.is_zero());
         //
-        #[cfg(feature = "record_cache")]
-        if let Some(rc) = self.1.get(&offset) {
-            return Ok(rc.as_ref().clone());
-        }
-        //
         self.0.seek_from_start(offset)?;
         let record_size = self.0.read_record_size()?;
         debug_assert!(record_size.is_valid_value());
@@ -513,9 +441,6 @@ impl<KT: DbXxxKeyType> VarFileValueCache<KT> {
         //
         let record = ValueRecord::with(offset, record_size, value);
         //
-        #[cfg(feature = "record_cache")]
-        let record = self.1.put(&mut self.0, record, record_size, false)?;
-        //
         Ok(record)
     }
 
@@ -523,72 +448,43 @@ impl<KT: DbXxxKeyType> VarFileValueCache<KT> {
     fn read_record_only_size(&mut self, offset: ValueRecordOffset) -> Result<ValueRecordSize> {
         debug_assert!(!offset.is_zero());
         //
-        #[cfg(feature = "record_cache")]
-        {
-            let record = self.read_record(offset)?;
-            Ok(record.size)
-        }
+        self.0.seek_from_start(offset)?;
+        let record_size = self.0.read_record_size()?;
         //
-        #[cfg(not(feature = "record_cache"))]
-        {
-            self.0.seek_from_start(offset)?;
-            let record_size = self.0.read_record_size()?;
-            //
-            Ok(record_size)
-        }
+        Ok(record_size)
     }
 
     #[inline]
     fn read_record_only_value_length(&mut self, offset: ValueRecordOffset) -> Result<ValueLength> {
         debug_assert!(!offset.is_zero());
         //
-        #[cfg(feature = "record_cache")]
-        {
-            let record = self.read_record(offset)?;
-            Ok(ValueLength::new(record.value.len()))
-        }
+        self.0.seek_skip_to_record_value(offset)?;
+        let val_len = self.0.read_value_len()?;
         //
-        #[cfg(not(feature = "record_cache"))]
-        {
-            self.0.seek_skip_to_record_value(offset)?;
-            let val_len = self.0.read_value_len()?;
-            //
-            Ok(val_len)
-        }
+        Ok(val_len)
     }
 
     #[inline]
     fn read_record_only_value(&mut self, offset: ValueRecordOffset) -> Result<Vec<u8>> {
         debug_assert!(!offset.is_zero());
         //
-        #[cfg(feature = "record_cache")]
-        {
-            let record = self.read_record(offset)?;
-            Ok(record.value)
-        }
+        self.0.seek_skip_to_record_value(offset)?;
         //
-        #[cfg(not(feature = "record_cache"))]
-        {
-            self.0.seek_skip_to_record_value(offset)?;
-            //
-            let val_len = self.0.read_value_len()?;
-            let maybe_slice = self.0.read_exact_maybeslice(val_len.into())?;
-            let value = maybe_slice.to_vec();
-            //
-            Ok(value)
-        }
+        let val_len = self.0.read_value_len()?;
+        let maybe_slice = self.0.read_exact_maybeslice(val_len.into())?;
+        let value = maybe_slice.to_vec();
+        //
+        Ok(value)
     }
 }
 
 /*
 ```text
-used record:
+used piece:
 +--------+-------+-------------+-----------------------------------+
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
-| 0      | 1..5  | record size | size in bytes of this record: u32 |
-| --     | 1..5  | key len     | a byte length of key              |
-| --     | --    | key data    | raw key data                      |
+| 0      | 1..5  | piece size  | size in bytes of this piece: u32  |
 | --     | 1..5  | val len     | a byte length of value            |
 | --     | --    | val data    | raw value data                    |
 | --     | --    | reserve     | reserved free space               |
@@ -597,12 +493,12 @@ used record:
 */
 /*
 ```text
-free record:
+free piece:
 +--------+-------+-------------+-----------------------------------+
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
-| 0      | 1..5  | record size | size in bytes of this record: u32 |
-| --     | 1     | key len     | always zero                       |
+| 0      | 1..5  | piece size  | size in bytes of this piece: u32  |
+| --     | 1     | val len     | always zero                       |
 | --     | 8     | next        | next free record offset           |
 | --     | --    | reserve     | reserved free space               |
 +--------+-------+-------------+-----------------------------------+

@@ -73,12 +73,16 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
     fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         RefCell::borrow(&self.0).count_of_free_node()
     }
-    /// count of the free record
-    fn count_of_free_record(&self) -> Result<CountOfPerSize> {
-        RefCell::borrow(&self.0).count_of_free_record()
+    /// count of the free key record
+    fn count_of_free_key_record(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_key_record()
+    }
+    /// count of the free value record
+    fn count_of_free_value_record(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_value_record()
     }
     /// count of the used record and the used node
-    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
+    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)> {
         RefCell::borrow(&self.0).count_of_used_node()
     }
     /// buffer statistics
@@ -112,6 +116,10 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbMap<KT> {
     #[inline]
     fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         RefCell::borrow_mut(&self.0).get_k8(key)
+    }
+    #[inline]
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_k8(key, value)
     }
     #[inline]
     fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>

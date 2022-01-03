@@ -292,7 +292,10 @@ impl VarFile {
         self.read_u32_le().map(|o| RecordOffset::new(o as u64))
     }
     #[inline]
-    pub fn write_record_offset_u32<T: Copy>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+    pub fn write_record_offset_u32<T: Copy>(
+        &mut self,
+        record_offset: RecordOffset<T>,
+    ) -> Result<()> {
         debug_assert!(record_offset.as_value() <= u32::MAX as u64);
         self.write_u32_le(
             record_offset.try_into().unwrap_or_else(|err| {
@@ -322,7 +325,10 @@ impl VarFile {
         self.read_u64_le().map(RecordOffset::new)
     }
     #[inline]
-    pub fn write_record_offset_u64<T: Copy>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+    pub fn write_record_offset_u64<T: Copy>(
+        &mut self,
+        record_offset: RecordOffset<T>,
+    ) -> Result<()> {
         self.write_u64_le(record_offset.into())
     }
     #[inline]
@@ -332,6 +338,37 @@ impl VarFile {
     #[inline]
     pub fn write_node_offset_u64(&mut self, node_offset: NodeOffset) -> Result<()> {
         self.write_u64_le(node_offset.into())
+    }
+}
+
+#[cfg(feature = "vf_u32u32")]
+#[cfg(feature = "htx")]
+impl VarFile {
+    #[inline]
+    pub fn read_value_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
+        self.read_u32_le().map(|o| RecordOffset::new(o as u64))
+    }
+    #[inline]
+    pub fn write_value_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+        debug_assert!(record_offset.as_value() <= u32::MAX as u64);
+        self.write_u32_le(
+            record_offset.try_into().unwrap_or_else(|err| {
+                panic!("record_offset: {}: {}", record_offset.as_value(), err)
+            }),
+        )
+    }
+}
+
+#[cfg(any(feature = "vf_u64u64", feature = "vf_vu64"))]
+#[cfg(feature = "htx")]
+impl VarFile {
+    #[inline]
+    pub fn read_value_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
+        self.read_u64_le().map(RecordOffset::new)
+    }
+    #[inline]
+    pub fn write_value_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+        self.write_u64_le(record_offset.as_value())
     }
 }
 
@@ -582,7 +619,7 @@ impl VarFile {
         })
     }
     #[inline]
-    pub fn read_vu64_u64(&mut self) -> Result<u64> {
+    pub fn _read_vu64_u64(&mut self) -> Result<u64> {
         self.read_and_decode_vu64()
     }
     #[inline]
@@ -594,7 +631,7 @@ impl VarFile {
         self.encode_and_write_vu64(value.into())
     }
     #[inline]
-    pub fn write_vu64_u64(&mut self, value: u64) -> Result<()> {
+    pub fn _write_vu64_u64(&mut self, value: u64) -> Result<()> {
         self.encode_and_write_vu64(value)
     }
 }
@@ -648,14 +685,14 @@ impl VarFile {
         self.write_vu64_u32(v / 8)
     }
     #[inline]
-    pub fn read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
-        self.read_vu64_u64().map(|v| RecordOffset::new(v * 8))
+    pub fn _read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
+        self._read_vu64_u64().map(|v| RecordOffset::new(v * 8))
     }
     #[inline]
-    pub fn write_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+    pub fn _write_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
         let v: u64 = record_offset.into();
         debug_assert!(v % 8 == 0);
-        self.write_vu64_u64(v / 8)
+        self._write_vu64_u64(v / 8)
     }
     //
     #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
@@ -753,7 +790,12 @@ mod debug {
         #[cfg(target_pointer_width = "64")]
         {
             #[cfg(not(feature = "buf_stats"))]
-            assert_eq!(std::mem::size_of::<VarFile>(), 176);
+            {
+                #[cfg(not(feature = "buf_print_hits"))]
+                assert_eq!(std::mem::size_of::<VarFile>(), 176);
+                #[cfg(feature = "buf_print_hits")]
+                assert_eq!(std::mem::size_of::<VarFile>(), 200);
+            }
             #[cfg(feature = "buf_stats")]
             assert_eq!(std::mem::size_of::<VarFile>(), 184);
         }
@@ -762,9 +804,19 @@ mod debug {
             #[cfg(not(any(feature = "buf_stats", feature = "buf_lru")))]
             {
                 #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
-                assert_eq!(std::mem::size_of::<VarFile>(), 108);
+                {
+                    #[cfg(not(feature = "buf_print_hits"))]
+                    assert_eq!(std::mem::size_of::<VarFile>(), 108);
+                    #[cfg(feature = "buf_print_hits")]
+                    assert_eq!(std::mem::size_of::<VarFile>(), 132);
+                }
                 #[cfg(any(target_arch = "arm", target_arch = "mips"))]
-                assert_eq!(std::mem::size_of::<VarFile>(), 120);
+                {
+                    #[cfg(not(feature = "buf_print_hits"))]
+                    assert_eq!(std::mem::size_of::<VarFile>(), 120);
+                    #[cfg(feature = "buf_print_hits")]
+                    assert_eq!(std::mem::size_of::<VarFile>(), 144);
+                }
             }
             #[cfg(all(feature = "buf_stats", feature = "buf_lru"))]
             {

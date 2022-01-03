@@ -49,7 +49,7 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
                 key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -94,7 +94,7 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
                 key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -149,7 +149,7 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
                 key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();

@@ -10,14 +10,13 @@ use std::rc::Rc;
 
 type HeaderSignature = [u8; 8];
 
-const CHUNK_SIZE: u32 = 4 * 1024;
-//const CHUNK_SIZE: u32 = 2 * 4 * 1024;
-//const CHUNK_SIZE: u32 = 16 * 4 * 1024;
-//const CHUNK_SIZE: u32 = 1024 * 1024;
+//const CHUNK_SIZE: u32 = 4 * 1024;
+const CHUNK_SIZE: u32 = 1024 * 1024;
 const HTX_HEADER_SZ: u64 = 128;
 const HTX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'H', 0u8];
 const DEFAULT_HT_SIZE: u64 = 10 * 1024 * 1024;
 
+#[cfg(not(feature = "htx_print_hits"))]
 use std::marker::PhantomData;
 
 #[cfg(not(feature = "htx_print_hits"))]
@@ -82,13 +81,14 @@ impl HtxFile {
         //
         if file_length.is_zero() {
             file_nc.0.write_htxf_init_header(sig2)?;
-            file_nc
-                .0
-                .set_file_length(NodeOffset::new(HTX_HEADER_SZ + 8 * DEFAULT_HT_SIZE))?;
+            let off = NodeOffset::new(HTX_HEADER_SZ + 8 * DEFAULT_HT_SIZE);
+            file_nc.0.set_file_length(off)?;
+            let off = NodeOffset::new(HTX_HEADER_SZ + 8 * DEFAULT_HT_SIZE - 8);
+            file_nc.0.seek_from_start(off)?;
+            file_nc.0.write_u64_le(0)?;
         } else {
             file_nc.0.check_htxf_header(sig2)?;
         }
-        //
         Ok(Self(Rc::new(RefCell::new(file_nc))))
     }
     #[inline]
@@ -148,7 +148,7 @@ impl HtxFile {
 impl Drop for HtxFile {
     fn drop(&mut self) {
         let (hits, miss) = {
-            let mut locked = RefCell::borrow_mut(&self.0);
+            let locked = RefCell::borrow_mut(&self.0);
             (locked.1, locked.2)
         };
         let total = hits + miss;
@@ -172,14 +172,13 @@ write initiale header to file.
 
 ## header map
 
-The db index header size is 128 bytes.
+The htx header size is 128 bytes.
 
 ```text
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 4     | signature1  | [b's', b'h', b'a', b'm']  |
-| 4      | 4     | signature1  | [b'd', b'b', b'1', 0u8]   |
+| 0      | 8     | signature1  | b"siamdbH\0"              |
 | 8      | 8     | signature2  | 8 bytes type signature    |
 | 16     | 8     | ht size     | hash table size           |
 | 24     | 8     | count       | count of items            |
@@ -232,7 +231,7 @@ impl VarFile {
         self.seek_from_start(NodeOffset::new(HTX_HT_SIZE_OFFSET))?;
         self.read_u64_le()
     }
-    fn write_hash_table_size(&mut self, val: u64) -> Result<()> {
+    fn _write_hash_table_size(&mut self, val: u64) -> Result<()> {
         self.seek_from_start(NodeOffset::new(HTX_HT_SIZE_OFFSET))?;
         self.write_u64_le(val)
     }
@@ -263,37 +262,16 @@ impl VarFile {
     }
 }
 
-//
-// ref) http://wwwa.pikara.ne.jp/okojisan/b-tree/bsb-tree.html
-//
-
 /*
 ```text
-used node:
+hash table:
 +--------+-------+-------------+-----------------------------------+
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
-| 0      | 1..5  | node size   | size in bytes of this node: vu32  |
-| 1      | 1     | key-count   | count of keys                     |
-| 2      | 1..9  | key1        | offset of key-value               |
-|        |       | ...         |                                   |
-|        |       | key4        |                                   |
-| --     | 1..9  | down1       | offset of next node               |
-|        |       | ...         |                                   |
-|        |       | down5       |                                   |
-+--------+-------+-------------+-----------------------------------+
-```
-*/
-/*
-```text
-free node:
-+--------+-------+-------------+-----------------------------------+
-| offset | bytes | name        | comment                           |
-+--------+-------+-------------+-----------------------------------+
-| 0      | 1..5  | node size   | size in bytes of this node: u32   |
-| --     | 1     | keys-count  | always zero                       |
-| --     | 8     | next        | next free record offset           |
-| --     | --    | reserve     | reserved free space               |
+| 0      | 8     | key offset  | offset of key piece               |
+| 8      | 8     | key offset  | offset of key piece               |
+| --     | --    | --          | --                                |
+| --     | 8     | key offset  | offset of key piece               |
 +--------+-------+-------------+-----------------------------------+
 ```
 */

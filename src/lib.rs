@@ -247,12 +247,14 @@ pub trait DbXxx<KT: DbXxxKeyType> {
         }
         Ok(ret)
     }
+    //
     fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
     #[inline]
     fn get_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
         self.get_k8(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
     }
+    #[inline]
     fn bulk_get_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
         /*
         let mut vec = Vec::with_capacity(bulk_keys.len());
@@ -283,6 +285,30 @@ pub trait DbXxx<KT: DbXxxKeyType> {
             ret.push(b);
         }
         Ok(ret)
+    }
+    //
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()>;
+    #[inline]
+    fn put_string_k8(&mut self, key: &[u8], value: &str) -> Result<()> {
+        self.put_k8(key, value.as_bytes())
+    }
+    #[inline]
+    fn bulk_put_k8(&mut self, bulk: &[(&[u8], &[u8])]) -> Result<()> {
+        let mut vec = bulk.to_vec();
+        vec.sort_by(|a, b| b.0.cmp(a.0));
+        while let Some(kv) = vec.pop() {
+            self.put_k8(kv.0, kv.1)?;
+        }
+        Ok(())
+    }
+    #[inline]
+    fn bulk_put_string_k8(&mut self, bulk: &[(&[u8], String)]) -> Result<()> {
+        let mut vec = bulk.to_vec();
+        vec.sort_by(|a, b| b.0.cmp(a.0));
+        while let Some(kv) = vec.pop() {
+            self.put_k8(kv.0, kv.1.as_bytes())?;
+        }
+        Ok(())
     }
 }
 

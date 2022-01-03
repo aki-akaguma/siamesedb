@@ -28,7 +28,7 @@ fn check_string(db_name: &str) -> std::io::Result<()> {
             FileDbParams {
                 key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -57,7 +57,7 @@ fn check_bytes(db_name: &str) -> std::io::Result<()> {
             FileDbParams {
                 key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -86,7 +86,7 @@ fn check_u64(db_name: &str) -> std::io::Result<()> {
             FileDbParams {
                 key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -118,9 +118,17 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
             println!("count / ht: {}/{}", count, ht_size);
         }
         //
-        println!("record free: {:?}", db_map.count_of_free_record().unwrap());
-        let (rec_v, node_v) = db_map.count_of_used_node().unwrap();
-        println!("record used: {:?}", rec_v);
+        println!(
+            "key record free: {:?}",
+            db_map.count_of_free_key_record().unwrap()
+        );
+        let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
+        println!("key record used: {:?}", key_rec_v);
+        println!(
+            "value record free: {:?}",
+            db_map.count_of_free_value_record().unwrap()
+        );
+        println!("value record used: {:?}", val_rec_v);
         println!("node free: {:?}", db_map.count_of_free_node().unwrap());
         println!("node used: {:?}", node_v);
         //

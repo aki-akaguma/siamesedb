@@ -176,9 +176,9 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             }
         }
         if is_leaf == 0 {
-            let _ = locked_idx
-                .0
-                .seek_from_start(keys_start + NodeSize::new(OFFSET_BYTE_SIZE * (keys_count + left)))?;
+            let _ = locked_idx.0.seek_from_start(
+                keys_start + NodeSize::new(OFFSET_BYTE_SIZE * (keys_count + left)),
+            )?;
             #[cfg(feature = "vf_node_u32")]
             let node_offset = locked_idx.0.read_node_offset_u32()?;
             #[cfg(feature = "vf_node_u64")]
@@ -243,9 +243,9 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             }
         }
         if is_leaf == 0 {
-            let _ = locked_idx
-                .0
-                .seek_from_start(keys_start + NodeSize::new(OFFSET_BYTE_SIZE * (keys_count + left)))?;
+            let _ = locked_idx.0.seek_from_start(
+                keys_start + NodeSize::new(OFFSET_BYTE_SIZE * (keys_count + left)),
+            )?;
             #[cfg(feature = "vf_node_u32")]
             let node_offset = locked_idx.0.read_node_offset_u32()?;
             #[cfg(feature = "vf_node_u64")]
@@ -254,6 +254,76 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
         } else {
             Ok(Err(NodeOffset::new(0)))
         }
+    }
+    //
+    fn keys_binary_search_k8(
+        &mut self,
+        node: &TreeNode,
+        key_slice: &[u8],
+    ) -> Result<std::result::Result<usize, usize>> {
+        /*
+        match node.keys.binary_search_by(|&key_offset| {
+            debug_assert!(!key_offset.is_zero());
+            let key_string = self.load_key_string(key_offset).unwrap();
+            key_string.as_ref().borrow().cmp(key)
+        }) {
+            Ok(k) => Ok(Ok(k)),
+            Err(k) => Ok(Err(k)),
+        }
+        */
+        /*
+        let key_borrow = key.borrow();
+        let keys = node.keys();
+        let mut left = 0;
+        let mut right = keys.len();
+        while left < right {
+            let mid = (left + right) / 2;
+            //
+            // SAFETY: `mid` is limited by `[left; right)` bound.
+            //let key_offset = unsafe { node.keys_get_unchecked(mid) };
+            let key_offset = unsafe { *keys.get_unchecked(mid) };
+            //let key_offset = node.keys[mid];
+            //
+            debug_assert!(!key_offset.is_zero());
+            let key_string = self.load_key_string(key_offset)?;
+            //
+            match key_borrow.cmp(key_string.as_ref().borrow()) {
+                Ordering::Greater => left = mid + 1,
+                Ordering::Equal => {
+                    return Ok(Ok(mid));
+                }
+                Ordering::Less => right = mid,
+            }
+        }
+        Ok(Err(left))
+        */
+        let mut locked = self.key_file.0.borrow_mut();
+        //
+        let keys = node.keys();
+        let mut left = 0;
+        let mut right = keys.len();
+        while left < right {
+            let mid = (left + right) / 2;
+            //
+            // SAFETY: `mid` is limited by `[left; right)` bound.
+            //let key_offset = unsafe { node.keys_get_unchecked(mid) };
+            let key_offset = unsafe { *keys.get_unchecked(mid) };
+            //let key_offset = node.keys[mid];
+            //
+            debug_assert!(!key_offset.is_zero());
+            //let key_string = self.load_key_string_no_cache(key_offset)?;
+            //let key_string = self.key_file.read_record_only_key(key_offset)?;
+            //let key_string = locked.read_record_only_key(key_offset)?;
+            let key_string = locked.read_record_only_key_maybeslice(key_offset)?;
+            match key_slice.cmp(&key_string) {
+                Ordering::Greater => left = mid + 1,
+                Ordering::Equal => {
+                    return Ok(Ok(mid));
+                }
+                Ordering::Less => right = mid,
+            }
+        }
+        Ok(Err(left))
     }
     //
     fn keys_binary_search<Q>(
@@ -382,14 +452,29 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
     fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         self.idx_file.count_of_free_node()
     }
-    /// count of the free record
-    fn count_of_free_record(&self) -> Result<CountOfPerSize> {
-        self.key_file.count_of_free_record()
+    /// count of the free key record
+    fn count_of_free_key_record(&self) -> Result<CountOfPerSize> {
+        self.key_file.count_of_free_key_record()
+    }
+    /// count of the free value record
+    fn count_of_free_value_record(&self) -> Result<CountOfPerSize> {
+        self.val_file.count_of_free_value_record()
     }
     /// count of the used record and the used node
-    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)> {
-        self.idx_file
-            .count_of_used_node(|off| self.load_key_record_size(off))
+    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)> {
+        self.idx_file.count_of_used_node(|off| {
+            let ks = self.load_key_record_size(off);
+            if let Err(err) = ks {
+                Err(err)
+            } else {
+                let vs = self.load_value_record_size(off);
+                if let Err(err) = vs {
+                    Err(err)
+                } else {
+                    Ok((ks.unwrap(), vs.unwrap()))
+                }
+            }
+        })
     }
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
@@ -426,6 +511,87 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
 
 // insert: NEW
 impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+    #[cfg(any(feature = "vf_node_u32", feature = "vf_node_u64"))]
+    fn insert_into_node_tree_k8(
+        &mut self,
+        mut node_: IdxNode,
+        key_slice: &[u8],
+        value: &[u8],
+    ) -> Result<IdxNode> {
+        let r = {
+            let node = node_.get_ref();
+            if node.keys_is_empty() {
+                let new_val_record = self.val_file.add_value_record(value)?;
+                let new_key_record = self
+                    .key_file
+                    .add_key_record_with_slice(key_slice, new_val_record.offset)?;
+                #[cfg(feature = "htx")]
+                {
+                    let off = new_key_record.offset;
+                    let hash = new_key_record.hash_value();
+                    self.htx_file.write_key_record_offset(hash, off)?;
+                }
+                //
+                return Ok(IdxNode::new_active(
+                    new_key_record.offset,
+                    NodeOffset::new(0),
+                    NodeOffset::new(0),
+                ));
+            }
+            self.keys_binary_search_k8(&node, key_slice)?
+        };
+        match r {
+            Ok(k) => {
+                let record_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //let record_offset = node.keys[k];
+                debug_assert!(record_offset != RecordOffset::new(0));
+                let new_record_offset = self.store_value_on_insert(record_offset, value)?;
+                if record_offset != new_record_offset {
+                    #[cfg(feature = "htx")]
+                    {
+                        let hash = key_slice.hash_value();
+                        self.htx_file
+                            .write_key_record_offset(hash, new_record_offset)?;
+                    }
+                    node_.get_mut().keys_set(k, new_record_offset);
+                    return self.write_node(node_);
+                }
+                Ok(node_)
+            }
+            Err(k) => {
+                let node_offset1 = unsafe { node_.get_ref().downs_get_unchecked(k) };
+                //let node_offset1 = node.downs[k];
+                let node2_ = if !node_offset1.is_zero() {
+                    let node1_ = self.idx_file.read_node(node_offset1)?;
+                    self.insert_into_node_tree_k8(node1_, key_slice, value)?
+                } else {
+                    let new_val_record = self.val_file.add_value_record(value)?;
+                    let new_key_record = self
+                        .key_file
+                        .add_key_record_with_slice(key_slice, new_val_record.offset)?;
+                    #[cfg(feature = "htx")]
+                    {
+                        let hash = key_slice.hash_value();
+                        self.htx_file
+                            .write_key_record_offset(hash, new_key_record.offset)?;
+                    }
+                    IdxNode::new_active(
+                        new_key_record.offset,
+                        NodeOffset::new(0),
+                        NodeOffset::new(0),
+                    )
+                };
+                if node2_.is_active_on_insert() {
+                    self.balance_on_insert(node_, k, &node2_)
+                } else {
+                    debug_assert!(!node2_.get_ref().offset().is_zero());
+                    let node2_ = self.write_node(node2_)?;
+                    node_.get_mut().downs_set(k, node2_.get_ref().offset());
+                    self.write_node(node_)
+                }
+            }
+        }
+    }
     fn insert_into_node_tree(
         &mut self,
         mut node_: IdxNode,
@@ -970,6 +1136,44 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
     {
         let mut top_node = self.idx_file.read_top_node()?;
         self.find_in_node_tree(&mut top_node, (*key).borrow())
+    }
+    #[cfg(any(feature = "vf_node_u32", feature = "vf_node_u64"))]
+    #[inline]
+    fn put_k8(&mut self, key_slice: &[u8], value: &[u8]) -> Result<()> {
+        #[cfg(feature = "htx")]
+        {
+            let hash = key_slice.hash_value();
+            let key_offset = self.htx_file.read_key_record_offset(hash)?;
+            if !key_offset.is_zero() {
+                let flg = {
+                    let mut locked_key = self.key_file.0.borrow_mut();
+                    let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
+                    match key_slice.cmp(&key_string) {
+                        Ordering::Equal => true,
+                        Ordering::Greater => false,
+                        Ordering::Less => false,
+                    }
+                };
+                if flg {
+                    #[cfg(feature = "htx_print_hits")]
+                    self.htx_file.set_hits();
+                    //
+                    let new_record_offset = self.store_value_on_insert(key_offset, value)?;
+                    assert!(key_offset == new_record_offset);
+                    return Ok(());
+                } else {
+                    #[cfg(feature = "htx_print_hits")]
+                    self.htx_file.set_miss();
+                }
+            }
+        }
+        let top_node = self.idx_file.read_top_node()?;
+        let active_node = self.insert_into_node_tree_k8(top_node, key_slice, value)?;
+        //let key_kt = KT::from(key_slice);
+        //let active_node = self.insert_into_node_tree(top_node, &key_kt, value)?;
+        let new_top_node = active_node.deactivate();
+        self.idx_file.write_top_node(new_top_node)?;
+        Ok(())
     }
     #[inline]
     fn put(&mut self, key: KT, value: &[u8]) -> Result<()>

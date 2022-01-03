@@ -71,10 +71,12 @@ pub trait CheckFileDbMap {
     fn depth_of_node_tree(&self) -> Result<u64>;
     /// count of the free node
     fn count_of_free_node(&self) -> Result<CountOfPerSize>;
-    /// count of the free record
-    fn count_of_free_record(&self) -> Result<CountOfPerSize>;
+    /// count of the free key record
+    fn count_of_free_key_record(&self) -> Result<CountOfPerSize>;
+    /// count of the free key record
+    fn count_of_free_value_record(&self) -> Result<CountOfPerSize>;
     /// count of the used record and the used node
-    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize)>;
+    fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)>;
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
     fn buf_stats(&self) -> Vec<(String, i64)>;

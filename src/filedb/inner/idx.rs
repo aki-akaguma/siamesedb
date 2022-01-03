@@ -15,10 +15,8 @@ use std::rc::Rc;
 
 type HeaderSignature = [u8; 8];
 
-const CHUNK_SIZE: u32 = 4 * 1024;
-//const CHUNK_SIZE: u32 = 2 * 4 * 1024;
-//const CHUNK_SIZE: u32 = 16 * 4 * 1024;
-//const CHUNK_SIZE: u32 = 1024 * 1024;
+//const CHUNK_SIZE: u32 = 4 * 1024;
+const CHUNK_SIZE: u32 = 4 * 4 * 1024;
 const IDX_HEADER_SZ: u64 = 128;
 const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'T', 0u8];
 const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
@@ -507,10 +505,10 @@ impl IdxFile {
     }
     pub fn count_of_used_node<F>(
         &self,
-        read_record_size_func: F,
-    ) -> Result<(CountOfPerSize, CountOfPerSize)>
+        read_key_value_record_size_func: F,
+    ) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)>
     where
-        F: Fn(KeyRecordOffset) -> Result<KeyRecordSize> + std::marker::Copy,
+        F: Fn(KeyRecordOffset) -> Result<(KeyRecordSize, ValueRecordSize)> + std::marker::Copy,
     {
         let mut node_vec = Vec::new();
         for node_size in NODE_SIZE_ARY {
@@ -518,10 +516,15 @@ impl IdxFile {
             node_vec.push((node_size, cnt));
         }
         //
-        let mut record_vec = Vec::new();
+        let mut key_record_vec = Vec::new();
         for record_size in super::key::REC_SIZE_ARY {
             let cnt = 0;
-            record_vec.push((record_size, cnt));
+            key_record_vec.push((record_size, cnt));
+        }
+        let mut value_record_vec = Vec::new();
+        for record_size in super::val::REC_SIZE_ARY {
+            let cnt = 0;
+            value_record_vec.push((record_size, cnt));
         }
         //
         let top_node = self.read_top_node()?;
@@ -529,11 +532,12 @@ impl IdxFile {
         locked.count_of_used_node(
             &top_node,
             &mut node_vec,
-            &mut record_vec,
-            read_record_size_func,
+            &mut key_record_vec,
+            &mut value_record_vec,
+            read_key_value_record_size_func,
         )?;
         //
-        Ok((record_vec, node_vec))
+        Ok((key_record_vec, value_record_vec, node_vec))
     }
     pub fn record_size_stats<KV, F>(&self, read_record_size_func: F) -> Result<RecordSizeStats<KV>>
     where
@@ -585,8 +589,7 @@ The db index header size is 128 bytes.
 +--------+-------+-------------+---------------------------+
 | offset | bytes | name        | comment                   |
 +--------+-------+-------------+---------------------------+
-| 0      | 4     | signature1  | [b's', b'h', b'a', b'm']  |
-| 4      | 4     | signature1  | [b'd', b'b', b'1', 0u8]   |
+| 0      | 8     | signature1  | b"siamdbT\0"              |
 | 8      | 8     | signature2  | 8 bytes type signature    |
 | 16     | 8     | top node    | offset of top node        |
 | 24     | 8     | free1 off   | offset of free 1st list   |
@@ -1313,11 +1316,12 @@ impl VarFileNodeCache {
         &mut self,
         node_: &IdxNode,
         node_vec: &mut Vec<(u32, u64)>,
-        record_vec: &mut Vec<(u32, u64)>,
-        read_record_size_func: F,
+        key_record_vec: &mut Vec<(u32, u64)>,
+        value_record_vec: &mut Vec<(u32, u64)>,
+        read_key_value_record_size_func: F,
     ) -> Result<()>
     where
-        F: Fn(KeyRecordOffset) -> Result<KeyRecordSize> + Copy,
+        F: Fn(KeyRecordOffset) -> Result<(KeyRecordSize, ValueRecordSize)> + std::marker::Copy,
     {
         let node = node_.get_ref();
         match node_vec.iter().position(|v| v.0 == node.size().as_value()) {
@@ -1336,24 +1340,43 @@ impl VarFileNodeCache {
             let node = self
                 .read_node(node_offset)
                 .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-            self.count_of_used_node(&node, node_vec, record_vec, read_record_size_func)?;
+            self.count_of_used_node(
+                &node,
+                node_vec,
+                key_record_vec,
+                value_record_vec,
+                read_key_value_record_size_func,
+            )?;
         }
         while i > 0 {
             i -= 1;
             //
             let record_offset = node.keys_get(i);
             if !record_offset.is_zero() {
-                let record_size = read_record_size_func(record_offset)?;
-                match record_vec
+                let (key_record_size, value_record_size) =
+                    read_key_value_record_size_func(record_offset)?;
+                match key_record_vec
                     .iter()
-                    .position(|v| v.0 == record_size.as_value())
+                    .position(|v| v.0 == key_record_size.as_value())
                 {
                     Some(sz_idx) => {
-                        record_vec[sz_idx].1 += 1;
+                        key_record_vec[sz_idx].1 += 1;
                     }
                     None => {
-                        let last = record_vec.len() - 1;
-                        record_vec[last].1 += 1;
+                        let last = key_record_vec.len() - 1;
+                        key_record_vec[last].1 += 1;
+                    }
+                }
+                match value_record_vec
+                    .iter()
+                    .position(|v| v.0 == value_record_size.as_value())
+                {
+                    Some(sz_idx) => {
+                        value_record_vec[sz_idx].1 += 1;
+                    }
+                    None => {
+                        let last = value_record_vec.len() - 1;
+                        value_record_vec[last].1 += 1;
                     }
                 }
             }
@@ -1363,7 +1386,13 @@ impl VarFileNodeCache {
                 let node = self
                     .read_node(node_offset)
                     .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-                self.count_of_used_node(&node, node_vec, record_vec, read_record_size_func)?;
+                self.count_of_used_node(
+                    &node,
+                    node_vec,
+                    key_record_vec,
+                    value_record_vec,
+                    read_key_value_record_size_func,
+                )?;
             }
         }
         //
@@ -1487,7 +1516,7 @@ impl VarFileNodeCache {
 
 /*
 ```text
-used node:
+used node piece:
 +--------+-------+-------------+-----------------------------------+
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
@@ -1504,7 +1533,7 @@ used node:
 */
 /*
 ```text
-free node:
+free piece:
 +--------+-------+-------------+-----------------------------------+
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+

@@ -514,7 +514,14 @@ fn _test02() {
     db_map.sync_data().unwrap();
     //
     println!("{}", db_map.graph_string_with_key_string().unwrap());
-    println!("record free: {:?}", db_map.count_of_free_record().unwrap());
+    println!(
+        "key record free: {:?}",
+        db_map.count_of_free_key_record().unwrap()
+    );
+    println!(
+        "value record free: {:?}",
+        db_map.count_of_free_value_record().unwrap()
+    );
     println!("free: {:?}", db_map.count_of_free_node().unwrap());
     println!("used: {:?}", db_map.count_of_used_node().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
@@ -562,7 +569,14 @@ fn _test02() {
     //
     //println!("{}", db_map.graph_string().unwrap());
     println!("{}", db_map.graph_string_with_key_string().unwrap());
-    println!("record free: {:?}", db_map.count_of_free_record().unwrap());
+    println!(
+        "key record free: {:?}",
+        db_map.count_of_free_key_record().unwrap()
+    );
+    println!(
+        "value record free: {:?}",
+        db_map.count_of_free_value_record().unwrap()
+    );
     println!("free: {:?}", db_map.count_of_free_node().unwrap());
     println!("used: {:?}", db_map.count_of_used_node().unwrap());
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
@@ -731,9 +745,17 @@ fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
-    println!("record free: {:?}", db_map.count_of_free_record().unwrap());
-    let (rec_v, node_v) = db_map.count_of_used_node().unwrap();
-    println!("record used: {:?}", rec_v);
+    println!(
+        "key record free: {:?}",
+        db_map.count_of_free_key_record().unwrap()
+    );
+    let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
+    println!("key record used: {:?}", key_rec_v);
+    println!(
+        "value record free: {:?}",
+        db_map.count_of_free_value_record().unwrap()
+    );
+    println!("value record used: {:?}", val_rec_v);
     println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
@@ -757,33 +779,41 @@ fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     );
 }
 
-fn _print_check_db_list(db_list: &FileDbMapU64, check_cnf: CheckC) {
+fn _print_check_db_list(db_map: &FileDbMapU64, check_cnf: CheckC) {
     if check_cnf.f_graph {
-        println!("{}", db_list.graph_string_with_key_string().unwrap());
+        println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
-    println!("record free: {:?}", db_list.count_of_free_record().unwrap());
-    let (rec_v, node_v) = db_list.count_of_used_node().unwrap();
-    println!("record used: {:?}", rec_v);
-    println!("node free: {:?}", db_list.count_of_free_node().unwrap());
+    println!(
+        "key record free: {:?}",
+        db_map.count_of_free_key_record().unwrap()
+    );
+    let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
+    println!("key record used: {:?}", key_rec_v);
+    println!(
+        "value record free: {:?}",
+        db_map.count_of_free_value_record().unwrap()
+    );
+    println!("value record used: {:?}", val_rec_v);
+    println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
-    println!("db_list.is_balanced(): {}", db_list.is_balanced().unwrap());
+    println!("db_list.is_balanced(): {}", db_map.is_balanced().unwrap());
     if check_cnf.f_mst {
-        println!("db_map.is_mst_valid(): {}", db_list.is_mst_valid().unwrap());
+        println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());
     }
-    println!("db_list.is_dense(): {}", db_list.is_dense().unwrap());
+    println!("db_list.is_dense(): {}", db_map.is_dense().unwrap());
     println!(
         "db_list.depth_of_node_tree(): {}",
-        db_list.depth_of_node_tree().unwrap()
+        db_map.depth_of_node_tree().unwrap()
     );
     #[cfg(feature = "buf_stats")]
-    println!("db_list.buf_stats(): {:?}", db_list.buf_stats());
+    println!("db_list.buf_stats(): {:?}", db_map.buf_stats());
     println!(
         "key_record_size_stats(): {}",
-        db_list.key_record_size_stats().unwrap()
+        db_map.key_record_size_stats().unwrap()
     );
     println!(
         "value_record_size_stats(): {}",
-        db_list.value_record_size_stats().unwrap()
+        db_map.value_record_size_stats().unwrap()
     );
 }
 

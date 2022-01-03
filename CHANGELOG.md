@@ -2,6 +2,11 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* changes many many codes for performance.
+* removes `record_cache` from features.
+* removes `kc-lfu` and `kc-lru` from features.
+* adds `get_k8()` and `put_k8()`.
+* adds `htx-file` for supporting hash table index cache.
 * change separates dat-file to key-file and val-file.
 
 0.1.14 (2021-12-23)

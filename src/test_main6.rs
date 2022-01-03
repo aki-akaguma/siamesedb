@@ -45,11 +45,12 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
                 */
                 key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
+                htx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
                 key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -66,6 +67,9 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
             break;
         }
         if ki % 10_000 == 0 {
+            #[cfg(feature = "htx")]
+            _test_write_one(&mut db_map, &kv_vec)?;
+            #[cfg(not(feature = "htx"))]
             db_map.bulk_put_string(&kv_vec)?;
             kv_vec.clear();
         }
@@ -73,6 +77,9 @@ fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
         kv_vec.push((k, v));
     }
     if !kv_vec.is_empty() {
+        #[cfg(feature = "htx")]
+        _test_write_one(&mut db_map, &kv_vec)?;
+        #[cfg(not(feature = "htx"))]
         db_map.bulk_put_string(&kv_vec)?;
     }
     db_map.flush()
@@ -90,11 +97,12 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
                 */
                 key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
+                htx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
                 key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -121,6 +129,9 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
             break;
         }
         if ki % 10_000 == 0 {
+            #[cfg(feature = "htx")]
+            _test_write_one(&mut db_map, &kv_vec)?;
+            #[cfg(not(feature = "htx"))]
             db_map.bulk_put_string(&kv_vec)?;
             kv_vec.clear();
         }
@@ -128,9 +139,25 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
         kv_vec.push((k, v));
     }
     if !kv_vec.is_empty() {
+        #[cfg(feature = "htx")]
+        _test_write_one(&mut db_map, &kv_vec)?;
+        #[cfg(not(feature = "htx"))]
         db_map.bulk_put_string(&kv_vec)?;
     }
     db_map.flush()
+}
+
+#[cfg(feature = "htx")]
+fn _test_write_one(
+    db_map: &mut FileDbMapBytes,
+    key_vec: &[(Bytes, String)],
+) -> Result<(), std::io::Error> {
+    use std::ops::Deref;
+    let keys: Vec<(&[u8], &[u8])> = key_vec
+        .iter()
+        .map(|(a, b)| (a.deref(), b.as_bytes()))
+        .collect();
+    db_map.bulk_put_k8(&keys)
 }
 
 fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
@@ -145,11 +172,12 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
                  */
                 key_buf_size: FileBufSizeParam::PerMille(1000),
                 idx_buf_size: FileBufSizeParam::PerMille(1000),
+                htx_buf_size: FileBufSizeParam::PerMille(1000),
                 /*
                 key_buf_size: FileBufSizeParam::Auto,
                 idx_buf_size: FileBufSizeParam::Auto,
                 */
-                .. Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
