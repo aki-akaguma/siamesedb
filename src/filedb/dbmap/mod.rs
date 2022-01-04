@@ -3,23 +3,20 @@ use super::{
     CheckFileDbMap, CountOfPerSize, DbXxxIntoIter, DbXxxIter, DbXxxIterMut, FileDbParams,
     FileDbXxxInner, Key, KeysCountStats, LengthStats, RecordSizeStats, Value,
 };
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::io::Result;
 use std::path::Path;
 use std::rc::Rc;
 
-pub mod bytes;
-pub mod kt_bytes;
-pub mod kt_string;
-pub mod kt_u64;
+pub mod kt_dbbytes;
+pub mod kt_dbint;
+pub mod kt_dbstring;
 
-pub use bytes::Bytes;
-pub use kt_bytes::FileDbMapBytes;
-pub use kt_string::FileDbMapString;
-pub use kt_u64::FileDbMapU64;
+pub use kt_dbbytes::{DbBytes, FileDbMapDbBytes};
+pub use kt_dbint::{DbInt, FileDbMapDbInt};
+pub use kt_dbstring::{DbString, FileDbMapString};
 
-/// String Map in a file database.
+/// DbMap in a file database.
 #[derive(Debug, Clone)]
 pub struct FileDbMap<KT: DbXxxKeyType>(Rc<RefCell<FileDbXxxInner<KT>>>);
 
@@ -122,28 +119,8 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbMap<KT> {
         RefCell::borrow_mut(&self.0).put_k8(key, value)
     }
     #[inline]
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        KT: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).get(&(*key.borrow()))
-    }
-    #[inline]
-    fn put(&mut self, key: KT, value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put(key, value)
-    }
-    #[inline]
-    fn bulk_put(&mut self, bulk: &[(KT, &[u8])]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).bulk_put(bulk)
-    }
-    #[inline]
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        KT: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).delete(&(*key.borrow()))
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_k8(key)
     }
     #[inline]
     fn read_fill_buffer(&mut self) -> Result<()> {
@@ -160,14 +137,6 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbMap<KT> {
     #[inline]
     fn sync_data(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).sync_data()
-    }
-    #[inline]
-    fn has_key<Q>(&mut self, key: &Q) -> Result<bool>
-    where
-        KT: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).has_key(&(*key.borrow()))
     }
 }
 

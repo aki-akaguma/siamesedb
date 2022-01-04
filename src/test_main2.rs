@@ -15,8 +15,8 @@ fn test01(db_name: &str) -> std::io::Result<()> {
     //
     let val = "ab".repeat(1024 * 1024 * 1024);
     //
-    db_map.put_string("A".to_string(), &val).unwrap();
-    db_map.put_string("B".to_string(), &val).unwrap();
+    db_map.put_string("A".into(), &val).unwrap();
+    db_map.put_string("B".into(), &val).unwrap();
     //
     db_map.sync_data().unwrap();
     _print_check_db_map(

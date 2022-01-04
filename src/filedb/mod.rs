@@ -1,17 +1,12 @@
 use std::cell::RefCell;
 use std::io::Result;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 mod dbmap;
 mod inner;
 
-pub use dbmap::Bytes;
-pub use dbmap::FileDbMapBytes;
-pub use dbmap::FileDbMapString;
-pub use dbmap::FileDbMapU64;
-
+pub use dbmap::{DbBytes, DbInt, DbString, FileDbMapDbBytes, FileDbMapDbInt, FileDbMapString};
 pub use inner::dbxxx::{DbXxxIntoIter, DbXxxIter, DbXxxIterMut, FileDbXxxInner};
 use inner::semtype::*;
 use inner::FileDbInner;
@@ -55,6 +50,7 @@ impl std::default::Default for FileDbParams {
 
 /// Checks the file db map for debug.
 pub trait CheckFileDbMap {
+    /// hash table size and item counts in htx file.
     #[cfg(feature = "htx")]
     fn ht_size_and_count(&self) -> Result<(u64, u64)>;
     /// convert the index node tree to graph string for debug.
@@ -236,32 +232,36 @@ impl FileDb {
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
-    pub fn db_map_u64(&self, name: &str) -> Result<FileDbMapU64> {
-        self.db_map_u64_with_params(name, FileDbParams::default())
-    }
-    pub fn db_map_u64_with_params(&self, name: &str, params: FileDbParams) -> Result<FileDbMapU64> {
-        if let Some(m) = RefCell::borrow(&self.0).db_list(name) {
-            return Ok(m);
-        }
-        RefCell::borrow_mut(&self.0).create_db_list(name, params)?;
-        match RefCell::borrow(&self.0).db_list(name) {
-            Some(m) => Ok(m),
-            None => panic!("Cannot create db_maps: {}", name),
-        }
-    }
-    pub fn db_map_bytes(&self, name: &str) -> Result<FileDbMapBytes> {
+    pub fn db_map_bytes(&self, name: &str) -> Result<FileDbMapDbBytes> {
         self.db_map_bytes_with_params(name, FileDbParams::default())
     }
     pub fn db_map_bytes_with_params(
         &self,
         name: &str,
         params: FileDbParams,
-    ) -> Result<FileDbMapBytes> {
+    ) -> Result<FileDbMapDbBytes> {
         if let Some(m) = RefCell::borrow(&self.0).db_map_bytes(name) {
             return Ok(m);
         }
         RefCell::borrow_mut(&self.0).create_db_map_bytes(name, params)?;
         match RefCell::borrow(&self.0).db_map_bytes(name) {
+            Some(m) => Ok(m),
+            None => panic!("Cannot create db_maps: {}", name),
+        }
+    }
+    pub fn db_map_int(&self, name: &str) -> Result<FileDbMapDbInt> {
+        self.db_map_int_with_params(name, FileDbParams::default())
+    }
+    pub fn db_map_int_with_params(
+        &self,
+        name: &str,
+        params: FileDbParams,
+    ) -> Result<FileDbMapDbInt> {
+        if let Some(m) = RefCell::borrow(&self.0).db_map_dbint(name) {
+            return Ok(m);
+        }
+        RefCell::borrow_mut(&self.0).create_db_map_dbint(name, params)?;
+        match RefCell::borrow(&self.0).db_map_dbint(name) {
             Some(m) => Ok(m),
             None => panic!("Cannot create db_maps: {}", name),
         }
@@ -281,7 +281,7 @@ impl FileDb {
 #[cfg(test)]
 mod debug {
     use super::FileDbInner;
-    use super::{FileDb, FileDbMapString, FileDbMapU64};
+    use super::{FileDb, FileDbMapDbInt, FileDbMapString};
     use super::{KeyRecordSizeStats, ValueRecordSizeStats};
     //
     #[test]
@@ -290,7 +290,7 @@ mod debug {
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 8);
             assert_eq!(std::mem::size_of::<FileDbMapString>(), 8);
-            assert_eq!(std::mem::size_of::<FileDbMapU64>(), 8);
+            assert_eq!(std::mem::size_of::<FileDbMapDbInt>(), 8);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 96);
             //
@@ -302,7 +302,7 @@ mod debug {
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 4);
             assert_eq!(std::mem::size_of::<FileDbMapString>(), 4);
-            assert_eq!(std::mem::size_of::<FileDbMapU64>(), 4);
+            assert_eq!(std::mem::size_of::<FileDbMapDbInt>(), 4);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 48);
             //

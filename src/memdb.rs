@@ -1,11 +1,8 @@
-use super::{Bytes, DbMapBytes, DbMapString, DbMapU64, DbXxx};
-use std::borrow::Borrow;
+use super::{DbBytes, DbInt, DbMapDbBytes, DbMapDbInt, DbMapString, DbString, DbXxx};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::rc::{Rc, Weak};
-
-// https://qiita.com/qnighy/items/4bbbb20e71cf4ae527b9
 
 #[derive(Debug, Clone)]
 pub struct MemoryDb<'a>(Rc<RefCell<MemoryDbInner<'a>>>);
@@ -17,10 +14,10 @@ pub(crate) struct MemoryDbNode<'a>(Weak<RefCell<MemoryDbInner<'a>>>);
 pub struct MemoryDbMapString<'a>(Rc<RefCell<MemoryDbMapStringInner<'a>>>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryDbMapU64<'a>(Rc<RefCell<MemoryDbMapU64Inner<'a>>>);
+pub struct MemoryDbMapDbInt<'a>(Rc<RefCell<MemoryDbMapDbIntInner<'a>>>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryDbMapBytes<'a>(Rc<RefCell<MemoryDbMapBytesInner<'a>>>);
+pub struct MemoryDbMapDbBytes<'a>(Rc<RefCell<MemoryDbMapDbBytesInner<'a>>>);
 
 impl<'a> MemoryDb<'a> {
     pub fn open() -> Self {
@@ -42,20 +39,20 @@ impl<'a> MemoryDb<'a> {
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
-    pub fn db_map_u64(&'a self, name: &str) -> MemoryDbMapU64<'a> {
-        if let Some(m) = RefCell::borrow(&self.0).db_lists.get(name) {
+    pub fn db_map_dbint(&'a self, name: &str) -> MemoryDbMapDbInt<'a> {
+        if let Some(m) = RefCell::borrow(&self.0).db_maps_dbint.get(name) {
             return m.clone();
         }
         //
         let x = self.to_node();
         x.create_db_list(name);
         //
-        match RefCell::borrow(&self.0).db_lists.get(name) {
+        match RefCell::borrow(&self.0).db_maps_dbint.get(name) {
             Some(m) => m.clone(),
             None => panic!("Cannot create db_maps: {}", name),
         }
     }
-    pub fn db_map_bytes(&'a self, name: &str) -> MemoryDbMapBytes<'a> {
+    pub fn db_map_bytes(&'a self, name: &str) -> MemoryDbMapDbBytes<'a> {
         if let Some(m) = RefCell::borrow(&self.0).db_maps_bytes.get(name) {
             return m.clone();
         }
@@ -86,7 +83,7 @@ impl<'a> MemoryDbNode<'a> {
         let _ = locked.db_maps.insert(name.to_string(), child);
     }
     fn create_db_list(&self, name: &str) {
-        let child: MemoryDbMapU64<'a> = MemoryDbMapU64::new();
+        let child: MemoryDbMapDbInt<'a> = MemoryDbMapDbInt::new();
         let rc = self.0.upgrade().expect("MemoryDbNode is already disposed");
         {
             let mut child_locked = child.0.borrow_mut();
@@ -97,10 +94,10 @@ impl<'a> MemoryDbNode<'a> {
             child_locked.parent = Some(self.clone())
         }
         let mut locked = rc.borrow_mut();
-        let _ = locked.db_lists.insert(name.to_string(), child);
+        let _ = locked.db_maps_dbint.insert(name.to_string(), child);
     }
     fn create_db_map_bytes(&self, name: &str) {
-        let child: MemoryDbMapBytes<'a> = MemoryDbMapBytes::new();
+        let child: MemoryDbMapDbBytes<'a> = MemoryDbMapDbBytes::new();
         let rc = self.0.upgrade().expect("MemoryDbNode is already disposed");
         {
             let mut child_locked = child.0.borrow_mut();
@@ -125,29 +122,15 @@ impl<'a> MemoryDbMapString<'a> {
     }
 }
 
-impl<'a> DbXxx<String> for MemoryDbMapString<'a> {
-    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(None)
+impl<'a> DbXxx<DbString> for MemoryDbMapString<'a> {
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_k8(key)
     }
-    fn put_k8(&mut self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        Ok(())
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_k8(key, value)
     }
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        String: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).get(&(*key.borrow()))
-    }
-    fn put(&mut self, key: String, value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put(key, value)
-    }
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        String: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).delete(&(*key.borrow()))
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_k8(key)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).read_fill_buffer()
@@ -165,35 +148,21 @@ impl<'a> DbXxx<String> for MemoryDbMapString<'a> {
 
 impl<'a> DbMapString for MemoryDbMapString<'a> {}
 
-impl<'a> MemoryDbMapU64<'a> {
+impl<'a> MemoryDbMapDbInt<'a> {
     fn new() -> Self {
-        Self(Rc::new(RefCell::new(MemoryDbMapU64Inner::new())))
+        Self(Rc::new(RefCell::new(MemoryDbMapDbIntInner::new())))
     }
 }
 
-impl<'a> DbXxx<u64> for MemoryDbMapU64<'a> {
-    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(None)
+impl<'a> DbXxx<DbInt> for MemoryDbMapDbInt<'a> {
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_k8(key)
     }
-    fn put_k8(&mut self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        Ok(())
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_k8(key, value)
     }
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        u64: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        self.0.borrow_mut().get(&(*key.borrow()))
-    }
-    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
-        self.0.borrow_mut().put(key, value)
-    }
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        u64: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        self.0.borrow_mut().delete(&(*key.borrow()))
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_k8(key)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         self.0.borrow_mut().read_fill_buffer()
@@ -209,37 +178,23 @@ impl<'a> DbXxx<u64> for MemoryDbMapU64<'a> {
     }
 }
 
-impl<'a> DbMapU64 for MemoryDbMapU64<'a> {}
+impl<'a> DbMapDbInt for MemoryDbMapDbInt<'a> {}
 
-impl<'a> MemoryDbMapBytes<'a> {
+impl<'a> MemoryDbMapDbBytes<'a> {
     fn new() -> Self {
-        Self(Rc::new(RefCell::new(MemoryDbMapBytesInner::new())))
+        Self(Rc::new(RefCell::new(MemoryDbMapDbBytesInner::new())))
     }
 }
 
-impl<'a> DbXxx<Bytes> for MemoryDbMapBytes<'a> {
-    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(None)
+impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytes<'a> {
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_k8(key)
     }
-    fn put_k8(&mut self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        Ok(())
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_k8(key, value)
     }
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        Bytes: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).get(&(*key.borrow()))
-    }
-    fn put(&mut self, key: Bytes, value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put(key, value)
-    }
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        Bytes: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        RefCell::borrow_mut(&self.0).delete(&(*key.borrow()))
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_k8(key)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).read_fill_buffer()
@@ -255,22 +210,22 @@ impl<'a> DbXxx<Bytes> for MemoryDbMapBytes<'a> {
     }
 }
 
-impl<'a> DbMapBytes for MemoryDbMapBytes<'a> {}
+impl<'a> DbMapDbBytes for MemoryDbMapDbBytes<'a> {}
 
 //--
 
 #[derive(Debug)]
 pub(crate) struct MemoryDbInner<'a> {
     db_maps: BTreeMap<String, MemoryDbMapString<'a>>,
-    db_lists: BTreeMap<String, MemoryDbMapU64<'a>>,
-    db_maps_bytes: BTreeMap<String, MemoryDbMapBytes<'a>>,
+    db_maps_dbint: BTreeMap<String, MemoryDbMapDbInt<'a>>,
+    db_maps_bytes: BTreeMap<String, MemoryDbMapDbBytes<'a>>,
 }
 
 impl<'a> MemoryDbInner<'a> {
     pub fn open() -> MemoryDbInner<'a> {
         MemoryDbInner {
             db_maps: BTreeMap::new(),
-            db_lists: BTreeMap::new(),
+            db_maps_dbint: BTreeMap::new(),
             db_maps_bytes: BTreeMap::new(),
         }
     }
@@ -291,32 +246,22 @@ impl<'a> MemoryDbMapStringInner<'a> {
     }
 }
 
-impl<'a> DbXxx<String> for MemoryDbMapStringInner<'a> {
-    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(None)
-    }
-    fn put_k8(&mut self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        Ok(())
-    }
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        String: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        let r = self.mem.get(&(*key.borrow())).map(|val| val.to_vec());
+impl<'a> DbXxx<DbString> for MemoryDbMapStringInner<'a> {
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let key_s = String::from_utf8_lossy(key).to_string();
+        let r = self.mem.get(&key_s).map(|val| val.to_vec());
         Ok(r)
     }
-    fn put(&mut self, key: String, value: &[u8]) -> Result<()> {
-        let _ = self.mem.insert(key, value.to_vec());
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        let key_s = String::from_utf8_lossy(key).to_string();
+        let _ = self.mem.insert(key_s, value.to_vec());
         Ok(())
     }
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        String: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        self.mem.remove(&(*key.borrow()));
-        Ok(())
+    #[inline]
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let key_s = String::from_utf8_lossy(key).to_string();
+        let r = self.mem.remove(&key_s);
+        Ok(r)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
@@ -346,12 +291,12 @@ impl<'a> DbXxx<String> for MemoryDbMapStringInner<'a> {
 impl<'a> DbMapString for MemoryDbMapStringInner<'a> {}
 
 #[derive(Debug)]
-pub(crate) struct MemoryDbMapU64Inner<'a> {
+pub(crate) struct MemoryDbMapDbIntInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
-    mem: BTreeMap<u64, Vec<u8>>,
+    mem: BTreeMap<DbInt, Vec<u8>>,
 }
 
-impl<'a> MemoryDbMapU64Inner<'a> {
+impl<'a> MemoryDbMapDbIntInner<'a> {
     fn new() -> Self {
         Self {
             parent: None,
@@ -360,32 +305,20 @@ impl<'a> MemoryDbMapU64Inner<'a> {
     }
 }
 
-impl<'a> DbXxx<u64> for MemoryDbMapU64Inner<'a> {
-    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(None)
-    }
-    fn put_k8(&mut self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        Ok(())
-    }
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        u64: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        let r = self.mem.get(&(*key.borrow())).map(|val| val.to_vec());
+impl<'a> DbXxx<DbInt> for MemoryDbMapDbIntInner<'a> {
+    #[inline]
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(&(key.into())).cloned();
         Ok(r)
     }
-    fn put(&mut self, key: u64, value: &[u8]) -> Result<()> {
-        let _ = self.mem.insert(key, value.to_vec());
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key.into(), value.to_vec());
         Ok(())
     }
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        u64: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        let _ = self.mem.remove(&(*key.borrow()));
-        Ok(())
+    #[inline]
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.remove(&(key.into()));
+        Ok(r)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
@@ -414,12 +347,12 @@ impl<'a> DbXxx<u64> for MemoryDbMapU64Inner<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct MemoryDbMapBytesInner<'a> {
+pub(crate) struct MemoryDbMapDbBytesInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
-    mem: BTreeMap<Bytes, Vec<u8>>,
+    mem: BTreeMap<DbBytes, Vec<u8>>,
 }
 
-impl<'a> MemoryDbMapBytesInner<'a> {
+impl<'a> MemoryDbMapDbBytesInner<'a> {
     fn new() -> Self {
         Self {
             parent: None,
@@ -428,33 +361,20 @@ impl<'a> MemoryDbMapBytesInner<'a> {
     }
 }
 
-impl<'a> DbXxx<Bytes> for MemoryDbMapBytesInner<'a> {
+impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytesInner<'a> {
     #[inline]
-    fn get_k8(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(None)
-    }
-    fn put_k8(&mut self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        Ok(())
-    }
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        Bytes: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        let r = self.mem.get(&(*key.borrow())).map(|val| val.to_vec());
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(&(key.into())).cloned();
         Ok(r)
     }
-    fn put(&mut self, key: Bytes, value: &[u8]) -> Result<()> {
-        let _ = self.mem.insert(key, value.to_vec());
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key.into(), value.to_vec());
         Ok(())
     }
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        Bytes: Borrow<Q>,
-        Q: Ord + ?Sized,
-    {
-        self.mem.remove(&(*key.borrow()));
-        Ok(())
+    #[inline]
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.remove(&(key.into()));
+        Ok(r)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
@@ -481,39 +401,39 @@ impl<'a> DbXxx<Bytes> for MemoryDbMapBytesInner<'a> {
         Ok(())
     }
 }
-impl<'a> DbMapBytes for MemoryDbMapBytesInner<'a> {}
+impl<'a> DbMapDbBytes for MemoryDbMapDbBytesInner<'a> {}
 
 //--
 #[cfg(test)]
 mod debug {
     #[test]
     fn test_size_of() {
-        use super::{MemoryDb, MemoryDbMapString, MemoryDbMapU64};
+        use super::{MemoryDb, MemoryDbMapDbInt, MemoryDbMapString};
         use super::{
-            MemoryDbInner, MemoryDbMapBytesInner, MemoryDbMapStringInner, MemoryDbMapU64Inner,
+            MemoryDbInner, MemoryDbMapDbBytesInner, MemoryDbMapDbIntInner, MemoryDbMapStringInner,
         };
         //
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<MemoryDb>(), 8);
             assert_eq!(std::mem::size_of::<MemoryDbMapString>(), 8);
-            assert_eq!(std::mem::size_of::<MemoryDbMapU64>(), 8);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbInt>(), 8);
             //
             assert_eq!(std::mem::size_of::<MemoryDbInner>(), 72);
             assert_eq!(std::mem::size_of::<MemoryDbMapStringInner>(), 32);
-            assert_eq!(std::mem::size_of::<MemoryDbMapU64Inner>(), 32);
-            assert_eq!(std::mem::size_of::<MemoryDbMapBytesInner>(), 32);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbIntInner>(), 32);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbBytesInner>(), 32);
         }
         #[cfg(target_pointer_width = "32")]
         {
             assert_eq!(std::mem::size_of::<MemoryDb>(), 4);
             assert_eq!(std::mem::size_of::<MemoryDbMapString>(), 4);
-            assert_eq!(std::mem::size_of::<MemoryDbMapU64>(), 4);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbInt>(), 4);
             //
             assert_eq!(std::mem::size_of::<MemoryDbInner>(), 36);
             assert_eq!(std::mem::size_of::<MemoryDbMapStringInner>(), 16);
-            assert_eq!(std::mem::size_of::<MemoryDbMapU64Inner>(), 16);
-            assert_eq!(std::mem::size_of::<MemoryDbMapBytesInner>(), 16);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbIntInner>(), 16);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbBytesInner>(), 16);
         }
     }
 }

@@ -36,18 +36,18 @@ fn main() -> std::io::Result<()> {
     //
     let r = db_map.get_string("key1")?;
     assert_eq!(r, None);
-    db_map.put_string("key1".to_string(), "value1")?;
+    db_map.put_string("key1".into(), "value1")?;
     let r = db_map.get_string("key1")?;
-    assert_eq!(r, Some("value1".to_string()));
+    assert_eq!(r, Some("value1".into()));
     db_map.sync_data()?;
     Ok(())
 }
 ```
 
-## Example DbMapU64:
+## Example DbMapDbInt:
 
 ```
-use siamesedb::{DbMapU64, DbXxx};
+use siamesedb::{DbMapDbInt, DbXxx};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test2.siamesedb";
@@ -55,10 +55,10 @@ fn main() -> std::io::Result<()> {
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
     let db = siamesedb::open_file(db_name)?;
-    let mut db_map = db.db_map_u64("some_list1")?;
+    let mut db_map = db.db_map_int("some_list1")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, None);
-    db_map.put_string(120, "value120")?;
+    db_map.put_string(120.into(), "value120")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, Some("value120".to_string()));
     db_map.sync_data()?;
@@ -97,15 +97,15 @@ fn main() -> std::io::Result<()> {
 }
 ```
 */
-use std::borrow::Borrow;
 use std::hash::Hash;
 use std::io::Result;
+use std::ops::Deref;
 use std::path::Path;
 
 pub mod filedb;
 pub mod memdb;
 
-pub use filedb::Bytes;
+pub use filedb::{DbBytes, DbInt, DbString};
 pub use filedb::{DbXxxIter, DbXxxIterMut};
 
 /// Open the memory db. This data is not stored in file.
@@ -120,23 +120,6 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<filedb::FileDb> {
 
 /// generic key-value map store interface. the key type is `KT`.
 pub trait DbXxx<KT: DbXxxKeyType> {
-    /// returns the value corresponding to the key.
-    fn get<Q>(&mut self, key: &Q) -> Result<Option<Vec<u8>>>
-    where
-        KT: Borrow<Q> + Ord,
-        Q: Ord + ?Sized;
-
-    /// inserts a key-value pair into the db.
-    fn put(&mut self, key: KT, value: &[u8]) -> Result<()>
-    where
-        KT: Ord;
-
-    /// removes a key from the db.
-    fn delete<Q>(&mut self, key: &Q) -> Result<()>
-    where
-        KT: Borrow<Q> + Ord,
-        Q: Ord + ?Sized;
-
     /// read and fill buffer.
     fn read_fill_buffer(&mut self) -> Result<()>;
 
@@ -149,25 +132,173 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     /// synchronize data to storage, except file metadabe.
     fn sync_data(&mut self) -> Result<()>;
 
-    /// returns true if the map contains a value for the specified key.
+    /// returns the value corresponding to the key. this key is store raw data and type `&[u8]`.
+    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+
+    /// inserts a key-value pair into the db. this key is store raw data and type `&[u8]`.
+    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()>;
+
+    /// removes a key from the db. this key is store raw data and type `&[u8]`.
+    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+
+    //
     #[inline]
-    fn has_key<Q>(&mut self, key: &Q) -> Result<bool>
+    fn get_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
+        self.get_k8(key)
+            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
+    }
+    //
+    fn bulk_get_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+        /*
+        let mut vec = Vec::with_capacity(bulk_keys.len());
+        for a in bulk_keys {
+            let value = self.get_k8(a)?;
+            vec.push(value);
+        }
+        Ok(vec)
+        */
+        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
+        let mut vec: Vec<(usize, &[u8])> =
+            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
+        vec.sort_by(|a, b| b.1.cmp(a.1));
+        while let Some(ik) = vec.pop() {
+            let result_value = self.get_k8(ik.1)?;
+            result.push((ik.0, result_value));
+        }
+        result.sort_by(|a, b| a.0.cmp(&(b.0)));
+        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
+        Ok(ret)
+    }
+    //
+    #[inline]
+    fn bulk_get_string_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<String>>> {
+        let vec = self.bulk_get_k8(bulk_keys)?;
+        let mut ret = Vec::new();
+        for opt in vec {
+            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
+            ret.push(b);
+        }
+        Ok(ret)
+    }
+    //
+    #[inline]
+    fn put_string_k8(&mut self, key: &[u8], value: &str) -> Result<()> {
+        self.put_k8(key, value.as_bytes())
+    }
+    //
+    #[inline]
+    fn bulk_put_k8(&mut self, bulk: &[(&[u8], &[u8])]) -> Result<()> {
+        let mut vec = bulk.to_vec();
+        vec.sort_by(|a, b| b.0.cmp(a.0));
+        while let Some(kv) = vec.pop() {
+            self.put_k8(kv.0, kv.1)?;
+        }
+        Ok(())
+    }
+    //
+    #[inline]
+    fn bulk_put_string_k8(&mut self, bulk: &[(&[u8], String)]) -> Result<()> {
+        let mut vec = bulk.to_vec();
+        vec.sort_by(|a, b| b.0.cmp(a.0));
+        while let Some(kv) = vec.pop() {
+            self.put_k8(kv.0, kv.1.as_bytes())?;
+        }
+        Ok(())
+    }
+    //
+    #[inline]
+    fn del_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
+        self.del_k8(key)
+            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
+    }
+    //
+    #[inline]
+    fn bulk_del_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
+        let mut vec: Vec<(usize, &[u8])> =
+            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
+        vec.sort_by(|a, b| b.1.cmp(a.1));
+        while let Some(ik) = vec.pop() {
+            let result_value = self.del_k8(ik.1)?;
+            result.push((ik.0, result_value));
+        }
+        result.sort_by(|a, b| a.0.cmp(&(b.0)));
+        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
+        Ok(ret)
+    }
+    //
+    #[inline]
+    fn bulk_del_string_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<String>>> {
+        let vec = self.bulk_del_k8(bulk_keys)?;
+        let mut ret = Vec::new();
+        for opt in vec {
+            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
+            ret.push(b);
+        }
+        Ok(ret)
+    }
+
+    // returns the value corresponding to the key.
+    #[inline]
+    fn get<'a, Q>(&mut self, key: &'a Q) -> Result<Option<Vec<u8>>>
     where
-        KT: Borrow<Q> + Ord,
+        DbBytes: From<&'a Q>,
         Q: Ord + ?Sized,
     {
-        self.get(key).map(|opt| opt.is_some())
+        let key_kt: DbBytes = From::from(key);
+        self.get_k8(key_kt.deref())
     }
 
     /// returns the value corresponding to the key. the value is converted to `String`.
     #[inline]
-    fn get_string<Q>(&mut self, key: &Q) -> Result<Option<String>>
+    fn get_string<'a, Q>(&mut self, key: &'a Q) -> Result<Option<String>>
     where
-        KT: Borrow<Q> + Ord,
+        DbBytes: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         self.get(key)
             .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
+    }
+
+    /// gets bulk key-value paires from the db.
+    fn bulk_get<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<Vec<u8>>>>
+    where
+        DbBytes: From<&'a Q>,
+        Q: Ord + ?Sized,
+    {
+        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
+        let mut vec: Vec<(usize, &Q)> =
+            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
+        vec.sort_by(|a, b| b.1.cmp(a.1));
+        while let Some(ik) = vec.pop() {
+            let result_value = self.get(ik.1)?;
+            result.push((ik.0, result_value));
+        }
+        result.sort_by(|a, b| a.0.cmp(&(b.0)));
+        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
+        Ok(ret)
+    }
+
+    /// gets bulk key-value paires from the db.
+    #[inline]
+    fn bulk_get_string<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<String>>>
+    where
+        DbBytes: From<&'a Q>,
+        Q: Ord + ?Sized,
+    {
+        let vec = self.bulk_get(bulk_keys)?;
+        let mut ret = Vec::new();
+        for opt in vec {
+            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
+            ret.push(b);
+        }
+        Ok(ret)
+    }
+
+    /// inserts a key-value pair into the db.
+    #[inline]
+    fn put(&mut self, key_kt: KT, value: &[u8]) -> Result<()> {
+        self.put_k8(key_kt.as_bytes(), value)
     }
 
     /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
@@ -206,109 +337,61 @@ pub trait DbXxx<KT: DbXxxKeyType> {
         Ok(())
     }
 
-    /// gets bulk key-value paires from the db.
-    fn bulk_get<Q>(&mut self, bulk_keys: &[&Q]) -> Result<Vec<Option<Vec<u8>>>>
+    /// removes a key from the db.
+    #[inline]
+    fn delete<'a, Q>(&mut self, key: &'a Q) -> Result<Option<Vec<u8>>>
     where
-        KT: Borrow<Q> + Ord,
+        DbBytes: From<&'a Q>,
         Q: Ord + ?Sized,
     {
-        /*
-        let mut vec = Vec::with_capacity(bulk_keys.len());
-        for a in bulk_keys {
-            let value = self.get(a)?;
-            vec.push(value);
-        }
-        Ok(vec)
-        */
+        let key_kt: DbBytes = From::from(key);
+        self.del_k8(key_kt.deref())
+    }
+
+    /// removes a key from the db.
+    #[inline]
+    fn delete_string<'a, Q>(&mut self, key: &'a Q) -> Result<Option<String>>
+    where
+        DbBytes: From<&'a Q>,
+        Q: Ord + ?Sized,
+    {
+        self.delete(key)
+            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
+    }
+
+    /// delete bulk key-value paires from the db.
+    fn bulk_delete<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<Vec<u8>>>>
+    where
+        DbBytes: From<&'a Q>,
+        Q: Ord + ?Sized,
+    {
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
         vec.sort_by(|a, b| b.1.cmp(a.1));
         while let Some(ik) = vec.pop() {
-            let result_value = self.get(ik.1)?;
+            let result_value = self.delete(ik.1)?;
             result.push((ik.0, result_value));
         }
         result.sort_by(|a, b| a.0.cmp(&(b.0)));
         let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
         Ok(ret)
     }
-    /// gets bulk key-value paires from the db.
+
+    /// delete bulk key-value paires from the db.
     #[inline]
-    fn bulk_get_string<Q>(&mut self, bulk_keys: &[&Q]) -> Result<Vec<Option<String>>>
+    fn bulk_delete_string<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<String>>>
     where
-        KT: Borrow<Q> + Ord,
+        DbBytes: From<&'a Q>,
         Q: Ord + ?Sized,
     {
-        let vec = self.bulk_get(bulk_keys)?;
+        let vec = self.bulk_delete(bulk_keys)?;
         let mut ret = Vec::new();
         for opt in vec {
             let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
             ret.push(b);
         }
         Ok(ret)
-    }
-    //
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
-    #[inline]
-    fn get_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
-        self.get_k8(key)
-            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
-    }
-    #[inline]
-    fn bulk_get_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
-        /*
-        let mut vec = Vec::with_capacity(bulk_keys.len());
-        for a in bulk_keys {
-            let value = self.get_k8(a)?;
-            vec.push(value);
-        }
-        Ok(vec)
-        */
-        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
-        let mut vec: Vec<(usize, &[u8])> =
-            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
-        vec.sort_by(|a, b| b.1.cmp(a.1));
-        while let Some(ik) = vec.pop() {
-            let result_value = self.get_k8(ik.1)?;
-            result.push((ik.0, result_value));
-        }
-        result.sort_by(|a, b| a.0.cmp(&(b.0)));
-        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
-        Ok(ret)
-    }
-    #[inline]
-    fn bulk_get_string_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<String>>> {
-        let vec = self.bulk_get_k8(bulk_keys)?;
-        let mut ret = Vec::new();
-        for opt in vec {
-            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
-            ret.push(b);
-        }
-        Ok(ret)
-    }
-    //
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()>;
-    #[inline]
-    fn put_string_k8(&mut self, key: &[u8], value: &str) -> Result<()> {
-        self.put_k8(key, value.as_bytes())
-    }
-    #[inline]
-    fn bulk_put_k8(&mut self, bulk: &[(&[u8], &[u8])]) -> Result<()> {
-        let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(a.0));
-        while let Some(kv) = vec.pop() {
-            self.put_k8(kv.0, kv.1)?;
-        }
-        Ok(())
-    }
-    #[inline]
-    fn bulk_put_string_k8(&mut self, bulk: &[(&[u8], String)]) -> Result<()> {
-        let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(a.0));
-        while let Some(kv) = vec.pop() {
-            self.put_k8(kv.0, kv.1.as_bytes())?;
-        }
-        Ok(())
     }
 }
 
@@ -319,19 +402,22 @@ pub trait DbMap<KT: DbXxxKeyType>: DbXxx<KT> {
 }
 
 /// key-value map store interface. the key type is `String`.
-pub trait DbMapString: DbXxx<String> {}
+pub trait DbMapString: DbXxx<DbString> {}
 
 /// key-value map store interface. the key type is `u64`.
-pub trait DbMapU64: DbXxx<u64> {}
+pub trait DbMapDbInt: DbXxx<DbInt> {}
 
 /// key-value map store interface. the key type is `Vec<u8>`.
-pub trait DbMapBytes: DbXxx<Bytes> {}
+pub trait DbMapDbBytes: DbXxx<DbBytes> {}
 
 /// key type
-pub trait DbXxxKeyType: Ord + Clone + Default + HashValue {
+pub trait DbXxxKeyType: Ord + Clone + Default + HashValue + Deref {
     /// Signature of database file.
     fn signature() -> [u8; 8];
-    fn as_bytes(&self) -> Vec<u8>;
+    fn as_bytes(&self) -> &[u8];
+    fn to_bytes_vec(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
     /// Converts a KeyType into a byte vector.
     //fn into_bytes(self) -> Vec<u8>;
     fn from(bytes: &[u8]) -> Self;

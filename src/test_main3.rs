@@ -39,7 +39,7 @@ fn test01(db_name: &str, data: &[(String, String)]) -> std::io::Result<()> {
     //
     for (k, v) in data {
         eprintln!("k:'{}', v:'{}'", k, v);
-        db_map.put_string(k.clone(), v.as_str()).unwrap();
+        db_map.put_string(k.into(), v.as_str()).unwrap();
     }
     //
     db_map.sync_data().unwrap();

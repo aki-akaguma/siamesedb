@@ -1,5 +1,5 @@
 use super::super::DbXxx;
-use super::{FileDbMapBytes, FileDbMapString, FileDbMapU64, FileDbParams};
+use super::{FileDbMapDbBytes, FileDbMapDbInt, FileDbMapString, FileDbParams};
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::path::{Path, PathBuf};
@@ -27,9 +27,10 @@ mod offidx;
 
 #[derive(Debug)]
 pub struct FileDbInner {
-    db_maps_bytes: BTreeMap<String, FileDbMapBytes>,
+    db_maps_bytes: BTreeMap<String, FileDbMapDbBytes>,
+    db_maps_dbint: BTreeMap<String, FileDbMapDbInt>,
     db_maps: BTreeMap<String, FileDbMapString>,
-    db_lists: BTreeMap<String, FileDbMapU64>,
+    //db_lists: BTreeMap<String, FileDbMapDbInt>,
     //
     path: PathBuf,
 }
@@ -42,8 +43,9 @@ impl FileDbInner {
         }
         Ok(FileDbInner {
             db_maps_bytes: BTreeMap::new(),
+            db_maps_dbint: BTreeMap::new(),
             db_maps: BTreeMap::new(),
-            db_lists: BTreeMap::new(),
+            //db_lists: BTreeMap::new(),
             path: path.to_path_buf(),
         })
     }
@@ -57,11 +59,13 @@ impl FileDbInner {
             let mut b = self.db_map(&a).unwrap();
             b.sync_all()?;
         }
+        /*
         let keys: Vec<_> = self.db_lists.keys().cloned().collect();
         for a in keys {
             let mut b = self.db_list(&a).unwrap();
             b.sync_all()?;
         }
+        */
         Ok(())
     }
     pub fn sync_data(&self) -> Result<()> {
@@ -70,49 +74,62 @@ impl FileDbInner {
             let mut b = self.db_map(&a).unwrap();
             b.sync_data()?;
         }
+        /*
         let keys: Vec<_> = self.db_lists.keys().cloned().collect();
         for a in keys {
             let mut b = self.db_list(&a).unwrap();
             b.sync_data()?;
         }
+        */
         Ok(())
     }
-    /*<CHACHA>
-    pub fn record_iter(&mut self) -> Result<RecordIter> {
-        RecordIter::new(self.file.clone())
-    }
-    */
 }
 
 impl FileDbInner {
     #[inline]
-    pub fn db_map_bytes(&self, name: &str) -> Option<FileDbMapBytes> {
+    pub fn db_map_bytes(&self, name: &str) -> Option<FileDbMapDbBytes> {
         self.db_maps_bytes.get(name).cloned()
+    }
+    #[inline]
+    pub fn db_map_dbint(&self, name: &str) -> Option<FileDbMapDbInt> {
+        self.db_maps_dbint.get(name).cloned()
     }
     #[inline]
     pub fn db_map(&self, name: &str) -> Option<FileDbMapString> {
         self.db_maps.get(name).cloned()
     }
+    /*
     #[inline]
-    pub fn db_list(&self, name: &str) -> Option<FileDbMapU64> {
+    pub fn db_list(&self, name: &str) -> Option<FileDbMapDbInt> {
         self.db_lists.get(name).cloned()
     }
+    */
     #[inline]
     pub fn db_map_bytes_insert(
         &mut self,
         name: &str,
-        child: FileDbMapBytes,
-    ) -> Option<FileDbMapBytes> {
+        child: FileDbMapDbBytes,
+    ) -> Option<FileDbMapDbBytes> {
         self.db_maps_bytes.insert(name.to_string(), child)
+    }
+    #[inline]
+    pub fn db_map_dbint_insert(
+        &mut self,
+        name: &str,
+        child: FileDbMapDbInt,
+    ) -> Option<FileDbMapDbInt> {
+        self.db_maps_dbint.insert(name.to_string(), child)
     }
     #[inline]
     pub fn db_map_insert(&mut self, name: &str, child: FileDbMapString) -> Option<FileDbMapString> {
         self.db_maps.insert(name.to_string(), child)
     }
+    /*
     #[inline]
-    pub fn db_list_insert(&mut self, name: &str, child: FileDbMapU64) -> Option<FileDbMapU64> {
+    pub fn db_list_insert(&mut self, name: &str, child: FileDbMapDbInt) -> Option<FileDbMapDbInt> {
         self.db_lists.insert(name.to_string(), child)
     }
+    */
 }
 
 impl FileDbInner {
@@ -121,14 +138,21 @@ impl FileDbInner {
         let _ = self.db_map_insert(name, child);
         Ok(())
     }
+    /*
     pub(super) fn create_db_list(&mut self, name: &str, params: FileDbParams) -> Result<()> {
-        let child: FileDbMapU64 = FileDbMapU64::open(self.path(), name, params)?;
+        let child: FileDbMapDbInt = FileDbMapDbInt::open(self.path(), name, params)?;
         let _ = self.db_list_insert(name, child);
         Ok(())
     }
+    */
     pub(super) fn create_db_map_bytes(&mut self, name: &str, params: FileDbParams) -> Result<()> {
-        let child: FileDbMapBytes = FileDbMapBytes::open(self.path(), name, params)?;
+        let child: FileDbMapDbBytes = FileDbMapDbBytes::open(self.path(), name, params)?;
         let _ = self.db_map_bytes_insert(name, child);
+        Ok(())
+    }
+    pub(super) fn create_db_map_dbint(&mut self, name: &str, params: FileDbParams) -> Result<()> {
+        let child: FileDbMapDbInt = FileDbMapDbInt::open(self.path(), name, params)?;
+        let _ = self.db_map_dbint_insert(name, child);
         Ok(())
     }
 }

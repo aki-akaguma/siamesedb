@@ -5,7 +5,7 @@ fn main() -> std::io::Result<()> {
     match args[1].as_str() {
         "-s" => check_string(&args[2])?,
         "-b" => check_bytes(&args[2])?,
-        "-u" => check_u64(&args[2])?,
+        "-u" => check_dbint(&args[2])?,
         _ => {
             eprintln!("[usage] {} {{-s|-b|-u}} path", args[0]);
         }
@@ -78,10 +78,10 @@ fn check_bytes(db_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn check_u64(db_name: &str) -> std::io::Result<()> {
+fn check_dbint(db_name: &str) -> std::io::Result<()> {
     let db = siamesedb::open_file(db_name).unwrap();
     let db_map = db
-        .db_map_u64_with_params(
+        .db_map_int_with_params(
             "some_map1",
             FileDbParams {
                 key_buf_size: FileBufSizeParam::PerMille(1000),

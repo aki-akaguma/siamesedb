@@ -1,7 +1,7 @@
 mod test_iter {
-    use siamesedb::{Bytes, DbMap};
+    use siamesedb::{DbBytes, DbInt, DbMap, DbString};
     //
-    fn basic_test_map_string<T: DbMap<String>>(db_map: &mut T) {
+    fn basic_test_map_string<T: DbMap<DbString>>(db_map: &mut T) {
         // insert
         db_map.put_string("key01".into(), "value1").unwrap();
         db_map.put_string("key02".into(), "value2").unwrap();
@@ -71,20 +71,20 @@ mod test_iter {
         //
         db_map.sync_data().unwrap();
     }
-    fn medium_test_map_string<T: DbMap<String>>(db_map: &mut T) {
+    fn medium_test_map_string<T: DbMap<DbString>>(db_map: &mut T) {
         const LOOP_MAX: i32 = 100;
         // insert
         for i in 0..LOOP_MAX {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            db_map.put_string(key, &value).unwrap();
+            db_map.put_string(key.into(), &value).unwrap();
         }
         // iterator
         let mut iter = db_map.iter_mut();
         for i in 0..LOOP_MAX {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            assert_eq!(iter.next(), Some((key, value.as_bytes().to_vec())));
+            assert_eq!(iter.next(), Some((key.into(), value.as_bytes().to_vec())));
         }
         assert_eq!(iter.next(), None);
         //
@@ -93,7 +93,7 @@ mod test_iter {
         for (k, v) in db_map.iter() {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            assert_eq!(k, key);
+            assert_eq!(k, key.into());
             assert_eq!(v, value.as_bytes().to_vec());
             i += 1;
         }
@@ -113,20 +113,20 @@ mod test_iter {
         //
         //db_map.sync_data().unwrap();
     }
-    fn basic_test_map_u64<T: DbMap<u64>>(db_map: &mut T) {
+    fn basic_test_map_dbint<T: DbMap<DbInt>>(db_map: &mut T) {
         // insert
-        db_map.put_string(12301, "value1").unwrap();
-        db_map.put_string(12302, "value2").unwrap();
-        db_map.put_string(12303, "value3").unwrap();
-        db_map.put_string(12304, "value4").unwrap();
-        db_map.put_string(12305, "value5").unwrap();
+        db_map.put_string(12301.into(), "value1").unwrap();
+        db_map.put_string(12302.into(), "value2").unwrap();
+        db_map.put_string(12303.into(), "value3").unwrap();
+        db_map.put_string(12304.into(), "value4").unwrap();
+        db_map.put_string(12305.into(), "value5").unwrap();
         // iterator
         let mut iter = db_map.iter_mut();
-        assert_eq!(iter.next(), Some((12301, b"value1".to_vec())));
-        assert_eq!(iter.next(), Some((12302, b"value2".to_vec())));
-        assert_eq!(iter.next(), Some((12303, b"value3".to_vec())));
-        assert_eq!(iter.next(), Some((12304, b"value4".to_vec())));
-        assert_eq!(iter.next(), Some((12305, b"value5".to_vec())));
+        assert_eq!(iter.next(), Some((12301.into(), b"value1".to_vec())));
+        assert_eq!(iter.next(), Some((12302.into(), b"value2".to_vec())));
+        assert_eq!(iter.next(), Some((12303.into(), b"value3".to_vec())));
+        assert_eq!(iter.next(), Some((12304.into(), b"value4".to_vec())));
+        assert_eq!(iter.next(), Some((12305.into(), b"value5".to_vec())));
         assert_eq!(iter.next(), None);
         /*
         // get hits
@@ -183,20 +183,20 @@ mod test_iter {
         //
         db_map.sync_data().unwrap();
     }
-    fn medium_test_map_u64<T: DbMap<u64>>(db_map: &mut T) {
+    fn medium_test_map_dbint<T: DbMap<DbInt>>(db_map: &mut T) {
         const LOOP_MAX: i32 = 100;
         // insert
         for i in 0..LOOP_MAX {
             let key = 12300u64 + i as u64;
             let value = format!("value{}", i);
-            db_map.put_string(key, &value).unwrap();
+            db_map.put_string(key.into(), &value).unwrap();
         }
         // iterator
         let mut iter = db_map.iter_mut();
         for i in 0..LOOP_MAX {
             let key = 12300u64 + i as u64;
             let value = format!("value{}", i);
-            assert_eq!(iter.next(), Some((key, value.as_bytes().to_vec())));
+            assert_eq!(iter.next(), Some((key.into(), value.as_bytes().to_vec())));
         }
         assert_eq!(iter.next(), None);
         //
@@ -205,7 +205,7 @@ mod test_iter {
         for (k, v) in db_map.iter() {
             let key = 12300u64 + i as u64;
             let value = format!("value{}", i);
-            assert_eq!(k, key);
+            assert_eq!(k, key.into());
             assert_eq!(v, value.as_bytes().to_vec());
             i += 1;
         }
@@ -225,7 +225,7 @@ mod test_iter {
         //
         //db_map.sync_data().unwrap();
     }
-    fn basic_test_map_bytes<T: DbMap<Bytes>>(db_map: &mut T) {
+    fn basic_test_map_bytes<T: DbMap<DbBytes>>(db_map: &mut T) {
         // insert
         db_map.put_string(b"key01".into(), "value1").unwrap();
         db_map.put_string(b"key02".into(), "value2").unwrap();
@@ -295,7 +295,7 @@ mod test_iter {
         //
         db_map.sync_data().unwrap();
     }
-    fn medium_test_map_bytes<T: DbMap<Bytes>>(db_map: &mut T) {
+    fn medium_test_map_bytes<T: DbMap<DbBytes>>(db_map: &mut T) {
         const LOOP_MAX: i32 = 100;
         // insert
         for i in 0..LOOP_MAX {
@@ -348,13 +348,13 @@ mod test_iter {
         medium_test_map_string(&mut db_map);
     }
     #[test]
-    fn test_file_map_u64() {
+    fn test_file_map_dbint() {
         let db_name = "target/tmp/test_iter-u.siamesedb";
         let _ = std::fs::remove_dir_all(db_name);
         let db = siamesedb::open_file(db_name).unwrap();
-        let mut db_map = db.db_map_u64("some_u64_1").unwrap();
-        basic_test_map_u64(&mut db_map);
-        medium_test_map_u64(&mut db_map);
+        let mut db_map = db.db_map_int("some_u64_1").unwrap();
+        basic_test_map_dbint(&mut db_map);
+        medium_test_map_dbint(&mut db_map);
     }
     #[test]
     fn test_file_map_bytes() {

@@ -1,6 +1,6 @@
 use siamesedb::filedb::CheckFileDbMap;
+use siamesedb::filedb::FileDbMapDbInt;
 use siamesedb::filedb::FileDbMapString;
-use siamesedb::filedb::FileDbMapU64;
 use siamesedb::DbMap;
 use siamesedb::DbXxx;
 
@@ -213,23 +213,16 @@ fn _test00_map() {
     let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     {
-        db_map.put_string("key1".to_string(), "value1").unwrap();
-        db_map.put_string("key2".to_string(), "value2").unwrap();
-        db_map.put_string("key3".to_string(), "value3").unwrap();
-        db_map.put_string("key4".to_string(), "value4").unwrap();
-        db_map.put_string("key5".to_string(), "value5").unwrap();
+        db_map.put_string("key1".into(), "value1").unwrap();
+        db_map.put_string("key2".into(), "value2").unwrap();
+        db_map.put_string("key3".into(), "value3").unwrap();
+        db_map.put_string("key4".into(), "value4").unwrap();
+        db_map.put_string("key5".into(), "value5").unwrap();
         //
-        db_map.put_string("key6".to_string(), "value6").unwrap();
-        db_map.put_string("key7".to_string(), "value7").unwrap();
-        db_map.put_string("key8".to_string(), "value8").unwrap();
-        db_map.put_string("key9".to_string(), "value9").unwrap();
-        /*
-         */
-        /*
-        db_map.put_string("key0", "value0").unwrap();
-        db_map.put_string("key1", "value2").unwrap();
-        db_map.put_string("key1", "value99").unwrap();
-        */
+        db_map.put_string("key6".into(), "value6").unwrap();
+        db_map.put_string("key7".into(), "value7").unwrap();
+        db_map.put_string("key8".into(), "value8").unwrap();
+        db_map.put_string("key9".into(), "value9").unwrap();
         //
         db_map.sync_data().unwrap();
     }
@@ -278,78 +271,51 @@ fn _test00_map_iter() {
     //
     {
         // insert
-        db_map.put_string("key01".to_string(), "value1").unwrap();
-        db_map.put_string("key02".to_string(), "value2").unwrap();
-        db_map.put_string("key03".to_string(), "value3").unwrap();
-        db_map.put_string("key04".to_string(), "value4").unwrap();
-        db_map.put_string("key05".to_string(), "value5").unwrap();
-        db_map.put_string("key06".to_string(), "value6").unwrap();
-        db_map.put_string("key07".to_string(), "value7").unwrap();
-        db_map.put_string("key08".to_string(), "value8").unwrap();
-        db_map.put_string("key09".to_string(), "value9").unwrap();
-        db_map.put_string("key10".to_string(), "value10").unwrap();
-        db_map.put_string("key11".to_string(), "value11").unwrap();
-        db_map.put_string("key12".to_string(), "value12").unwrap();
-        db_map.put_string("key13".to_string(), "value13").unwrap();
-        db_map.put_string("key14".to_string(), "value14").unwrap();
-        db_map.put_string("key15".to_string(), "value15").unwrap();
-        db_map.put_string("key16".to_string(), "value16").unwrap();
-        db_map.put_string("key17".to_string(), "value17").unwrap();
-        db_map.put_string("key18".to_string(), "value18").unwrap();
+        db_map.put_string("key01".into(), "value1").unwrap();
+        db_map.put_string("key02".into(), "value2").unwrap();
+        db_map.put_string("key03".into(), "value3").unwrap();
+        db_map.put_string("key04".into(), "value4").unwrap();
+        db_map.put_string("key05".into(), "value5").unwrap();
+        db_map.put_string("key06".into(), "value6").unwrap();
+        db_map.put_string("key07".into(), "value7").unwrap();
+        db_map.put_string("key08".into(), "value8").unwrap();
+        db_map.put_string("key09".into(), "value9").unwrap();
+        db_map.put_string("key10".into(), "value10").unwrap();
+        db_map.put_string("key11".into(), "value11").unwrap();
+        db_map.put_string("key12".into(), "value12").unwrap();
+        db_map.put_string("key13".into(), "value13").unwrap();
+        db_map.put_string("key14".into(), "value14").unwrap();
+        db_map.put_string("key15".into(), "value15").unwrap();
+        db_map.put_string("key16".into(), "value16").unwrap();
+        db_map.put_string("key17".into(), "value17").unwrap();
+        db_map.put_string("key18".into(), "value18").unwrap();
         //
         println!("{}", db_map.graph_string_with_key_string().unwrap());
         //
         // iterator
         let mut iter = db_map.iter_mut();
-        assert_eq!(iter.next(), Some(("key01".to_string(), b"value1".to_vec())));
-        assert_eq!(iter.next(), Some(("key02".to_string(), b"value2".to_vec())));
-        assert_eq!(iter.next(), Some(("key03".to_string(), b"value3".to_vec())));
-        assert_eq!(iter.next(), Some(("key04".to_string(), b"value4".to_vec())));
-        assert_eq!(iter.next(), Some(("key05".to_string(), b"value5".to_vec())));
+        assert_eq!(iter.next(), Some(("key01".into(), b"value1".to_vec())));
+        assert_eq!(iter.next(), Some(("key02".into(), b"value2".to_vec())));
+        assert_eq!(iter.next(), Some(("key03".into(), b"value3".to_vec())));
+        assert_eq!(iter.next(), Some(("key04".into(), b"value4".to_vec())));
+        assert_eq!(iter.next(), Some(("key05".into(), b"value5".to_vec())));
         //
-        assert_eq!(iter.next(), Some(("key06".to_string(), b"value6".to_vec())));
+        assert_eq!(iter.next(), Some(("key06".into(), b"value6".to_vec())));
         //
-        assert_eq!(iter.next(), Some(("key07".to_string(), b"value7".to_vec())));
-        assert_eq!(iter.next(), Some(("key08".to_string(), b"value8".to_vec())));
-        assert_eq!(iter.next(), Some(("key09".to_string(), b"value9".to_vec())));
-        assert_eq!(
-            iter.next(),
-            Some(("key10".to_string(), b"value10".to_vec()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("key11".to_string(), b"value11".to_vec()))
-        );
+        assert_eq!(iter.next(), Some(("key07".into(), b"value7".to_vec())));
+        assert_eq!(iter.next(), Some(("key08".into(), b"value8".to_vec())));
+        assert_eq!(iter.next(), Some(("key09".into(), b"value9".to_vec())));
+        assert_eq!(iter.next(), Some(("key10".into(), b"value10".to_vec())));
+        assert_eq!(iter.next(), Some(("key11".into(), b"value11".to_vec())));
         //
-        assert_eq!(
-            iter.next(),
-            Some(("key12".to_string(), b"value12".to_vec()))
-        );
+        assert_eq!(iter.next(), Some(("key12".into(), b"value12".to_vec())));
         //
-        assert_eq!(
-            iter.next(),
-            Some(("key13".to_string(), b"value13".to_vec()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("key14".to_string(), b"value14".to_vec()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("key15".to_string(), b"value15".to_vec()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("key16".to_string(), b"value16".to_vec()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("key17".to_string(), b"value17".to_vec()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("key18".to_string(), b"value18".to_vec()))
-        );
+        assert_eq!(iter.next(), Some(("key13".into(), b"value13".to_vec())));
+        assert_eq!(iter.next(), Some(("key14".into(), b"value14".to_vec())));
+        assert_eq!(iter.next(), Some(("key15".into(), b"value15".to_vec())));
+        assert_eq!(iter.next(), Some(("key16".into(), b"value16".to_vec())));
+        assert_eq!(iter.next(), Some(("key17".into(), b"value17".to_vec())));
+        assert_eq!(iter.next(), Some(("key18".into(), b"value18".to_vec())));
         assert_eq!(iter.next(), None);
         //
         db_map.sync_data().unwrap();
@@ -367,7 +333,7 @@ fn _test00_map_iter2() {
         for i in 0..100 {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            db_map.put_string(key, &value).unwrap();
+            db_map.put_string(key.into(), &value).unwrap();
         }
         //
         println!("{}", db_map.graph_string_with_key_string().unwrap());
@@ -377,7 +343,7 @@ fn _test00_map_iter2() {
         for i in 0..100 {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            assert_eq!(iter.next(), Some((key, value.as_bytes().to_vec())));
+            assert_eq!(iter.next(), Some((key.into(), value.as_bytes().to_vec())));
         }
         assert_eq!(iter.next(), None);
         //
@@ -389,19 +355,19 @@ fn _test00_list() {
     let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_list = db.db_map_u64("some_list1").unwrap();
+    let mut db_list = db.db_map_int("some_list1").unwrap();
     //
     {
-        db_list.put_string(1, "value1").unwrap();
-        db_list.put_string(2, "value2").unwrap();
-        db_list.put_string(3, "value3").unwrap();
-        db_list.put_string(4, "value4").unwrap();
-        db_list.put_string(5, "value5").unwrap();
+        db_list.put_string(1.into(), "value1").unwrap();
+        db_list.put_string(2.into(), "value2").unwrap();
+        db_list.put_string(3.into(), "value3").unwrap();
+        db_list.put_string(4.into(), "value4").unwrap();
+        db_list.put_string(5.into(), "value5").unwrap();
         //
-        db_list.put_string(6, "value6").unwrap();
-        db_list.put_string(7, "value7").unwrap();
-        db_list.put_string(8, "value8").unwrap();
-        db_list.put_string(9, "value9").unwrap();
+        db_list.put_string(6.into(), "value6").unwrap();
+        db_list.put_string(7.into(), "value7").unwrap();
+        db_list.put_string(8.into(), "value8").unwrap();
+        db_list.put_string(9.into(), "value9").unwrap();
         /*
          */
         /*
@@ -464,25 +430,25 @@ fn _test01() {
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, None);
     //
-    db_map.put_string("key1".to_string(), "value1").unwrap();
+    db_map.put_string("key1".into(), "value1").unwrap();
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));
     //
-    db_map.put_string("key2".to_string(), "value2").unwrap();
+    db_map.put_string("key2".into(), "value2").unwrap();
     let r = db_map.get_string("key2").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key0".to_string(), "value0").unwrap();
+    db_map.put_string("key0".into(), "value0").unwrap();
     let r = db_map.get_string("key0").unwrap();
     assert_eq!(r, Some("value0".to_string()));
     //
     println!("{}", db_map.graph_string_with_key_string().unwrap());
-    db_map.put_string("key1".to_string(), "value2").unwrap();
+    db_map.put_string("key1".into(), "value2").unwrap();
     println!("{}", db_map.graph_string_with_key_string().unwrap());
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key1".to_string(), "value99").unwrap();
+    db_map.put_string("key1".into(), "value99").unwrap();
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value99".to_string()));
     //
@@ -508,7 +474,7 @@ fn _test02() {
     for i in 1..20 {
         let key = format!("key{:02}", i);
         let val = format!("value{:02}", i);
-        db_map.put_string(key, &val).unwrap();
+        db_map.put_string(key.into(), &val).unwrap();
     }
     //
     db_map.sync_data().unwrap();
@@ -627,7 +593,7 @@ where
         for i in 0..test_cnf.max_cnt {
             let key = fmt_key_func(i);
             let val = fmt_val_func(i);
-            db_map.put_string(key, &val).unwrap();
+            db_map.put_string(key.into(), &val).unwrap();
         }
         let instant_ed = std::time::Instant::now();
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
@@ -683,7 +649,7 @@ where
     let db_name = "target/tmp/testA.siamesedb";
     let _ = std::fs::remove_dir_all(db_name);
     let db = siamesedb::open_file(db_name).unwrap();
-    let mut db_list = db.db_map_u64("some_list1").unwrap();
+    let mut db_list = db.db_map_int("some_list1").unwrap();
     //
     for _ in 0..test_cnf.f_repeat.max(1) {
         println!("start put");
@@ -695,7 +661,7 @@ where
             */
             let key = fmt_key_func(i);
             let val = fmt_val_func(i);
-            db_list.put_string(key, &val).unwrap();
+            db_list.put_string(key.into(), &val).unwrap();
         }
         let instant_ed = std::time::Instant::now();
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
@@ -779,7 +745,7 @@ fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
     );
 }
 
-fn _print_check_db_list(db_map: &FileDbMapU64, check_cnf: CheckC) {
+fn _print_check_db_list(db_map: &FileDbMapDbInt, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
@@ -824,7 +790,7 @@ fn _print_depth_db_map(db_map: &FileDbMapString) {
     );
 }
 
-fn _print_depth_db_list(db_list: &FileDbMapU64) {
+fn _print_depth_db_list(db_list: &FileDbMapDbInt) {
     println!(
         "db_list.depth_of_node_tree(): {}",
         db_list.depth_of_node_tree().unwrap()

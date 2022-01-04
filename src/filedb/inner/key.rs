@@ -141,13 +141,13 @@ impl<KT: DbXxxKeyType> KeyFile<KT> {
         locked.delete_record(offset)
     }
     #[inline]
-    pub fn add_key_record(
+    pub fn _add_key_record(
         &self,
         key: &KT,
         value_offset: ValueRecordOffset,
     ) -> Result<KeyRecord<KT>> {
         let mut locked = self.0.borrow_mut();
-        locked.add_key_record(key, value_offset)
+        locked._add_key_record(key, value_offset)
     }
     #[inline]
     pub fn add_key_record_with_slice(
@@ -330,7 +330,7 @@ impl<KT: DbXxxKeyType> KeyRecord<KT> {
         }
     }
     #[inline]
-    pub fn with_key_value(key: KT, value_offset: ValueRecordOffset) -> Self {
+    pub fn _with_key_value(key: KT, value_offset: ValueRecordOffset) -> Self {
         Self {
             key,
             value_offset,
@@ -392,7 +392,7 @@ impl<KT: DbXxxKeyType> KeyRecord<KT> {
         file.seek_from_start(self.offset)?;
         file.write_record_size(self.size)?;
         file.write_key_len(key_len)?;
-        file.write_all(&key)?;
+        file.write_all(key)?;
         #[cfg(feature = "htx")]
         file.write_value_record_offset(self.value_offset)?;
         #[cfg(not(feature = "htx"))]
@@ -415,12 +415,12 @@ impl<KT: DbXxxKeyType> VarFileKeyCache<KT> {
     }
 
     #[inline]
-    fn add_key_record(
+    fn _add_key_record(
         &mut self,
         key: &KT,
         value_offset: ValueRecordOffset,
     ) -> Result<KeyRecord<KT>> {
-        self.write_record(KeyRecord::with_key_value(key.clone(), value_offset), true)
+        self.write_record(KeyRecord::_with_key_value(key.clone(), value_offset), true)
     }
 
     #[inline]

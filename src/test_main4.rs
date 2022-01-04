@@ -51,7 +51,7 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         for (k, v) in data {
-            db_map.put(k.clone(), v.as_bytes()).unwrap();
+            db_map.put(k.into(), v.as_bytes()).unwrap();
         }
         //
         db_map.sync_data().unwrap();
@@ -65,7 +65,7 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         for (k, v) in data {
-            db_map.put(k.clone(), v.as_bytes()).unwrap();
+            db_map.put(k.into(), v.as_bytes()).unwrap();
         }
         //
         db_map.sync_data().unwrap();
@@ -79,13 +79,13 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         db_map
-            .put_string("9909909900".to_string(), "TEST, v9909909900")
+            .put_string("9909909900".into(), "TEST, v9909909900")
             .unwrap();
         db_map
-            .put_string("9909909901".to_string(), "TEST, v9909909901")
+            .put_string("9909909901".into(), "TEST, v9909909901")
             .unwrap();
         db_map
-            .put_string("9909909902".to_string(), "TEST, v9909909902")
+            .put_string("9909909902".into(), "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
     });
@@ -147,13 +147,13 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         db_map
-            .put_string("9909909900".to_string(), "TEST, v9909909900")
+            .put_string("9909909900".into(), "TEST, v9909909900")
             .unwrap();
         db_map
-            .put_string("9909909901".to_string(), "TEST, v9909909901")
+            .put_string("9909909901".into(), "TEST, v9909909901")
             .unwrap();
         db_map
-            .put_string("9909909902".to_string(), "TEST, v9909909902")
+            .put_string("9909909902".into(), "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
         _print_check_db_map(
@@ -174,15 +174,15 @@ fn test_fixtures_fruits() {
     do_file_map_string(db_name, |mut db_map: FileDbMapString| {
         assert_eq!(
             db_map.get_string("9909909900").unwrap(),
-            Some("TEST, v9909909900".to_string())
+            Some("TEST, v9909909900".into())
         );
         assert_eq!(
             db_map.get_string("9909909901").unwrap(),
-            Some("TEST, v9909909901".to_string())
+            Some("TEST, v9909909901".into())
         );
         assert_eq!(
             db_map.get_string("9909909902").unwrap(),
-            Some("TEST, v9909909902".to_string())
+            Some("TEST, v9909909902".into())
         );
     });
 }
