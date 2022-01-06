@@ -274,7 +274,7 @@ impl IdxFile {
         }
         let record_offset = node.get_ref().keys_get(0);
         let key_string = if !record_offset.is_zero() {
-            dbxxx.load_key_string_no_cache(record_offset)?
+            dbxxx.load_key_data(record_offset)?
         } else {
             Default::default()
         };
@@ -294,12 +294,12 @@ impl IdxFile {
             let key_offset2 = node.get_ref().keys_get(i);
             let node_offset = node.get_ref().downs_get(i);
             let key_string1 = if !key_offset1.is_zero() {
-                dbxxx.load_key_string_no_cache(key_offset1)?
+                dbxxx.load_key_data(key_offset1)?
             } else {
                 Default::default()
             };
             let key_string2 = if !key_offset2.is_zero() {
-                dbxxx.load_key_string_no_cache(key_offset2)?
+                dbxxx.load_key_data(key_offset2)?
             } else {
                 Default::default()
             };
@@ -322,7 +322,7 @@ impl IdxFile {
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
             if !record_offset.is_zero() {
-                let key_string = dbxxx.load_key_string_no_cache(record_offset)?;
+                let key_string = dbxxx.load_key_data(record_offset)?;
                 if !self.is_large(&key_string, &node1, dbxxx)? {
                     return Ok(false);
                 }
@@ -349,7 +349,7 @@ impl IdxFile {
             }
             let record_offset = node.get_ref().keys_get(i);
             if !record_offset.is_zero() {
-                let key_string1 = dbxxx.load_key_string_no_cache(record_offset)?;
+                let key_string1 = dbxxx.load_key_data(record_offset)?;
                 if key <= &key_string1 {
                     return Ok(false);
                 }
@@ -386,7 +386,7 @@ impl IdxFile {
             }
             let record_offset11 = node.get_ref().keys_get(i);
             if !record_offset11.is_zero() {
-                let ket_string11 = dbxxx.load_key_string_no_cache(record_offset11)?;
+                let ket_string11 = dbxxx.load_key_data(record_offset11)?;
                 if key1 >= &ket_string11 {
                     return Ok(false);
                 }
@@ -420,7 +420,7 @@ impl IdxFile {
             }
             let record_offset = node.get_ref().keys_get(i);
             if !record_offset.is_zero() {
-                let ket_string1 = dbxxx.load_key_string_no_cache(record_offset)?;
+                let ket_string1 = dbxxx.load_key_data(record_offset)?;
                 if key >= &ket_string1 {
                     return Ok(false);
                 }
@@ -1289,7 +1289,7 @@ impl VarFileNodeCache {
             i -= 1;
             let record_offset = node.keys_get(i);
             if !record_offset.is_zero() {
-                let key_string = dbxxx.load_key_string_no_cache(record_offset)?;
+                let key_string = dbxxx.load_key_data(record_offset)?;
                 gs += &format!(
                     "{}{:04x}:'{}'\n",
                     head,

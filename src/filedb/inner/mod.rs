@@ -10,14 +10,13 @@ pub(crate) mod semtype;
 mod piece;
 mod tr;
 
-mod htx;
 mod idx;
 mod key;
 mod val;
 mod vfile;
 
-#[cfg(feature = "key_cache")]
-mod kc;
+#[cfg(feature = "htx")]
+mod htx;
 
 #[cfg(feature = "node_cache")]
 mod nc;

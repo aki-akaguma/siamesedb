@@ -1,10 +1,10 @@
-use super::super::super::{DbXxx, DbXxxKeyType, HashValue};
+use super::super::super::{DbXxx, DbXxxKeyType};
 use super::super::{
     CheckFileDbMap, CountOfPerSize, FileDbParams, KeysCountStats, LengthStats, RecordSizeStats,
 };
 use super::semtype::*;
 use super::tr::{IdxNode, TreeNode};
-use super::{htx, idx, key, val};
+use super::{idx, key, val};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -13,11 +13,11 @@ use std::io::Result;
 use std::path::Path;
 use std::rc::Rc;
 
-#[cfg(feature = "key_cache")]
-use super::kc::KeyCacheTrait;
+#[cfg(feature = "htx")]
+use super::super::super::HashValue;
 
-#[cfg(feature = "key_cache")]
-use super::kc;
+#[cfg(feature = "htx")]
+use super::htx;
 
 #[derive(Debug)]
 pub struct FileDbXxxInner<KT: DbXxxKeyType> {
@@ -28,9 +28,6 @@ pub struct FileDbXxxInner<KT: DbXxxKeyType> {
     idx_file: idx::IdxFile,
     #[cfg(feature = "htx")]
     htx_file: htx::HtxFile,
-    //
-    #[cfg(feature = "key_cache")]
-    key_cache: kc::KeyCache<KT>,
     //
     _phantom: std::marker::PhantomData<KT>,
 }
@@ -54,8 +51,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             #[cfg(feature = "htx")]
             htx_file,
             dirty: false,
-            #[cfg(feature = "key_cache")]
-            key_cache: kc::KeyCache::new(),
             _phantom: std::marker::PhantomData,
         })
     }
@@ -67,37 +62,8 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 
 // for utils
 impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
-    #[cfg(feature = "key_cache")]
     #[inline]
-    fn clear_key_cache(&mut self, record_offset: KeyRecordOffset) {
-        self.key_cache.delete(&record_offset);
-    }
-    #[cfg(feature = "key_cache")]
-    #[inline]
-    fn _clear_key_cache_all(&mut self) {
-        self.key_cache.clear();
-    }
-    #[cfg(feature = "key_cache")]
-    #[inline]
-    pub fn load_key_string(&mut self, record_offset: KeyRecordOffset) -> Result<Rc<KT>> {
-        debug_assert!(!record_offset.is_zero());
-        let string = match self.key_cache.get(&record_offset) {
-            Some(s) => s,
-            None => {
-                let key = self.key_file.read_record_only_key(record_offset)?;
-                self.key_cache.put(&record_offset, key)
-            }
-        };
-        Ok(string)
-    }
-    #[cfg(not(feature = "key_cache"))]
-    #[inline]
-    pub fn load_key_string(&mut self, record_offset: RecordOffset) -> Result<Rc<KT>> {
-        self.load_key_string_no_cache(record_offset)
-            .map(|a| Rc::new(a))
-    }
-    #[inline]
-    pub fn load_key_string_no_cache(&self, record_offset: KeyRecordOffset) -> Result<KT> {
+    pub(crate) fn load_key_data(&self, record_offset: KeyRecordOffset) -> Result<KT> {
         debug_assert!(!record_offset.is_zero());
         self.key_file.read_record_only_key(record_offset)
     }
@@ -194,42 +160,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
         node: &TreeNode,
         key_slice: &[u8],
     ) -> Result<std::result::Result<usize, usize>> {
-        /*
-        match node.keys.binary_search_by(|&key_offset| {
-            debug_assert!(!key_offset.is_zero());
-            let key_string = self.load_key_string(key_offset).unwrap();
-            key_string.as_ref().borrow().cmp(key)
-        }) {
-            Ok(k) => Ok(Ok(k)),
-            Err(k) => Ok(Err(k)),
-        }
-        */
-        /*
-        let key_borrow = key.borrow();
-        let keys = node.keys();
-        let mut left = 0;
-        let mut right = keys.len();
-        while left < right {
-            let mid = (left + right) / 2;
-            //
-            // SAFETY: `mid` is limited by `[left; right)` bound.
-            //let key_offset = unsafe { node.keys_get_unchecked(mid) };
-            let key_offset = unsafe { *keys.get_unchecked(mid) };
-            //let key_offset = node.keys[mid];
-            //
-            debug_assert!(!key_offset.is_zero());
-            let key_string = self.load_key_string(key_offset)?;
-            //
-            match key_borrow.cmp(key_string.as_ref().borrow()) {
-                Ordering::Greater => left = mid + 1,
-                Ordering::Equal => {
-                    return Ok(Ok(mid));
-                }
-                Ordering::Less => right = mid,
-            }
-        }
-        Ok(Err(left))
-        */
         let mut locked = self.key_file.0.borrow_mut();
         //
         let keys = node.keys();
@@ -244,9 +174,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             //let key_offset = node.keys[mid];
             //
             debug_assert!(!key_offset.is_zero());
-            //let key_string = self.load_key_string_no_cache(key_offset)?;
-            //let key_string = self.key_file.read_record_only_key(key_offset)?;
-            //let key_string = locked.read_record_only_key(key_offset)?;
             let key_string = locked.read_record_only_key_maybeslice(key_offset)?;
             match key_slice.cmp(&key_string) {
                 Ordering::Greater => left = mid + 1,
@@ -523,14 +450,14 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     fn delete_from_node_tree_k8(
         &mut self,
         mut node_: IdxNode,
-        key: &[u8],
+        key_slice: &[u8],
     ) -> Result<(IdxNode, Option<Vec<u8>>)> {
         let r = {
             if node_.get_ref().keys_is_empty() {
                 return Ok((node_, None));
             }
             let node = node_.get_ref();
-            self.keys_binary_search_k8(&node, key)?
+            self.keys_binary_search_k8(&node, key_slice)?
         };
         match r {
             Ok(k) => {
@@ -542,7 +469,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                 //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let node1_ = self.idx_file.read_node(node_offset1)?;
-                    let (node1_, val) = self.delete_from_node_tree_k8(node1_, key)?;
+                    let (node1_, val) = self.delete_from_node_tree_k8(node1_, key_slice)?;
                     node_.get_mut().downs_set(k, node1_.get_ref().offset());
                     let node_ = self.write_node(node_)?;
                     if k == node_.get_ref().downs_len() - 1 {
@@ -566,8 +493,6 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             record_offset
         );
         let opt_value = {
-            #[cfg(feature = "key_cache")]
-            self.clear_key_cache(record_offset);
             let record = self.key_file.read_record(record_offset)?;
             #[cfg(feature = "htx")]
             {
@@ -751,9 +676,9 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     fn find_in_node_tree_k8(
         &mut self,
         node_offset: NodeOffset,
-        key: &[u8],
+        key_slice: &[u8],
     ) -> Result<Option<Vec<u8>>> {
-        let r = self.keys_binary_search_uu_k8(node_offset, key)?;
+        let r = self.keys_binary_search_uu_k8(node_offset, key_slice)?;
         match r {
             Ok(key_offset) => {
                 debug_assert!(!key_offset.is_zero());
@@ -761,7 +686,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             }
             Err(node_offset) => {
                 if !node_offset.is_zero() {
-                    self.find_in_node_tree_k8(node_offset, key)
+                    self.find_in_node_tree_k8(node_offset, key_slice)
                 } else {
                     Ok(None)
                 }
@@ -848,29 +773,6 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
     }
     #[inline]
     fn del_k8(&mut self, key_slice: &[u8]) -> Result<Option<Vec<u8>>> {
-        /*
-        #[cfg(feature = "htx")]
-        {
-            let hash = key_slice.hash_value();
-            let key_offset = self.htx_file.read_key_record_offset(hash)?;
-            if !key_offset.is_zero() {
-                let flg = {
-                    let mut locked_key = self.key_file.0.borrow_mut();
-                    let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
-                    match key_slice.cmp(&key_string) {
-                        Ordering::Equal => true,
-                        Ordering::Greater => false,
-                        Ordering::Less => false,
-                    }
-                };
-                if flg {
-                    self.htx_file
-                        .write_key_record_offset(hash, KeyRecordOffset::new(0))?;
-                }
-            }
-        }
-        */
-        //
         let top_node = self.idx_file.read_top_node()?;
         let top_node_offset = top_node.get_ref().offset();
         let (top_node, opt_val) = self.delete_from_node_tree_k8(top_node, key_slice)?;
@@ -1053,10 +955,10 @@ impl<KT: DbXxxKeyType> Iterator for DbXxxIterMut<KT> {
     type Item = (KT, Vec<u8>);
     fn next(&mut self) -> Option<(KT, Vec<u8>)> {
         if let Some(key_offset) = self.next_record_offset() {
-            let mut db_map_inner = RefCell::borrow_mut(&self.db_map);
-            let key_rc = db_map_inner.load_key_string(key_offset).unwrap();
+            let db_map_inner = RefCell::borrow_mut(&self.db_map);
+            let key = db_map_inner.load_key_data(key_offset).unwrap();
             let value_vec = db_map_inner.load_value(key_offset).unwrap();
-            Some((key_rc.as_ref().clone(), value_vec))
+            Some((key, value_vec))
         } else {
             None
         }

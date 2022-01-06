@@ -1,5 +1,5 @@
 use siamesedb::filedb::{FileBufSizeParam, FileDbMapString, FileDbParams};
-use siamesedb::DbXxx;
+use siamesedb::{DbString, DbXxx, DbXxxKeyType};
 use std::str::FromStr;
 
 const LOOP_MAX: i64 = 2_000_000;
@@ -40,7 +40,7 @@ fn open_db_map(db_name: &str) -> Result<FileDbMapString, std::io::Error> {
     )
 }
 
-fn conv_to_kv_string(ki: i64, _vi: i64) -> (String, String) {
+fn conv_to_kv_string(ki: i64, _vi: i64) -> (DbString, String) {
     let bytes = ki.to_le_bytes();
     //let k = format!("{}.{}", bytes[0], bytes[1]);
     //let k = format!("{}.{}.{}.{}", bytes[0], bytes[1], bytes[2], bytes[3]);
@@ -50,7 +50,7 @@ fn conv_to_kv_string(ki: i64, _vi: i64) -> (String, String) {
     //let v = format!("value-{}", ki);
     //let v = format!("{}", _vi);
     //let v = String::new();
-    (k, v)
+    (k.into(), v)
 }
 
 fn _test_create(db_name: &str) -> Result<(), std::io::Error> {
@@ -64,7 +64,7 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
     //
     let (k, _v) = conv_to_kv_string(1, 0);
     let vi: i64 = {
-        if let Some(s) = db_map.get_string(&k)? {
+        if let Some(s) = db_map.get_string(k.as_bytes())? {
             match i64::from_str(&s) {
                 Ok(i) => i + 1,
                 Err(_) => 0,
@@ -74,7 +74,7 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
         }
     };
     //
-    let mut kv_vec: Vec<(String, String)> = Vec::new();
+    let mut kv_vec: Vec<(DbString, String)> = Vec::new();
     let mut ki: i64 = 0;
     loop {
         ki += 1;
@@ -118,14 +118,14 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
     //
     let (k, _v) = conv_to_kv_string(1, 0);
     let vi: i64 = {
-        if let Some(s) = db_map.get_string(&k)? {
+        if let Some(s) = db_map.get_string(k.as_bytes())? {
             i64::from_str(&s).unwrap_or(0)
         } else {
             0
         }
     };
     //
-    let mut key_vec: Vec<String> = Vec::new();
+    let mut key_vec: Vec<DbString> = Vec::new();
     let mut value_vec: Vec<String> = Vec::new();
     let mut ki: i64 = 0;
     loop {
@@ -154,7 +154,7 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
 
 fn _test_read_one(
     db_map: &mut FileDbMapString,
-    key_vec: &[String],
+    key_vec: &[DbString],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
     /*
@@ -183,14 +183,14 @@ fn _test_delete(db_name: &str) -> Result<(), std::io::Error> {
     //
     let (k, _v) = conv_to_kv_string(1, 0);
     let vi: i64 = {
-        if let Some(s) = db_map.get_string(&k)? {
+        if let Some(s) = db_map.get_string(k.as_bytes())? {
             i64::from_str(&s).unwrap_or(0)
         } else {
             0
         }
     };
     //
-    let mut key_vec: Vec<String> = Vec::new();
+    let mut key_vec: Vec<DbString> = Vec::new();
     let mut value_vec: Vec<String> = Vec::new();
     let mut ki: i64 = 0;
     loop {
@@ -219,7 +219,7 @@ fn _test_delete(db_name: &str) -> Result<(), std::io::Error> {
 
 fn _test_delete_one(
     db_map: &mut FileDbMapString,
-    key_vec: &[String],
+    key_vec: &[DbString],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
     /*

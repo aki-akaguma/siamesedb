@@ -346,6 +346,7 @@ impl<KT: DbXxxKeyType> KeyRecord<KT> {
             ..Default::default()
         }
     }
+    #[cfg(feature = "htx")]
     pub fn hash_value(&self) -> u64 {
         use std::hash::Hasher;
         //

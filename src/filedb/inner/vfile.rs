@@ -684,12 +684,14 @@ impl VarFile {
         debug_assert!(v % 8 == 0);
         self.write_vu64_u32(v / 8)
     }
+    #[cfg(not(feature = "htx"))]
     #[inline]
-    pub fn _read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
+    pub fn read_record_offset<T>(&mut self) -> Result<RecordOffset<T>> {
         self._read_vu64_u64().map(|v| RecordOffset::new(v * 8))
     }
+    #[cfg(not(feature = "htx"))]
     #[inline]
-    pub fn _write_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
+    pub fn write_record_offset<T>(&mut self, record_offset: RecordOffset<T>) -> Result<()> {
         let v: u64 = record_offset.into();
         debug_assert!(v % 8 == 0);
         self._write_vu64_u64(v / 8)

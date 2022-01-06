@@ -4,7 +4,7 @@ Unreleased changes. Release notes have not yet been written.
 
 * changes many many codes for performance.
 * adds `DbInt` and `DbString` to key types.
-* removes `record_cache` from features.
+* removes `key_cache` and `record_cache` from features.
 * removes `kc-lfu` and `kc-lru` from features.
 * adds `get_k8()`, `put_k8()` and `del_k8()`.
 * adds `htx-file` for supporting hash table index cache.
