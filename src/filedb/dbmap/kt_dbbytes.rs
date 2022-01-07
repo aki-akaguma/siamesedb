@@ -1,4 +1,4 @@
-use super::super::super::{DbXxxKeyType, HashValue};
+use super::super::super::{DbMapKeyType, HashValue};
 use super::FileDbMap;
 use std::fmt::{Display, Error, Formatter};
 use std::ops::Deref;
@@ -6,12 +6,11 @@ use std::ops::Deref;
 /// DbBytes Map in a file databse.
 pub type FileDbMapDbBytes = FileDbMap<DbBytes>;
 
-/// DbBytes
-/// New type pattern of `Vec<u8>`.
+/// db-key type. `&[u8]` can be used as keys.
 #[derive(Debug, Default, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct DbBytes(Vec<u8>);
 
-impl DbXxxKeyType for DbBytes {
+impl DbMapKeyType for DbBytes {
     #[inline]
     fn from_bytes(bytes: &[u8]) -> Self {
         DbBytes(bytes.to_vec())

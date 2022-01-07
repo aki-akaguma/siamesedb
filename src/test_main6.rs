@@ -1,5 +1,6 @@
 use siamesedb::filedb::{FileBufSizeParam, FileDbMapDbBytes, FileDbParams};
-use siamesedb::{DbBytes, DbXxx};
+use siamesedb::DbBytes;
+use siamesedb::{DbXxx, DbXxxBase};
 use std::str::FromStr;
 
 const LOOP_MAX: i64 = 2_000_000;

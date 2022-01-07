@@ -3,6 +3,8 @@ TBD: siamesedb
 Unreleased changes. Release notes have not yet been written.
 
 * changes many many codes for performance.
+* separates `DbXxx` to `DbXxx`, `DbXxxObjectSafe` and `DbXxxBase`.
+* renames `DbXxxKeyType` to `DbMapKeyType`.
 * adds `DbInt` and `DbString` to key types.
 * removes `key_cache` and `record_cache` from features.
 * removes `kc-lfu` and `kc-lru` from features.

@@ -1,4 +1,4 @@
-use super::super::super::DbXxxKeyType;
+use super::super::super::DbMapKeyType;
 use super::super::{FileBufSizeParam, FileDbParams};
 use super::semtype::*;
 use super::vfile::VarFile;
@@ -20,12 +20,12 @@ const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b
 use std::marker::PhantomData;
 
 #[derive(Debug)]
-struct VarFileValueCache<KT: DbXxxKeyType>(VarFile, PhantomData<KT>);
+struct VarFileValueCache<KT: DbMapKeyType>(VarFile, PhantomData<KT>);
 
 #[derive(Debug, Clone)]
-pub struct ValueFile<KT: DbXxxKeyType>(Rc<RefCell<VarFileValueCache<KT>>>);
+pub struct ValueFile<KT: DbMapKeyType>(Rc<RefCell<VarFileValueCache<KT>>>);
 
-impl<KT: DbXxxKeyType> ValueFile<KT> {
+impl<KT: DbMapKeyType> ValueFile<KT> {
     pub fn open_with_params<P: AsRef<Path>>(
         path: P,
         ks_name: &str,
@@ -143,7 +143,7 @@ impl<KT: DbXxxKeyType> ValueFile<KT> {
 }
 
 // for debug
-impl<KT: DbXxxKeyType> ValueFile<KT> {
+impl<KT: DbMapKeyType> ValueFile<KT> {
     pub fn count_of_free_value_record(&self) -> Result<Vec<(u32, u64)>> {
         let sz_ary = REC_SIZE_ARY;
         //
@@ -289,7 +289,7 @@ impl ValueRecordSize {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct ValueRecord<KT: DbXxxKeyType> {
+pub struct ValueRecord<KT: DbMapKeyType> {
     /// offset of IdxNode in dat file.
     pub offset: ValueRecordOffset,
     /// size in bytes of ValueRecord in dat file.
@@ -299,7 +299,7 @@ pub struct ValueRecord<KT: DbXxxKeyType> {
     _phantom: std::marker::PhantomData<KT>,
 }
 
-impl<KT: DbXxxKeyType> ValueRecord<KT> {
+impl<KT: DbMapKeyType> ValueRecord<KT> {
     #[inline]
     pub fn with(offset: ValueRecordOffset, size: ValueRecordSize, value: Vec<u8>) -> Self {
         Self {
@@ -354,7 +354,7 @@ impl<KT: DbXxxKeyType> ValueRecord<KT> {
     }
 }
 
-impl<KT: DbXxxKeyType> VarFileValueCache<KT> {
+impl<KT: DbMapKeyType> VarFileValueCache<KT> {
     fn delete_record(&mut self, offset: ValueRecordOffset) -> Result<ValueRecordSize> {
         let old_record_size = {
             self.0.seek_from_start(offset)?;

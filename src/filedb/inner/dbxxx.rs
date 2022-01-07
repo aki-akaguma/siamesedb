@@ -1,4 +1,4 @@
-use super::super::super::{DbXxx, DbXxxKeyType};
+use super::super::super::{DbMapKeyType, DbXxxBase, DbXxxObjectSafe};
 use super::super::{
     CheckFileDbMap, CountOfPerSize, FileDbParams, KeysCountStats, LengthStats, RecordSizeStats,
 };
@@ -17,7 +17,7 @@ use std::rc::Rc;
 use super::htx;
 
 #[derive(Debug)]
-pub struct FileDbXxxInner<KT: DbXxxKeyType> {
+pub struct FileDbXxxInner<KT: DbMapKeyType> {
     dirty: bool,
     //
     key_file: key::KeyFile<KT>,
@@ -29,7 +29,7 @@ pub struct FileDbXxxInner<KT: DbXxxKeyType> {
     _phantom: std::marker::PhantomData<KT>,
 }
 
-impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     pub(crate) fn open_with_params<P: AsRef<Path>>(
         path: P,
         ks_name: &str,
@@ -58,7 +58,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 }
 
 // for utils
-impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     #[inline]
     pub(crate) fn load_key_data(&self, record_offset: KeyRecordOffset) -> Result<KT> {
         debug_assert!(!record_offset.is_zero());
@@ -196,7 +196,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 }
 
 // for debug
-impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT> {
+impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT> {
     #[cfg(feature = "htx")]
     fn ht_size_and_count(&self) -> Result<(u64, u64)> {
         self.htx_file.ht_size_and_count()
@@ -291,7 +291,7 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
 }
 
 // insert: NEW
-impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     fn insert_into_node_tree_kt(
         &mut self,
         mut node_: IdxNode,
@@ -443,7 +443,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 }
 
 // delete: NEW
-impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     fn delete_from_node_tree_kt(
         &mut self,
         mut node_: IdxNode,
@@ -669,7 +669,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 }
 
 // find: NEW
-impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
+impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     fn find_in_node_tree_kt(
         &mut self,
         node_offset: NodeOffset,
@@ -692,8 +692,60 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     }
 }
 
-// impl trait: DbXxx<KT>
-impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
+// impl trait: DbXxxBase
+impl<KT: DbMapKeyType> DbXxxBase for FileDbXxxInner<KT> {
+    #[inline]
+    fn read_fill_buffer(&mut self) -> Result<()> {
+        self.val_file.read_fill_buffer()?;
+        self.key_file.read_fill_buffer()?;
+        self.idx_file.read_fill_buffer()?;
+        #[cfg(feature = "htx")]
+        self.htx_file.read_fill_buffer()?;
+        Ok(())
+    }
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        if self.is_dirty() {
+            // save all data
+            self.val_file.flush()?;
+            self.key_file.flush()?;
+            self.idx_file.flush()?;
+            #[cfg(feature = "htx")]
+            self.htx_file.flush()?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+    #[inline]
+    fn sync_all(&mut self) -> Result<()> {
+        if self.is_dirty() {
+            // save all data and meta
+            self.val_file.sync_all()?;
+            self.key_file.sync_all()?;
+            self.idx_file.sync_all()?;
+            #[cfg(feature = "htx")]
+            self.htx_file.sync_all()?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+    #[inline]
+    fn sync_data(&mut self) -> Result<()> {
+        if self.is_dirty() {
+            // save all data
+            self.val_file.sync_data()?;
+            self.key_file.sync_data()?;
+            self.idx_file.sync_data()?;
+            #[cfg(feature = "htx")]
+            self.htx_file.sync_data()?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+}
+
+// impl trait: DbXxxObjectSafe<KT>
+impl<KT: DbMapKeyType> DbXxxObjectSafe<KT> for FileDbXxxInner<KT> {
     #[inline]
     fn get_kt(&mut self, key_kt: &KT) -> Result<Option<Vec<u8>>> {
         #[cfg(feature = "htx")]
@@ -777,66 +829,18 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
         }
         Ok(opt_val)
     }
-    #[inline]
-    fn read_fill_buffer(&mut self) -> Result<()> {
-        self.val_file.read_fill_buffer()?;
-        self.key_file.read_fill_buffer()?;
-        self.idx_file.read_fill_buffer()?;
-        #[cfg(feature = "htx")]
-        self.htx_file.read_fill_buffer()?;
-        Ok(())
-    }
-    #[inline]
-    fn flush(&mut self) -> Result<()> {
-        if self.is_dirty() {
-            // save all data
-            self.val_file.flush()?;
-            self.key_file.flush()?;
-            self.idx_file.flush()?;
-            #[cfg(feature = "htx")]
-            self.htx_file.flush()?;
-            self.dirty = false;
-        }
-        Ok(())
-    }
-    #[inline]
-    fn sync_all(&mut self) -> Result<()> {
-        if self.is_dirty() {
-            // save all data and meta
-            self.val_file.sync_all()?;
-            self.key_file.sync_all()?;
-            self.idx_file.sync_all()?;
-            #[cfg(feature = "htx")]
-            self.htx_file.sync_all()?;
-            self.dirty = false;
-        }
-        Ok(())
-    }
-    #[inline]
-    fn sync_data(&mut self) -> Result<()> {
-        if self.is_dirty() {
-            // save all data
-            self.val_file.sync_data()?;
-            self.key_file.sync_data()?;
-            self.idx_file.sync_data()?;
-            #[cfg(feature = "htx")]
-            self.htx_file.sync_data()?;
-            self.dirty = false;
-        }
-        Ok(())
-    }
 }
 
 // for Iterator
 //
 #[derive(Debug)]
-pub struct DbXxxIterMut<KT: DbXxxKeyType> {
+pub struct DbXxxIterMut<KT: DbMapKeyType> {
     db_map: Rc<RefCell<FileDbXxxInner<KT>>>,
     /// node depth of top node to leaf node.
     depth_nodes: Vec<(IdxNode, i32, i32)>,
 }
 
-impl<KT: DbXxxKeyType> DbXxxIterMut<KT> {
+impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
     pub fn new(db_map: Rc<RefCell<FileDbXxxInner<KT>>>) -> Result<Self> {
         let depth_nodes = {
             let db_map_inner = RefCell::borrow(&db_map);
@@ -946,7 +950,7 @@ impl<KT: DbXxxKeyType> DbXxxIterMut<KT> {
 }
 
 // impl trait: Iterator
-impl<KT: DbXxxKeyType> Iterator for DbXxxIterMut<KT> {
+impl<KT: DbMapKeyType> Iterator for DbXxxIterMut<KT> {
     type Item = (KT, Vec<u8>);
     fn next(&mut self) -> Option<(KT, Vec<u8>)> {
         if let Some(key_offset) = self.next_record_offset() {
@@ -962,11 +966,11 @@ impl<KT: DbXxxKeyType> Iterator for DbXxxIterMut<KT> {
 
 //
 #[derive(Debug)]
-pub struct DbXxxIter<KT: DbXxxKeyType> {
+pub struct DbXxxIter<KT: DbMapKeyType> {
     iter: DbXxxIterMut<KT>,
 }
 
-impl<KT: DbXxxKeyType> DbXxxIter<KT> {
+impl<KT: DbMapKeyType> DbXxxIter<KT> {
     #[inline]
     pub fn new(db_map: Rc<RefCell<FileDbXxxInner<KT>>>) -> Result<Self> {
         Ok(Self {
@@ -976,7 +980,7 @@ impl<KT: DbXxxKeyType> DbXxxIter<KT> {
 }
 
 // impl trait: Iterator
-impl<KT: DbXxxKeyType> Iterator for DbXxxIter<KT> {
+impl<KT: DbMapKeyType> Iterator for DbXxxIter<KT> {
     type Item = (KT, Vec<u8>);
     #[inline]
     fn next(&mut self) -> Option<(KT, Vec<u8>)> {
@@ -986,11 +990,11 @@ impl<KT: DbXxxKeyType> Iterator for DbXxxIter<KT> {
 
 //
 #[derive(Debug)]
-pub struct DbXxxIntoIter<KT: DbXxxKeyType> {
+pub struct DbXxxIntoIter<KT: DbMapKeyType> {
     iter: DbXxxIterMut<KT>,
 }
 
-impl<KT: DbXxxKeyType> DbXxxIntoIter<KT> {
+impl<KT: DbMapKeyType> DbXxxIntoIter<KT> {
     #[inline]
     pub fn new(db_map: Rc<RefCell<FileDbXxxInner<KT>>>) -> Result<Self> {
         Ok(Self {
@@ -1000,7 +1004,7 @@ impl<KT: DbXxxKeyType> DbXxxIntoIter<KT> {
 }
 
 // impl trait: Iterator
-impl<KT: DbXxxKeyType> Iterator for DbXxxIntoIter<KT> {
+impl<KT: DbMapKeyType> Iterator for DbXxxIntoIter<KT> {
     type Item = (KT, Vec<u8>);
     #[inline]
     fn next(&mut self) -> Option<(KT, Vec<u8>)> {

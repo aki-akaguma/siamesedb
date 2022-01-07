@@ -1,6 +1,6 @@
 use siamesedb::filedb::CheckFileDbMap;
-use siamesedb::filedb::FileDbMapString;
-use siamesedb::DbXxx;
+use siamesedb::filedb::FileDbMapDbString;
+use siamesedb::{DbXxx, DbXxxBase};
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -62,7 +62,7 @@ struct CheckC {
     f_graph: bool,
 }
 
-fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
+fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }

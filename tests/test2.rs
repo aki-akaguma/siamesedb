@@ -1,11 +1,11 @@
 mod test2 {
     use siamesedb::filedb::CheckFileDbMap;
-    use siamesedb::filedb::FileDbMapString;
-    use siamesedb::DbXxx;
+    use siamesedb::filedb::FileDbMapDbString;
+    use siamesedb::{DbXxx, DbXxxBase};
     ////
     fn do_file_map_string<F>(db_name: &str, mut fun: F)
     where
-        F: FnMut(FileDbMapString),
+        F: FnMut(FileDbMapDbString),
     {
         let db = siamesedb::open_file(db_name).unwrap();
         let db_map = db.db_map_string("some_map1").unwrap();
@@ -37,7 +37,7 @@ mod test2 {
         let db_name = "target/tmp/test21.siamesedb";
         let _ = std::fs::remove_dir_all(db_name);
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             for (k, v) in &data {
                 db_map.put(k.into(), v.as_bytes()).unwrap();
             }
@@ -53,7 +53,7 @@ mod test2 {
         let db_name = "target/tmp/test22.siamesedb";
         let _ = std::fs::remove_dir_all(db_name);
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             for (k, v) in data {
                 db_map.put(k.into(), v.as_bytes()).unwrap();
             }
@@ -61,13 +61,13 @@ mod test2 {
             db_map.flush().unwrap();
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             for (k, v) in data {
                 db_map.put(k.into(), v.as_bytes()).unwrap();
             }
@@ -75,13 +75,13 @@ mod test2 {
             db_map.flush().unwrap();
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             db_map
                 .put_string("9909909900".into(), "TEST, v9909909900")
                 .unwrap();
@@ -94,13 +94,13 @@ mod test2 {
             db_map.flush().unwrap();
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             assert_eq!(
                 db_map.get_string("9909909900").unwrap(),
                 Some("TEST, v9909909900".to_string())
@@ -115,38 +115,38 @@ mod test2 {
             );
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             db_map.delete("9909909900").unwrap();
             db_map.delete("9909909901").unwrap();
             db_map.delete("9909909902").unwrap();
             db_map.flush().unwrap();
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             assert_eq!(db_map.get_string("9909909900").unwrap(), None);
             assert_eq!(db_map.get_string("9909909901").unwrap(), None);
             assert_eq!(db_map.get_string("9909909902").unwrap(), None);
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             db_map
                 .put_string("9909909900".into(), "TEST, v9909909900")
                 .unwrap();
@@ -159,13 +159,13 @@ mod test2 {
             db_map.flush().unwrap();
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());
         });
         //
-        do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+        do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             assert_eq!(
                 db_map.get_string("9909909900").unwrap(),
                 Some("TEST, v9909909900".to_string())
@@ -180,7 +180,7 @@ mod test2 {
             );
         });
         //
-        do_file_map_string(db_name, |db_map: FileDbMapString| {
+        do_file_map_string(db_name, |db_map: FileDbMapDbString| {
             assert!(db_map.is_balanced().unwrap());
             assert!(db_map.is_mst_valid().unwrap());
             assert!(db_map.is_dense().unwrap());

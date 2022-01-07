@@ -1,4 +1,4 @@
-use super::super::super::DbXxxKeyType;
+use super::super::super::DbMapKeyType;
 use super::super::{FileBufSizeParam, FileDbParams};
 use super::semtype::*;
 use super::vfile::VarFile;
@@ -20,12 +20,12 @@ const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b
 use std::marker::PhantomData;
 
 #[derive(Debug)]
-pub struct VarFileKeyCache<KT: DbXxxKeyType>(pub VarFile, PhantomData<KT>);
+pub struct VarFileKeyCache<KT: DbMapKeyType>(pub VarFile, PhantomData<KT>);
 
 #[derive(Debug, Clone)]
-pub struct KeyFile<KT: DbXxxKeyType>(pub Rc<RefCell<VarFileKeyCache<KT>>>);
+pub struct KeyFile<KT: DbMapKeyType>(pub Rc<RefCell<VarFileKeyCache<KT>>>);
 
-impl<KT: DbXxxKeyType> KeyFile<KT> {
+impl<KT: DbMapKeyType> KeyFile<KT> {
     pub fn open_with_params<P: AsRef<Path>>(
         path: P,
         ks_name: &str,
@@ -152,7 +152,7 @@ impl<KT: DbXxxKeyType> KeyFile<KT> {
 }
 
 // for debug
-impl<KT: DbXxxKeyType> KeyFile<KT> {
+impl<KT: DbMapKeyType> KeyFile<KT> {
     pub fn count_of_free_key_record(&self) -> Result<Vec<(u32, u64)>> {
         let sz_ary = REC_SIZE_ARY;
         //
@@ -294,7 +294,7 @@ impl KeyRecordSize {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct KeyRecord<KT: DbXxxKeyType> {
+pub struct KeyRecord<KT: DbMapKeyType> {
     /// offset of IdxNode in dat file.
     pub offset: KeyRecordOffset,
     /// size in bytes of KeyRecord in dat file.
@@ -305,7 +305,7 @@ pub struct KeyRecord<KT: DbXxxKeyType> {
     pub value_offset: ValueRecordOffset,
 }
 
-impl<KT: DbXxxKeyType> KeyRecord<KT> {
+impl<KT: DbMapKeyType> KeyRecord<KT> {
     #[inline]
     pub fn with(
         offset: KeyRecordOffset,
@@ -383,7 +383,7 @@ impl<KT: DbXxxKeyType> KeyRecord<KT> {
     }
 }
 
-impl<KT: DbXxxKeyType> VarFileKeyCache<KT> {
+impl<KT: DbMapKeyType> VarFileKeyCache<KT> {
     fn delete_record(&mut self, offset: KeyRecordOffset) -> Result<KeyRecordSize> {
         let old_record_size = {
             self.0.seek_from_start(offset)?;

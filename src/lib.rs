@@ -5,25 +5,39 @@ The simple local key-value store.
 
 - key-value store.
 - in-memory and file store.
-- `DbMapString` has keys as utf-8 string.
-- `DbMapU64` has keys as u64.
+- `DbMapDbString` has keys as utf-8 string.
+- `DbMapDbInt` has keys as u64.
+- `DbMapDbBytes` has keys as Vec<u8>.
 - The value is any bytes included utf-8 string.
-- The file store is implemented the basic B-Tree. (no hash and no leaf)
+- The file store is implemented the basic B-Tree. (no leaf)
+- The file store is included the htx file that is hash cache table for performance.
 - Small db file size.
-- Separated files. (data record file and index file)
-- One database has some db-map-string and some db-map-u64.
+- Separated files. (key file, value file, index file and htx file)
+- One database has some db-map-string and some db-map-int and some db-map-bytes.
+- Swiss army knife with easy-to-use and good performance
 - minimum support rustc rustc 1.53.0 (53cb7b09b 2021-06-17)
 
 # Compatibility
 
 - Nothing?
 
+# Todo
+
+- [ ] more performance
+- [ ] DB lock as support for multi-process-safe
+
+# Low priority todo
+
+- [ ] transaction support that handles multiple key-space at a time.
+- [ ] thread-safe support
+- [ ] non db lock multi-process-safe support
+
 # Examples
 
-## Example DbMapString:
+## Example DbMapDbString:
 
 ```
-use siamesedb::{DbMapString, DbXxx};
+use siamesedb::{DbMapDbString, DbXxx, DbXxxBase, DbXxxObjectSafe};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test1.siamesedb";
@@ -47,7 +61,7 @@ fn main() -> std::io::Result<()> {
 ## Example DbMapDbInt:
 
 ```
-use siamesedb::{DbMapDbInt, DbXxx};
+use siamesedb::{DbMapDbInt, DbXxx, DbXxxBase, DbXxxObjectSafe};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test2.siamesedb";
@@ -69,7 +83,7 @@ fn main() -> std::io::Result<()> {
 ## Example Iterator:
 
 ```
-use siamesedb::{DbMapString, DbMap, DbXxx};
+use siamesedb::{DbMapDbString, DbMap, DbXxx, DbXxxBase, DbXxxObjectSafe};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test3.siamesedb";
@@ -117,8 +131,8 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<filedb::FileDb> {
     filedb::FileDb::open(path)
 }
 
-/// generic key-value map store interface. the key type is `KT`.
-pub trait DbXxx<KT: DbXxxKeyType> {
+/// base interface for generic key-value map store interface. this is not include `KT`
+pub trait DbXxxBase {
     /// read and fill buffer.
     fn read_fill_buffer(&mut self) -> Result<()>;
 
@@ -130,7 +144,10 @@ pub trait DbXxx<KT: DbXxxKeyType> {
 
     /// synchronize data to storage, except file metadabe.
     fn sync_data(&mut self) -> Result<()>;
+}
 
+/// generic key-value map store interface. the key type is `KT`. this is only object safe.
+pub trait DbXxxObjectSafe<KT: DbMapKeyType>: DbXxxBase {
     /// returns the value corresponding to the key. this key is store raw data and type `&[u8]`.
     fn get_kt(&mut self, key: &KT) -> Result<Option<Vec<u8>>>;
 
@@ -139,8 +156,11 @@ pub trait DbXxx<KT: DbXxxKeyType> {
 
     /// removes a key from the db. this key is store raw data and type `&[u8]`.
     fn del_kt(&mut self, key: &KT) -> Result<Option<Vec<u8>>>;
+}
 
-    // returns the value corresponding to the key.
+/// generic key-value map store interface. the key type is `KT`.
+pub trait DbXxx<KT: DbMapKeyType>: DbXxxObjectSafe<KT> {
+    /// returns the value corresponding to the key.
     #[inline]
     fn get<'a, Q>(&mut self, key: &'a Q) -> Result<Option<Vec<u8>>>
     where
@@ -298,13 +318,13 @@ pub trait DbXxx<KT: DbXxxKeyType> {
 }
 
 /// key-value db map store interface.
-pub trait DbMap<KT: DbXxxKeyType>: DbXxx<KT> {
+pub trait DbMap<KT: DbMapKeyType>: DbXxx<KT> {
     fn iter(&self) -> DbXxxIter<KT>;
     fn iter_mut(&mut self) -> DbXxxIterMut<KT>;
 }
 
 /// key-value map store interface. the key type is `String`.
-pub trait DbMapString: DbXxx<DbString> {}
+pub trait DbMapDbString: DbXxx<DbString> {}
 
 /// key-value map store interface. the key type is `u64`.
 pub trait DbMapDbInt: DbXxx<DbInt> {}
@@ -313,7 +333,7 @@ pub trait DbMapDbInt: DbXxx<DbInt> {}
 pub trait DbMapDbBytes: DbXxx<DbBytes> {}
 
 /// key type
-pub trait DbXxxKeyType: Ord + Clone + Default + HashValue {
+pub trait DbMapKeyType: Ord + Clone + Default + HashValue {
     /// Convert a byte slice to Key.
     fn from_bytes(bytes: &[u8]) -> Self;
     /// Signature in header of database file.
@@ -326,7 +346,7 @@ pub trait DbXxxKeyType: Ord + Clone + Default + HashValue {
 
 /// hash value for htx
 pub trait HashValue: Hash {
-    /// 
+    /// hash value for htx
     fn hash_value(&self) -> u64 {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::new();

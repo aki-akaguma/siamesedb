@@ -6,7 +6,9 @@ use std::rc::Rc;
 mod dbmap;
 mod inner;
 
-pub use dbmap::{DbBytes, DbInt, DbString, FileDbMapDbBytes, FileDbMapDbInt, FileDbMapString};
+pub use dbmap::{
+    DbBytes, DbInt, DbString, FileDbMap, FileDbMapDbBytes, FileDbMapDbInt, FileDbMapDbString,
+};
 pub use inner::dbxxx::{DbXxxIntoIter, DbXxxIter, DbXxxIterMut, FileDbXxxInner};
 use inner::semtype::*;
 use inner::FileDbInner;
@@ -215,19 +217,19 @@ impl FileDb {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         Ok(Self(Rc::new(RefCell::new(FileDbInner::open(path)?))))
     }
-    pub fn db_map_string(&self, name: &str) -> Result<FileDbMapString> {
+    pub fn db_map_string(&self, name: &str) -> Result<FileDbMapDbString> {
         self.db_map_string_with_params(name, FileDbParams::default())
     }
     pub fn db_map_string_with_params(
         &self,
         name: &str,
         params: FileDbParams,
-    ) -> Result<FileDbMapString> {
-        if let Some(m) = RefCell::borrow(&self.0).db_map(name) {
+    ) -> Result<FileDbMapDbString> {
+        if let Some(m) = RefCell::borrow(&self.0).db_map_string(name) {
             return Ok(m);
         }
         RefCell::borrow_mut(&self.0).create_db_map(name, params)?;
-        match RefCell::borrow(&self.0).db_map(name) {
+        match RefCell::borrow(&self.0).db_map_string(name) {
             Some(m) => Ok(m),
             None => panic!("Cannot create db_maps: {}", name),
         }
@@ -257,11 +259,11 @@ impl FileDb {
         name: &str,
         params: FileDbParams,
     ) -> Result<FileDbMapDbInt> {
-        if let Some(m) = RefCell::borrow(&self.0).db_map_dbint(name) {
+        if let Some(m) = RefCell::borrow(&self.0).db_map_int(name) {
             return Ok(m);
         }
         RefCell::borrow_mut(&self.0).create_db_map_dbint(name, params)?;
-        match RefCell::borrow(&self.0).db_map_dbint(name) {
+        match RefCell::borrow(&self.0).db_map_int(name) {
             Some(m) => Ok(m),
             None => panic!("Cannot create db_maps: {}", name),
         }
@@ -281,7 +283,7 @@ impl FileDb {
 #[cfg(test)]
 mod debug {
     use super::FileDbInner;
-    use super::{FileDb, FileDbMapDbInt, FileDbMapString};
+    use super::{FileDb, FileDbMapDbInt, FileDbMapDbString};
     use super::{KeyRecordSizeStats, ValueRecordSizeStats};
     //
     #[test]
@@ -289,7 +291,7 @@ mod debug {
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 8);
-            assert_eq!(std::mem::size_of::<FileDbMapString>(), 8);
+            assert_eq!(std::mem::size_of::<FileDbMapDbString>(), 8);
             assert_eq!(std::mem::size_of::<FileDbMapDbInt>(), 8);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 96);
@@ -301,7 +303,7 @@ mod debug {
         #[cfg(target_pointer_width = "32")]
         {
             assert_eq!(std::mem::size_of::<FileDb>(), 4);
-            assert_eq!(std::mem::size_of::<FileDbMapString>(), 4);
+            assert_eq!(std::mem::size_of::<FileDbMapDbString>(), 4);
             assert_eq!(std::mem::size_of::<FileDbMapDbInt>(), 4);
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 48);

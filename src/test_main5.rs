@@ -1,5 +1,6 @@
-use siamesedb::filedb::{FileBufSizeParam, FileDbMapString, FileDbParams};
-use siamesedb::{DbString, DbXxx, DbXxxKeyType};
+use siamesedb::filedb::{FileBufSizeParam, FileDbMapDbString, FileDbParams};
+use siamesedb::{DbMapKeyType, DbString};
+use siamesedb::{DbXxx, DbXxxBase};
 use std::str::FromStr;
 
 const LOOP_MAX: i64 = 2_000_000;
@@ -21,7 +22,7 @@ fn main() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn open_db_map(db_name: &str) -> Result<FileDbMapString, std::io::Error> {
+fn open_db_map(db_name: &str) -> Result<FileDbMapDbString, std::io::Error> {
     let db = siamesedb::open_file(db_name).unwrap();
     db.db_map_string_with_params(
         "some_map1",
@@ -102,7 +103,7 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
 
 #[cfg(feature = "htx")]
 fn _test_write_one(
-    db_map: &mut FileDbMapString,
+    db_map: &mut FileDbMapDbString,
     key_vec: &[(DbString, String)],
 ) -> Result<(), std::io::Error> {
     let keys: Vec<(DbString, &[u8])> = key_vec
@@ -153,7 +154,7 @@ fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
 }
 
 fn _test_read_one(
-    db_map: &mut FileDbMapString,
+    db_map: &mut FileDbMapDbString,
     key_vec: &[DbString],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
@@ -214,7 +215,7 @@ fn _test_delete(db_name: &str) -> Result<(), std::io::Error> {
 }
 
 fn _test_delete_one(
-    db_map: &mut FileDbMapString,
+    db_map: &mut FileDbMapDbString,
     key_vec: &[DbString],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {

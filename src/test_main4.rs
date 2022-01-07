@@ -1,6 +1,6 @@
 use siamesedb::filedb::CheckFileDbMap;
-use siamesedb::filedb::FileDbMapString;
-use siamesedb::DbXxx;
+use siamesedb::filedb::FileDbMapDbString;
+use siamesedb::{DbXxx, DbXxxBase};
 
 fn main() {
     test_fixtures_fruits();
@@ -8,7 +8,7 @@ fn main() {
 
 fn do_file_map_string<F>(db_name: &str, mut fun: F)
 where
-    F: FnMut(FileDbMapString),
+    F: FnMut(FileDbMapDbString),
 {
     let db = siamesedb::open_file(db_name).unwrap();
     let db_map = db.db_map_string("some_map1").unwrap();
@@ -49,7 +49,7 @@ fn test_fixtures_fruits() {
     let data = load_fixtures(concat!(base_path!(0), "fixtures/test-fruits.txt"));
     let data = &data[..5000];
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         for (k, v) in data {
             db_map.put(k.into(), v.as_bytes()).unwrap();
         }
@@ -57,13 +57,13 @@ fn test_fixtures_fruits() {
         db_map.sync_data().unwrap();
     });
     //
-    do_file_map_string(db_name, |db_map: FileDbMapString| {
+    do_file_map_string(db_name, |db_map: FileDbMapDbString| {
         assert!(db_map.is_balanced().unwrap());
         assert!(db_map.is_mst_valid().unwrap());
         assert!(db_map.is_dense().unwrap());
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         for (k, v) in data {
             db_map.put(k.into(), v.as_bytes()).unwrap();
         }
@@ -71,13 +71,13 @@ fn test_fixtures_fruits() {
         db_map.sync_data().unwrap();
     });
     //
-    do_file_map_string(db_name, |db_map: FileDbMapString| {
+    do_file_map_string(db_name, |db_map: FileDbMapDbString| {
         assert!(db_map.is_balanced().unwrap());
         assert!(db_map.is_mst_valid().unwrap());
         assert!(db_map.is_dense().unwrap());
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         db_map
             .put_string("9909909900".into(), "TEST, v9909909900")
             .unwrap();
@@ -90,13 +90,13 @@ fn test_fixtures_fruits() {
         db_map.sync_data().unwrap();
     });
     //
-    do_file_map_string(db_name, |db_map: FileDbMapString| {
+    do_file_map_string(db_name, |db_map: FileDbMapDbString| {
         assert!(db_map.is_balanced().unwrap());
         assert!(db_map.is_mst_valid().unwrap());
         assert!(db_map.is_dense().unwrap());
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         assert_eq!(
             db_map.get_string("9909909900").unwrap(),
             Some("TEST, v9909909900".to_string())
@@ -111,26 +111,26 @@ fn test_fixtures_fruits() {
         );
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         db_map.delete("9909909900").unwrap();
         db_map.delete("9909909901").unwrap();
         db_map.delete("9909909902").unwrap();
         db_map.sync_data().unwrap();
     });
     /*
-    do_file_map_string(db_name, |db_map: FileDbMapString| {
+    do_file_map_string(db_name, |db_map: FileDbMapDbString| {
         println!("{}", db_map.to_graph_string_with_key_string().unwrap());
     });
     return;
     */
     //
-    do_file_map_string(db_name, |db_map: FileDbMapString| {
+    do_file_map_string(db_name, |db_map: FileDbMapDbString| {
         assert!(db_map.is_balanced().unwrap());
         assert!(db_map.is_mst_valid().unwrap());
         assert!(db_map.is_dense().unwrap());
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         assert_eq!(db_map.get_string("9909909900").unwrap(), None);
         assert_eq!(db_map.get_string("9909909901").unwrap(), None);
         assert_eq!(db_map.get_string("9909909902").unwrap(), None);
@@ -145,7 +145,7 @@ fn test_fixtures_fruits() {
         );
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         db_map
             .put_string("9909909900".into(), "TEST, v9909909900")
             .unwrap();
@@ -165,13 +165,13 @@ fn test_fixtures_fruits() {
         );
     });
     //
-    do_file_map_string(db_name, |db_map: FileDbMapString| {
+    do_file_map_string(db_name, |db_map: FileDbMapDbString| {
         assert!(db_map.is_balanced().unwrap());
         assert!(db_map.is_mst_valid().unwrap());
         assert!(db_map.is_dense().unwrap());
     });
     //
-    do_file_map_string(db_name, |mut db_map: FileDbMapString| {
+    do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         assert_eq!(
             db_map.get_string("9909909900").unwrap(),
             Some("TEST, v9909909900".into())
@@ -195,7 +195,7 @@ struct CheckC {
     f_graph: bool,
 }
 
-fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
+fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }

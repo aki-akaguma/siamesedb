@@ -1,4 +1,4 @@
-use super::super::super::DbXxxKeyType;
+use super::super::super::DbMapKeyType;
 use super::super::{
     CountOfPerSize, FileBufSizeParam, FileDbParams, KeysCountStats, LengthStats, RecordSizeStats,
 };
@@ -206,7 +206,7 @@ impl IdxFile {
     }
     pub fn graph_string_with_key_string<KT>(&self, dbxxx: &FileDbXxxInner<KT>) -> Result<String>
     where
-        KT: DbXxxKeyType + std::fmt::Display,
+        KT: DbMapKeyType + std::fmt::Display,
     {
         let top_node = self.read_top_node()?;
         let mut locked = RefCell::borrow_mut(&self.0);
@@ -267,7 +267,7 @@ impl IdxFile {
     //
     pub fn is_mst_valid<KT>(&self, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
     where
-        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbMapKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         if node.get_ref().keys_is_empty() {
             return Ok(true);
@@ -337,7 +337,7 @@ impl IdxFile {
     //
     fn is_small<KT>(&self, key: &KT, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
     where
-        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbMapKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         for i in 0..node.get_ref().keys_len() {
             let node_offset = node.get_ref().downs_get(i);
@@ -374,7 +374,7 @@ impl IdxFile {
         dbxxx: &FileDbXxxInner<KT>,
     ) -> Result<bool>
     where
-        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbMapKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         for i in 0..node.get_ref().keys_len() {
             let node_offset = node.get_ref().downs_get(i);
@@ -408,7 +408,7 @@ impl IdxFile {
     }
     fn is_large<KT>(&self, key: &KT, node: &IdxNode, dbxxx: &FileDbXxxInner<KT>) -> Result<bool>
     where
-        KT: DbXxxKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
+        KT: DbMapKeyType + std::fmt::Display + std::default::Default + std::cmp::PartialOrd,
     {
         for i in 0..node.get_ref().keys_len() {
             let node_offset = node.get_ref().downs_get(i);
@@ -1266,7 +1266,7 @@ impl VarFileNodeCache {
         dbxxx: &FileDbXxxInner<KT>,
     ) -> Result<String>
     where
-        KT: DbXxxKeyType + std::fmt::Display,
+        KT: DbMapKeyType + std::fmt::Display,
     {
         let node = node_.get_ref();
         let mut gs = format!(

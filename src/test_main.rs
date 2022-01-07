@@ -1,8 +1,8 @@
 use siamesedb::filedb::CheckFileDbMap;
 use siamesedb::filedb::FileDbMapDbInt;
-use siamesedb::filedb::FileDbMapString;
+use siamesedb::filedb::FileDbMapDbString;
 use siamesedb::DbMap;
-use siamesedb::DbXxx;
+use siamesedb::{DbXxx, DbXxxBase};
 
 fn main() {
     _test_a1();
@@ -707,7 +707,7 @@ where
     }
 }
 
-fn _print_check_db_map(db_map: &FileDbMapString, check_cnf: CheckC) {
+fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
     if check_cnf.f_graph {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
@@ -783,7 +783,7 @@ fn _print_check_db_list(db_map: &FileDbMapDbInt, check_cnf: CheckC) {
     );
 }
 
-fn _print_depth_db_map(db_map: &FileDbMapString) {
+fn _print_depth_db_map(db_map: &FileDbMapDbString) {
     println!(
         "db_map.depth_of_node_tree(): {}",
         db_map.depth_of_node_tree().unwrap()

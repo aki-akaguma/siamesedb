@@ -1,4 +1,7 @@
-use super::{DbBytes, DbInt, DbMapDbBytes, DbMapDbInt, DbMapString, DbString, DbXxx};
+use super::{
+    DbBytes, DbInt, DbMapDbBytes, DbMapDbInt, DbMapDbString, DbString, DbXxx, DbXxxBase,
+    DbXxxObjectSafe,
+};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io::Result;
@@ -11,7 +14,7 @@ pub struct MemoryDb<'a>(Rc<RefCell<MemoryDbInner<'a>>>);
 pub(crate) struct MemoryDbNode<'a>(Weak<RefCell<MemoryDbInner<'a>>>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryDbMapString<'a>(Rc<RefCell<MemoryDbMapStringInner<'a>>>);
+pub struct MemoryDbMapDbString<'a>(Rc<RefCell<MemoryDbMapDbStringInner<'a>>>);
 
 #[derive(Debug, Clone)]
 pub struct MemoryDbMapDbInt<'a>(Rc<RefCell<MemoryDbMapDbIntInner<'a>>>);
@@ -26,7 +29,7 @@ impl<'a> MemoryDb<'a> {
     fn to_node(&self) -> MemoryDbNode<'a> {
         MemoryDbNode(Rc::downgrade(&self.0))
     }
-    pub fn db_map_string(&'a self, name: &str) -> MemoryDbMapString<'a> {
+    pub fn db_map_string(&'a self, name: &str) -> MemoryDbMapDbString<'a> {
         if let Some(m) = RefCell::borrow(&self.0).db_maps.get(name) {
             return m.clone();
         }
@@ -69,7 +72,7 @@ impl<'a> MemoryDb<'a> {
 
 impl<'a> MemoryDbNode<'a> {
     fn create_db_map(&self, name: &str) {
-        let child: MemoryDbMapString<'a> = MemoryDbMapString::new();
+        let child: MemoryDbMapDbString<'a> = MemoryDbMapDbString::new();
         let rc = self.0.upgrade().expect("MemoryDbNode is already disposed");
         {
             let mut child_locked = child.0.borrow_mut();
@@ -116,22 +119,13 @@ impl<'a> MemoryDbNode<'a> {
     fn sync_data(&self) {}
 }
 
-impl<'a> MemoryDbMapString<'a> {
+impl<'a> MemoryDbMapDbString<'a> {
     fn new() -> Self {
-        Self(Rc::new(RefCell::new(MemoryDbMapStringInner::new())))
+        Self(Rc::new(RefCell::new(MemoryDbMapDbStringInner::new())))
     }
 }
 
-impl<'a> DbXxx<DbString> for MemoryDbMapString<'a> {
-    fn get_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_kt(key)
-    }
-    fn put_kt(&mut self, key: &DbString, value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_kt(key, value)
-    }
-    fn del_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_kt(key)
-    }
+impl<'a> DbXxxBase for MemoryDbMapDbString<'a> {
     fn read_fill_buffer(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).read_fill_buffer()
     }
@@ -146,7 +140,19 @@ impl<'a> DbXxx<DbString> for MemoryDbMapString<'a> {
     }
 }
 
-impl<'a> DbMapString for MemoryDbMapString<'a> {}
+impl<'a> DbXxxObjectSafe<DbString> for MemoryDbMapDbString<'a> {
+    fn get_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
+    }
+    fn put_kt(&mut self, key: &DbString, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
+    }
+    fn del_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
+    }
+}
+impl<'a> DbXxx<DbString> for MemoryDbMapDbString<'a> {}
+impl<'a> DbMapDbString for MemoryDbMapDbString<'a> {}
 
 impl<'a> MemoryDbMapDbInt<'a> {
     fn new() -> Self {
@@ -154,16 +160,7 @@ impl<'a> MemoryDbMapDbInt<'a> {
     }
 }
 
-impl<'a> DbXxx<DbInt> for MemoryDbMapDbInt<'a> {
-    fn get_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_kt(key)
-    }
-    fn put_kt(&mut self, key: &DbInt, value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_kt(key, value)
-    }
-    fn del_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_kt(key)
-    }
+impl<'a> DbXxxBase for MemoryDbMapDbInt<'a> {
     fn read_fill_buffer(&mut self) -> Result<()> {
         self.0.borrow_mut().read_fill_buffer()
     }
@@ -178,6 +175,18 @@ impl<'a> DbXxx<DbInt> for MemoryDbMapDbInt<'a> {
     }
 }
 
+impl<'a> DbXxxObjectSafe<DbInt> for MemoryDbMapDbInt<'a> {
+    fn get_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
+    }
+    fn put_kt(&mut self, key: &DbInt, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
+    }
+    fn del_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
+    }
+}
+impl<'a> DbXxx<DbInt> for MemoryDbMapDbInt<'a> {}
 impl<'a> DbMapDbInt for MemoryDbMapDbInt<'a> {}
 
 impl<'a> MemoryDbMapDbBytes<'a> {
@@ -186,16 +195,7 @@ impl<'a> MemoryDbMapDbBytes<'a> {
     }
 }
 
-impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytes<'a> {
-    fn get_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_kt(key)
-    }
-    fn put_kt(&mut self, key: &DbBytes, value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_kt(key, value)
-    }
-    fn del_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_kt(key)
-    }
+impl<'a> DbXxxBase for MemoryDbMapDbBytes<'a> {
     fn read_fill_buffer(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).read_fill_buffer()
     }
@@ -210,13 +210,25 @@ impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytes<'a> {
     }
 }
 
+impl<'a> DbXxxObjectSafe<DbBytes> for MemoryDbMapDbBytes<'a> {
+    fn get_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
+    }
+    fn put_kt(&mut self, key: &DbBytes, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
+    }
+    fn del_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
+    }
+}
+impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytes<'a> {}
 impl<'a> DbMapDbBytes for MemoryDbMapDbBytes<'a> {}
 
 //--
 
 #[derive(Debug)]
 pub(crate) struct MemoryDbInner<'a> {
-    db_maps: BTreeMap<String, MemoryDbMapString<'a>>,
+    db_maps: BTreeMap<String, MemoryDbMapDbString<'a>>,
     db_maps_dbint: BTreeMap<String, MemoryDbMapDbInt<'a>>,
     db_maps_bytes: BTreeMap<String, MemoryDbMapDbBytes<'a>>,
 }
@@ -232,12 +244,12 @@ impl<'a> MemoryDbInner<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct MemoryDbMapStringInner<'a> {
+pub(crate) struct MemoryDbMapDbStringInner<'a> {
     parent: Option<MemoryDbNode<'a>>,
     mem: BTreeMap<String, Vec<u8>>,
 }
 
-impl<'a> MemoryDbMapStringInner<'a> {
+impl<'a> MemoryDbMapDbStringInner<'a> {
     fn new() -> Self {
         Self {
             parent: None,
@@ -246,22 +258,7 @@ impl<'a> MemoryDbMapStringInner<'a> {
     }
 }
 
-impl<'a> DbXxx<DbString> for MemoryDbMapStringInner<'a> {
-    fn get_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
-        let key_s = String::from_utf8_lossy(key).to_string();
-        let r = self.mem.get(&key_s).map(|val| val.to_vec());
-        Ok(r)
-    }
-    fn put_kt(&mut self, key: &DbString, value: &[u8]) -> Result<()> {
-        let key_s = String::from_utf8_lossy(key).to_string();
-        let _ = self.mem.insert(key_s, value.to_vec());
-        Ok(())
-    }
-    fn del_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
-        let key_s = String::from_utf8_lossy(key).to_string();
-        let r = self.mem.remove(&key_s);
-        Ok(r)
-    }
+impl<'a> DbXxxBase for MemoryDbMapDbStringInner<'a> {
     fn read_fill_buffer(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.read_fill_buffer()
@@ -287,7 +284,26 @@ impl<'a> DbXxx<DbString> for MemoryDbMapStringInner<'a> {
         Ok(())
     }
 }
-impl<'a> DbMapString for MemoryDbMapStringInner<'a> {}
+
+impl<'a> DbXxxObjectSafe<DbString> for MemoryDbMapDbStringInner<'a> {
+    fn get_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
+        let key_s = String::from_utf8_lossy(key).to_string();
+        let r = self.mem.get(&key_s).map(|val| val.to_vec());
+        Ok(r)
+    }
+    fn put_kt(&mut self, key: &DbString, value: &[u8]) -> Result<()> {
+        let key_s = String::from_utf8_lossy(key).to_string();
+        let _ = self.mem.insert(key_s, value.to_vec());
+        Ok(())
+    }
+    fn del_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
+        let key_s = String::from_utf8_lossy(key).to_string();
+        let r = self.mem.remove(&key_s);
+        Ok(r)
+    }
+}
+impl<'a> DbXxx<DbString> for MemoryDbMapDbStringInner<'a> {}
+impl<'a> DbMapDbString for MemoryDbMapDbStringInner<'a> {}
 
 #[derive(Debug)]
 pub(crate) struct MemoryDbMapDbIntInner<'a> {
@@ -304,19 +320,7 @@ impl<'a> MemoryDbMapDbIntInner<'a> {
     }
 }
 
-impl<'a> DbXxx<DbInt> for MemoryDbMapDbIntInner<'a> {
-    fn get_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
-        let r = self.mem.get(key).cloned();
-        Ok(r)
-    }
-    fn put_kt(&mut self, key: &DbInt, value: &[u8]) -> Result<()> {
-        let _ = self.mem.insert(key.clone(), value.to_vec());
-        Ok(())
-    }
-    fn del_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
-        let r = self.mem.remove(key);
-        Ok(r)
-    }
+impl<'a> DbXxxBase for MemoryDbMapDbIntInner<'a> {
     fn read_fill_buffer(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.read_fill_buffer()
@@ -342,6 +346,23 @@ impl<'a> DbXxx<DbInt> for MemoryDbMapDbIntInner<'a> {
         Ok(())
     }
 }
+
+impl<'a> DbXxxObjectSafe<DbInt> for MemoryDbMapDbIntInner<'a> {
+    fn get_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(key).cloned();
+        Ok(r)
+    }
+    fn put_kt(&mut self, key: &DbInt, value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key.clone(), value.to_vec());
+        Ok(())
+    }
+    fn del_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.remove(key);
+        Ok(r)
+    }
+}
+impl<'a> DbXxx<DbInt> for MemoryDbMapDbIntInner<'a> {}
+impl<'a> DbMapDbInt for MemoryDbMapDbIntInner<'a> {}
 
 #[derive(Debug)]
 pub(crate) struct MemoryDbMapDbBytesInner<'a> {
@@ -358,19 +379,7 @@ impl<'a> MemoryDbMapDbBytesInner<'a> {
     }
 }
 
-impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytesInner<'a> {
-    fn get_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
-        let r = self.mem.get(&(key.into())).cloned();
-        Ok(r)
-    }
-    fn put_kt(&mut self, key: &DbBytes, value: &[u8]) -> Result<()> {
-        let _ = self.mem.insert(key.into(), value.to_vec());
-        Ok(())
-    }
-    fn del_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
-        let r = self.mem.remove(&(key.into()));
-        Ok(r)
-    }
+impl<'a> DbXxxBase for MemoryDbMapDbBytesInner<'a> {
     fn read_fill_buffer(&mut self) -> Result<()> {
         if let Some(p) = self.parent.as_ref() {
             p.read_fill_buffer()
@@ -396,6 +405,22 @@ impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytesInner<'a> {
         Ok(())
     }
 }
+
+impl<'a> DbXxxObjectSafe<DbBytes> for MemoryDbMapDbBytesInner<'a> {
+    fn get_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(&(key.into())).cloned();
+        Ok(r)
+    }
+    fn put_kt(&mut self, key: &DbBytes, value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key.into(), value.to_vec());
+        Ok(())
+    }
+    fn del_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.remove(&(key.into()));
+        Ok(r)
+    }
+}
+impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytesInner<'a> {}
 impl<'a> DbMapDbBytes for MemoryDbMapDbBytesInner<'a> {}
 
 //--
@@ -403,30 +428,30 @@ impl<'a> DbMapDbBytes for MemoryDbMapDbBytesInner<'a> {}
 mod debug {
     #[test]
     fn test_size_of() {
-        use super::{MemoryDb, MemoryDbMapDbInt, MemoryDbMapString};
+        use super::{MemoryDb, MemoryDbMapDbInt, MemoryDbMapDbString};
         use super::{
-            MemoryDbInner, MemoryDbMapDbBytesInner, MemoryDbMapDbIntInner, MemoryDbMapStringInner,
+            MemoryDbInner, MemoryDbMapDbBytesInner, MemoryDbMapDbIntInner, MemoryDbMapDbStringInner,
         };
         //
         #[cfg(target_pointer_width = "64")]
         {
             assert_eq!(std::mem::size_of::<MemoryDb>(), 8);
-            assert_eq!(std::mem::size_of::<MemoryDbMapString>(), 8);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbString>(), 8);
             assert_eq!(std::mem::size_of::<MemoryDbMapDbInt>(), 8);
             //
             assert_eq!(std::mem::size_of::<MemoryDbInner>(), 72);
-            assert_eq!(std::mem::size_of::<MemoryDbMapStringInner>(), 32);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbStringInner>(), 32);
             assert_eq!(std::mem::size_of::<MemoryDbMapDbIntInner>(), 32);
             assert_eq!(std::mem::size_of::<MemoryDbMapDbBytesInner>(), 32);
         }
         #[cfg(target_pointer_width = "32")]
         {
             assert_eq!(std::mem::size_of::<MemoryDb>(), 4);
-            assert_eq!(std::mem::size_of::<MemoryDbMapString>(), 4);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbString>(), 4);
             assert_eq!(std::mem::size_of::<MemoryDbMapDbInt>(), 4);
             //
             assert_eq!(std::mem::size_of::<MemoryDbInner>(), 36);
-            assert_eq!(std::mem::size_of::<MemoryDbMapStringInner>(), 16);
+            assert_eq!(std::mem::size_of::<MemoryDbMapDbStringInner>(), 16);
             assert_eq!(std::mem::size_of::<MemoryDbMapDbIntInner>(), 16);
             assert_eq!(std::mem::size_of::<MemoryDbMapDbBytesInner>(), 16);
         }
