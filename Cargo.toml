@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.14"
+version = "0.1.15"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -81,11 +81,11 @@ test_large_data = []
 small_node_slots = []
 
 [dependencies]
-#rabuf = { version = "0.1", default-features=false }
+rabuf = { version = "0.1", default-features=false }
 vu64 = "0.1"
 #rabuf = { git = "https://github.com/aki-akaguma/rabuf" }
 #vu64 = { git = "https://github.com/aki-akaguma/vu64" }
-rabuf = { path = "../rabuf", default-features=false }
+#rabuf = { path = "../rabuf", default-features=false }
 #vu64 = { path = "../vu64" }
 
 [dev-dependencies]

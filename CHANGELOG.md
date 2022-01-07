@@ -2,6 +2,9 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.15 (2022-01-07)
+=====
+
 * changes many many codes for performance.
 * separates `DbXxx` to `DbXxx`, `DbXxxObjectSafe` and `DbXxxBase`.
 * renames `DbXxxKeyType` to `DbMapKeyType`.

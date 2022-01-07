@@ -6,25 +6,39 @@ The simple local key-value store.
 
 - key-value store.
 - in-memory and file store.
-- `DbMapString` has keys as utf-8 string.
-- `DbMapU64` has keys as u64.
+- `DbMapDbString` has keys as utf-8 string.
+- `DbMapDbInt` has keys as u64.
+- `DbMapDbBytes` has keys as Vec<u8>.
 - The value is any bytes included utf-8 string.
-- The file store is implemented the basic B-Tree. (no hash and no leaf)
+- The file store is implemented the basic B-Tree. (no leaf)
+- The file store is included the htx file that is hash cache table for performance.
 - Small db file size.
-- Separated files. (data record file and index file)
-- One database has some db-map-string and some db-map-u64.
+- Separated files. (key file, value file, index file and htx file)
+- One database has some db-map-string and some db-map-int and some db-map-bytes.
+- Swiss army knife with easy-to-use and good performance
 - minimum support rustc rustc 1.53.0 (53cb7b09b 2021-06-17)
 
 ## Compatibility
 
 - Nothing?
 
+## Todo
+
+- [ ] more performance
+- [ ] DB lock as support for multi-process-safe
+
+## Low priority todo
+
+- [ ] transaction support that handles multiple key-space at a time.
+- [ ] thread-safe support
+- [ ] non db lock multi-process-safe support
+
 ## Examples
 
-### Example DbMapString:
+### Example DbMapDbString:
 
 ```rust
-use siamesedb::{DbMapString, DbXxx};
+use siamesedb::{DbMapDbString, DbXxx, DbXxxBase, DbXxxObjectSafe};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test1.siamesedb";
@@ -37,18 +51,18 @@ fn main() -> std::io::Result<()> {
     //
     let r = db_map.get_string("key1")?;
     assert_eq!(r, None);
-    db_map.put_string("key1".to_string(), "value1")?;
+    db_map.put_string("key1".into(), "value1")?;
     let r = db_map.get_string("key1")?;
-    assert_eq!(r, Some("value1".to_string()));
+    assert_eq!(r, Some("value1".into()));
     db_map.sync_data()?;
     Ok(())
 }
 ```
 
-### Example DbMapU64:
+### Example DbMapDbInt:
 
 ```rust
-use siamesedb::{DbMapU64, DbXxx};
+use siamesedb::{DbMapDbInt, DbXxx, DbXxxBase, DbXxxObjectSafe};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test2.siamesedb";
@@ -56,10 +70,10 @@ fn main() -> std::io::Result<()> {
     let _ = std::fs::remove_dir_all(db_name);
     // create or open database
     let db = siamesedb::open_file(db_name)?;
-    let mut db_map = db.db_map_u64("some_list1")?;
+    let mut db_map = db.db_map_int("some_list1")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, None);
-    db_map.put_string(120, "value120")?;
+    db_map.put_string(120.into(), "value120")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, Some("value120".to_string()));
     db_map.sync_data()?;
@@ -70,7 +84,7 @@ fn main() -> std::io::Result<()> {
 ### Example Iterator:
 
 ```rust
-use siamesedb::{DbMapString, DbMap, DbXxx};
+use siamesedb::{DbMapDbString, DbMap, DbXxx, DbXxxBase, DbXxxObjectSafe};
 
 fn main() -> std::io::Result<()> {
     let db_name = "target/tmp/doc-test3.siamesedb";
