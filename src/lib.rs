@@ -99,7 +99,6 @@ fn main() -> std::io::Result<()> {
 */
 use std::hash::Hash;
 use std::io::Result;
-use std::ops::Deref;
 use std::path::Path;
 
 pub mod filedb;
@@ -133,127 +132,30 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     fn sync_data(&mut self) -> Result<()>;
 
     /// returns the value corresponding to the key. this key is store raw data and type `&[u8]`.
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+    fn get_kt(&mut self, key: &KT) -> Result<Option<Vec<u8>>>;
 
     /// inserts a key-value pair into the db. this key is store raw data and type `&[u8]`.
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()>;
+    fn put_kt(&mut self, key: &KT, value: &[u8]) -> Result<()>;
 
     /// removes a key from the db. this key is store raw data and type `&[u8]`.
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
-
-    //
-    #[inline]
-    fn get_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
-        self.get_k8(key)
-            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
-    }
-    //
-    fn bulk_get_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
-        /*
-        let mut vec = Vec::with_capacity(bulk_keys.len());
-        for a in bulk_keys {
-            let value = self.get_k8(a)?;
-            vec.push(value);
-        }
-        Ok(vec)
-        */
-        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
-        let mut vec: Vec<(usize, &[u8])> =
-            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
-        vec.sort_by(|a, b| b.1.cmp(a.1));
-        while let Some(ik) = vec.pop() {
-            let result_value = self.get_k8(ik.1)?;
-            result.push((ik.0, result_value));
-        }
-        result.sort_by(|a, b| a.0.cmp(&(b.0)));
-        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
-        Ok(ret)
-    }
-    //
-    #[inline]
-    fn bulk_get_string_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<String>>> {
-        let vec = self.bulk_get_k8(bulk_keys)?;
-        let mut ret = Vec::new();
-        for opt in vec {
-            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
-            ret.push(b);
-        }
-        Ok(ret)
-    }
-    //
-    #[inline]
-    fn put_string_k8(&mut self, key: &[u8], value: &str) -> Result<()> {
-        self.put_k8(key, value.as_bytes())
-    }
-    //
-    #[inline]
-    fn bulk_put_k8(&mut self, bulk: &[(&[u8], &[u8])]) -> Result<()> {
-        let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(a.0));
-        while let Some(kv) = vec.pop() {
-            self.put_k8(kv.0, kv.1)?;
-        }
-        Ok(())
-    }
-    //
-    #[inline]
-    fn bulk_put_string_k8(&mut self, bulk: &[(&[u8], String)]) -> Result<()> {
-        let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(a.0));
-        while let Some(kv) = vec.pop() {
-            self.put_k8(kv.0, kv.1.as_bytes())?;
-        }
-        Ok(())
-    }
-    //
-    #[inline]
-    fn del_string_k8(&mut self, key: &[u8]) -> Result<Option<String>> {
-        self.del_k8(key)
-            .map(|opt| opt.map(|val| String::from_utf8_lossy(&val).to_string()))
-    }
-    //
-    #[inline]
-    fn bulk_del_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
-        let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
-        let mut vec: Vec<(usize, &[u8])> =
-            bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
-        vec.sort_by(|a, b| b.1.cmp(a.1));
-        while let Some(ik) = vec.pop() {
-            let result_value = self.del_k8(ik.1)?;
-            result.push((ik.0, result_value));
-        }
-        result.sort_by(|a, b| a.0.cmp(&(b.0)));
-        let ret: Vec<Option<Vec<u8>>> = result.iter().map(|a| a.1.clone()).collect();
-        Ok(ret)
-    }
-    //
-    #[inline]
-    fn bulk_del_string_k8(&mut self, bulk_keys: &[&[u8]]) -> Result<Vec<Option<String>>> {
-        let vec = self.bulk_del_k8(bulk_keys)?;
-        let mut ret = Vec::new();
-        for opt in vec {
-            let b = opt.map(|val| String::from_utf8_lossy(&val).to_string());
-            ret.push(b);
-        }
-        Ok(ret)
-    }
+    fn del_kt(&mut self, key: &KT) -> Result<Option<Vec<u8>>>;
 
     // returns the value corresponding to the key.
     #[inline]
     fn get<'a, Q>(&mut self, key: &'a Q) -> Result<Option<Vec<u8>>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
-        let key_kt: DbBytes = From::from(key);
-        self.get_k8(key_kt.deref())
+        let key_kt: KT = From::from(key);
+        self.get_kt(&key_kt)
     }
 
     /// returns the value corresponding to the key. the value is converted to `String`.
     #[inline]
     fn get_string<'a, Q>(&mut self, key: &'a Q) -> Result<Option<String>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         self.get(key)
@@ -263,7 +165,7 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     /// gets bulk key-value paires from the db.
     fn bulk_get<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<Vec<u8>>>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
@@ -283,7 +185,7 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     #[inline]
     fn bulk_get_string<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<String>>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         let vec = self.bulk_get(bulk_keys)?;
@@ -298,7 +200,7 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     /// inserts a key-value pair into the db.
     #[inline]
     fn put(&mut self, key_kt: KT, value: &[u8]) -> Result<()> {
-        self.put_k8(key_kt.as_bytes(), value)
+        self.put_kt(&key_kt, value)
     }
 
     /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
@@ -341,18 +243,18 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     #[inline]
     fn delete<'a, Q>(&mut self, key: &'a Q) -> Result<Option<Vec<u8>>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
-        let key_kt: DbBytes = From::from(key);
-        self.del_k8(key_kt.deref())
+        let key_kt: KT = From::from(key);
+        self.del_kt(&key_kt)
     }
 
     /// removes a key from the db.
     #[inline]
     fn delete_string<'a, Q>(&mut self, key: &'a Q) -> Result<Option<String>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         self.delete(key)
@@ -362,7 +264,7 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     /// delete bulk key-value paires from the db.
     fn bulk_delete<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<Vec<u8>>>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
@@ -382,7 +284,7 @@ pub trait DbXxx<KT: DbXxxKeyType> {
     #[inline]
     fn bulk_delete_string<'a, Q>(&mut self, bulk_keys: &[&'a Q]) -> Result<Vec<Option<String>>>
     where
-        DbBytes: From<&'a Q>,
+        KT: From<&'a Q>,
         Q: Ord + ?Sized,
     {
         let vec = self.bulk_delete(bulk_keys)?;
@@ -411,23 +313,20 @@ pub trait DbMapDbInt: DbXxx<DbInt> {}
 pub trait DbMapDbBytes: DbXxx<DbBytes> {}
 
 /// key type
-pub trait DbXxxKeyType: Ord + Clone + Default + HashValue + Deref {
-    /// Signature of database file.
+pub trait DbXxxKeyType: Ord + Clone + Default + HashValue {
+    /// Convert a byte slice to Key.
+    fn from_bytes(bytes: &[u8]) -> Self;
+    /// Signature in header of database file.
     fn signature() -> [u8; 8];
+    /// Byte slice of data to be saved
     fn as_bytes(&self) -> &[u8];
-    fn to_bytes_vec(&self) -> Vec<u8> {
-        self.as_bytes().to_vec()
-    }
-    /// Converts a KeyType into a byte vector.
-    //fn into_bytes(self) -> Vec<u8>;
-    fn from(bytes: &[u8]) -> Self;
-    fn byte_len(&self) -> usize {
-        self.as_bytes().len()
-    }
+    /// Compare with stored data
     fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering;
 }
 
+/// hash value for htx
 pub trait HashValue: Hash {
+    /// 
     fn hash_value(&self) -> u64 {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -435,4 +334,3 @@ pub trait HashValue: Hash {
         hasher.finish()
     }
 }
-impl HashValue for &[u8] {}

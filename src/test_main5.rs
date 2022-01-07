@@ -103,13 +103,13 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
 #[cfg(feature = "htx")]
 fn _test_write_one(
     db_map: &mut FileDbMapString,
-    key_vec: &[(String, String)],
+    key_vec: &[(DbString, String)],
 ) -> Result<(), std::io::Error> {
-    let keys: Vec<(&[u8], &[u8])> = key_vec
+    let keys: Vec<(DbString, &[u8])> = key_vec
         .iter()
-        .map(|(a, b)| (a.as_bytes(), b.as_bytes()))
+        .map(|(a, b)| (a.clone(), b.as_bytes()))
         .collect();
-    db_map.bulk_put_k8(&keys)
+    db_map.bulk_put(&keys)
 }
 
 fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
@@ -157,12 +157,8 @@ fn _test_read_one(
     key_vec: &[DbString],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
-    /*
-    let keys: Vec<&String> = key_vec.iter().collect();
+    let keys: Vec<&DbString> = key_vec.iter().collect();
     let result = db_map.bulk_get_string(&keys)?;
-    */
-    let keys: Vec<&[u8]> = key_vec.iter().map(|a| a.as_bytes()).collect();
-    let result = db_map.bulk_get_string_k8(&keys)?;
     //
     for (idx, answer) in result.iter().enumerate() {
         if let Some(answer) = answer {
@@ -222,12 +218,8 @@ fn _test_delete_one(
     key_vec: &[DbString],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
-    /*
-    let keys: Vec<&String> = key_vec.iter().collect();
+    let keys: Vec<&DbString> = key_vec.iter().collect();
     let result = db_map.bulk_get_string(&keys)?;
-    */
-    let keys: Vec<&[u8]> = key_vec.iter().map(|a| a.as_bytes()).collect();
-    let result = db_map.bulk_del_string_k8(&keys)?;
     //
     for (idx, answer) in result.iter().enumerate() {
         if let Some(answer) = answer {

@@ -14,9 +14,6 @@ use std::path::Path;
 use std::rc::Rc;
 
 #[cfg(feature = "htx")]
-use super::super::super::HashValue;
-
-#[cfg(feature = "htx")]
 use super::htx;
 
 #[derive(Debug)]
@@ -93,10 +90,10 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
     }
 
     #[cfg(any(feature = "vf_node_u32", feature = "vf_node_u64"))]
-    fn keys_binary_search_uu_k8(
+    fn keys_binary_search_uu_kt(
         &mut self,
         node_offset: NodeOffset,
-        key_slice: &[u8],
+        key_kt: &KT,
     ) -> Result<std::result::Result<KeyRecordOffset, NodeOffset>> {
         #[cfg(feature = "vf_node_u32")]
         const OFFSET_BYTE_SIZE: u32 = 4;
@@ -133,7 +130,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             //
             debug_assert!(!key_offset.is_zero());
             let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
-            match key_slice.cmp(&key_string) {
+            match key_kt.cmp_u8(&key_string) {
                 Ordering::Greater => left = mid + 1,
                 Ordering::Equal => {
                     return Ok(Ok(key_offset));
@@ -155,10 +152,10 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
         }
     }
     //
-    fn keys_binary_search_k8(
+    fn keys_binary_search_kt(
         &mut self,
         node: &TreeNode,
-        key_slice: &[u8],
+        key_kt: &KT,
     ) -> Result<std::result::Result<usize, usize>> {
         let mut locked = self.key_file.0.borrow_mut();
         //
@@ -175,7 +172,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             //
             debug_assert!(!key_offset.is_zero());
             let key_string = locked.read_record_only_key_maybeslice(key_offset)?;
-            match key_slice.cmp(&key_string) {
+            match key_kt.cmp_u8(&key_string) {
                 Ordering::Greater => left = mid + 1,
                 Ordering::Equal => {
                     return Ok(Ok(mid));
@@ -295,10 +292,10 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
 
 // insert: NEW
 impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
-    fn insert_into_node_tree_k8(
+    fn insert_into_node_tree_kt(
         &mut self,
         mut node_: IdxNode,
-        key_slice: &[u8],
+        key_kt: &KT,
         value: &[u8],
     ) -> Result<IdxNode> {
         let r = {
@@ -307,7 +304,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                 let new_val_record = self.val_file.add_value_record(value)?;
                 let new_key_record = self
                     .key_file
-                    .add_key_record_with_slice(key_slice, new_val_record.offset)?;
+                    .add_key_record(key_kt, new_val_record.offset)?;
                 #[cfg(feature = "htx")]
                 {
                     let off = new_key_record.offset;
@@ -321,7 +318,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                     NodeOffset::new(0),
                 ));
             }
-            self.keys_binary_search_k8(&node, key_slice)?
+            self.keys_binary_search_kt(&node, key_kt)?
         };
         match r {
             Ok(k) => {
@@ -332,7 +329,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                 if record_offset != new_record_offset {
                     #[cfg(feature = "htx")]
                     {
-                        let hash = key_slice.hash_value();
+                        let hash = key_kt.hash_value();
                         self.htx_file
                             .write_key_record_offset(hash, new_record_offset)?;
                     }
@@ -346,15 +343,15 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                 //let node_offset1 = node.downs[k];
                 let node2_ = if !node_offset1.is_zero() {
                     let node1_ = self.idx_file.read_node(node_offset1)?;
-                    self.insert_into_node_tree_k8(node1_, key_slice, value)?
+                    self.insert_into_node_tree_kt(node1_, key_kt, value)?
                 } else {
                     let new_val_record = self.val_file.add_value_record(value)?;
                     let new_key_record = self
                         .key_file
-                        .add_key_record_with_slice(key_slice, new_val_record.offset)?;
+                        .add_key_record(key_kt, new_val_record.offset)?;
                     #[cfg(feature = "htx")]
                     {
-                        let hash = key_slice.hash_value();
+                        let hash = key_kt.hash_value();
                         self.htx_file
                             .write_key_record_offset(hash, new_key_record.offset)?;
                     }
@@ -447,17 +444,17 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 
 // delete: NEW
 impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
-    fn delete_from_node_tree_k8(
+    fn delete_from_node_tree_kt(
         &mut self,
         mut node_: IdxNode,
-        key_slice: &[u8],
+        key_kt: &KT,
     ) -> Result<(IdxNode, Option<Vec<u8>>)> {
         let r = {
             if node_.get_ref().keys_is_empty() {
                 return Ok((node_, None));
             }
             let node = node_.get_ref();
-            self.keys_binary_search_k8(&node, key_slice)?
+            self.keys_binary_search_kt(&node, key_kt)?
         };
         match r {
             Ok(k) => {
@@ -469,7 +466,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
                 //let node_offset1 = node.downs[k];
                 if !node_offset1.is_zero() {
                     let node1_ = self.idx_file.read_node(node_offset1)?;
-                    let (node1_, val) = self.delete_from_node_tree_k8(node1_, key_slice)?;
+                    let (node1_, val) = self.delete_from_node_tree_kt(node1_, key_kt)?;
                     node_.get_mut().downs_set(k, node1_.get_ref().offset());
                     let node_ = self.write_node(node_)?;
                     if k == node_.get_ref().downs_len() - 1 {
@@ -673,12 +670,12 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 
 // find: NEW
 impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
-    fn find_in_node_tree_k8(
+    fn find_in_node_tree_kt(
         &mut self,
         node_offset: NodeOffset,
-        key_slice: &[u8],
+        key_kt: &KT,
     ) -> Result<Option<Vec<u8>>> {
-        let r = self.keys_binary_search_uu_k8(node_offset, key_slice)?;
+        let r = self.keys_binary_search_uu_kt(node_offset, key_kt)?;
         match r {
             Ok(key_offset) => {
                 debug_assert!(!key_offset.is_zero());
@@ -686,7 +683,7 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
             }
             Err(node_offset) => {
                 if !node_offset.is_zero() {
-                    self.find_in_node_tree_k8(node_offset, key_slice)
+                    self.find_in_node_tree_kt(node_offset, key_kt)
                 } else {
                     Ok(None)
                 }
@@ -698,16 +695,16 @@ impl<KT: DbXxxKeyType> FileDbXxxInner<KT> {
 // impl trait: DbXxx<KT>
 impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
     #[inline]
-    fn get_k8(&mut self, key_slice: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn get_kt(&mut self, key_kt: &KT) -> Result<Option<Vec<u8>>> {
         #[cfg(feature = "htx")]
         {
-            let hash = key_slice.hash_value();
+            let hash = key_kt.hash_value();
             let key_offset = self.htx_file.read_key_record_offset(hash)?;
             if !key_offset.is_zero() {
                 let flg = {
                     let mut locked_key = self.key_file.0.borrow_mut();
                     let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
-                    match key_slice.cmp(&key_string) {
+                    match key_kt.cmp_u8(&key_string) {
                         Ordering::Equal => true,
                         Ordering::Greater => false,
                         Ordering::Less => false,
@@ -732,19 +729,19 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
             let mut locked_idx = self.idx_file.0.borrow_mut();
             locked_idx.0.read_top_node_offset()?
         };
-        self.find_in_node_tree_k8(node_offset, key_slice)
+        self.find_in_node_tree_kt(node_offset, key_kt)
     }
     #[inline]
-    fn put_k8(&mut self, key_slice: &[u8], value: &[u8]) -> Result<()> {
+    fn put_kt(&mut self, key_kt: &KT, value: &[u8]) -> Result<()> {
         #[cfg(feature = "htx")]
         {
-            let hash = key_slice.hash_value();
+            let hash = key_kt.hash_value();
             let key_offset = self.htx_file.read_key_record_offset(hash)?;
             if !key_offset.is_zero() {
                 let flg = {
                     let mut locked_key = self.key_file.0.borrow_mut();
                     let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
-                    match key_slice.cmp(&key_string) {
+                    match key_kt.cmp_u8(&key_string) {
                         Ordering::Equal => true,
                         Ordering::Greater => false,
                         Ordering::Less => false,
@@ -764,18 +761,16 @@ impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbXxxInner<KT> {
             }
         }
         let top_node = self.idx_file.read_top_node()?;
-        let active_node = self.insert_into_node_tree_k8(top_node, key_slice, value)?;
-        //let key_kt = KT::from(key_slice);
-        //let active_node = self.insert_into_node_tree(top_node, &key_kt, value)?;
+        let active_node = self.insert_into_node_tree_kt(top_node, key_kt, value)?;
         let new_top_node = active_node.deactivate();
         self.idx_file.write_top_node(new_top_node)?;
         Ok(())
     }
     #[inline]
-    fn del_k8(&mut self, key_slice: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn del_kt(&mut self, key_kt: &KT) -> Result<Option<Vec<u8>>> {
         let top_node = self.idx_file.read_top_node()?;
         let top_node_offset = top_node.get_ref().offset();
-        let (top_node, opt_val) = self.delete_from_node_tree_k8(top_node, key_slice)?;
+        let (top_node, opt_val) = self.delete_from_node_tree_kt(top_node, key_kt)?;
         let new_top_node = self.trim(top_node)?;
         if top_node_offset != new_top_node.get_ref().offset() {
             self.idx_file.write_top_node(new_top_node)?;

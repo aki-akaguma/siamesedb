@@ -13,19 +13,16 @@ pub struct DbBytes(Vec<u8>);
 
 impl DbXxxKeyType for DbBytes {
     #[inline]
+    fn from_bytes(bytes: &[u8]) -> Self {
+        DbBytes(bytes.to_vec())
+    }
+    #[inline]
     fn signature() -> [u8; 8] {
-        [b'b', b'y', b't', b'e', b's', 0u8, 0u8, 0u8]
+        *b"bytes\0\0\0"
     }
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
-    }
-    #[inline]
-    fn from(bytes: &[u8]) -> Self {
-        DbBytes(bytes.to_vec())
-    }
-    fn byte_len(&self) -> usize {
-        self.0.len()
     }
     fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering {
         self.0.as_slice().cmp(other)

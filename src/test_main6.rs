@@ -105,12 +105,11 @@ fn _test_write_one(
     db_map: &mut FileDbMapDbBytes,
     key_vec: &[(DbBytes, String)],
 ) -> Result<(), std::io::Error> {
-    use std::ops::Deref;
-    let keys: Vec<(&[u8], &[u8])> = key_vec
+    let keys: Vec<(DbBytes, &[u8])> = key_vec
         .iter()
-        .map(|(a, b)| (a.deref(), b.as_bytes()))
+        .map(|(a, b)| (a.clone(), b.as_bytes()))
         .collect();
-    db_map.bulk_put_k8(&keys)
+    db_map.bulk_put(&keys)
 }
 
 fn _test_read(db_name: &str) -> Result<(), std::io::Error> {
@@ -158,13 +157,8 @@ fn _test_read_one(
     key_vec: &[DbBytes],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
-    /*
     let keys: Vec<&DbBytes> = key_vec.iter().collect();
     let result = db_map.bulk_get_string(&keys)?;
-    */
-    use std::ops::Deref;
-    let keys: Vec<&[u8]> = key_vec.iter().map(|a| a.deref()).collect();
-    let result = db_map.bulk_get_string_k8(&keys)?;
     //
     for (idx, answer) in result.iter().enumerate() {
         if let Some(answer) = answer {
@@ -224,13 +218,8 @@ fn _test_delete_one(
     key_vec: &[DbBytes],
     value_vec: &[String],
 ) -> Result<(), std::io::Error> {
-    /*
     let keys: Vec<&DbBytes> = key_vec.iter().collect();
     let result = db_map.bulk_delete_string(&keys)?;
-    */
-    use std::ops::Deref;
-    let keys: Vec<&[u8]> = key_vec.iter().map(|a| a.deref()).collect();
-    let result = db_map.bulk_del_string_k8(&keys)?;
     //
     for (idx, answer) in result.iter().enumerate() {
         if let Some(answer) = answer {

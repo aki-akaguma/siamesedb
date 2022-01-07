@@ -39,11 +39,11 @@ name = "check_main"
 path = "src/check_main.rs"
 
 [features]
-#default = ["vf_vu64", "key_cache", "node_cache", "buf_default", "htx", "print_hits"]
-default = ["vf_vu64", "node_cache", "buf_default", "print_hits"]
-#default = ["vf_vu64", "key_cache", "node_cache", "buf_default"]
-#default = ["vf_u32u32", "key_cache", "node_cache", "buf_default", "htx"]
-#default = ["vf_u64u64", "key_cache", "node_cache", "buf_default", "htx"]
+#default = ["vf_vu64", "node_cache", "buf_default", "htx", "print_hits"]
+default = ["vf_vu64", "node_cache", "buf_default", "htx", "print_hits"]
+#default = ["vf_vu64", "node_cache", "buf_default"]
+#default = ["vf_u32u32", "node_cache", "buf_default", "htx"]
+#default = ["vf_u64u64", "node_cache", "buf_default", "htx"]
 
 # for developping
 vf_u32u32 = ["vf_node_u32"]

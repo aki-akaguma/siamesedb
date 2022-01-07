@@ -123,14 +123,14 @@ impl<'a> MemoryDbMapString<'a> {
 }
 
 impl<'a> DbXxx<DbString> for MemoryDbMapString<'a> {
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_k8(key)
+    fn get_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
     }
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_k8(key, value)
+    fn put_kt(&mut self, key: &DbString, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
     }
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_k8(key)
+    fn del_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).read_fill_buffer()
@@ -155,14 +155,14 @@ impl<'a> MemoryDbMapDbInt<'a> {
 }
 
 impl<'a> DbXxx<DbInt> for MemoryDbMapDbInt<'a> {
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_k8(key)
+    fn get_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
     }
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_k8(key, value)
+    fn put_kt(&mut self, key: &DbInt, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
     }
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_k8(key)
+    fn del_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         self.0.borrow_mut().read_fill_buffer()
@@ -187,14 +187,14 @@ impl<'a> MemoryDbMapDbBytes<'a> {
 }
 
 impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytes<'a> {
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_k8(key)
+    fn get_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
     }
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_k8(key, value)
+    fn put_kt(&mut self, key: &DbBytes, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
     }
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_k8(key)
+    fn del_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
         RefCell::borrow_mut(&self.0).read_fill_buffer()
@@ -247,18 +247,17 @@ impl<'a> MemoryDbMapStringInner<'a> {
 }
 
 impl<'a> DbXxx<DbString> for MemoryDbMapStringInner<'a> {
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn get_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
         let key_s = String::from_utf8_lossy(key).to_string();
         let r = self.mem.get(&key_s).map(|val| val.to_vec());
         Ok(r)
     }
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+    fn put_kt(&mut self, key: &DbString, value: &[u8]) -> Result<()> {
         let key_s = String::from_utf8_lossy(key).to_string();
         let _ = self.mem.insert(key_s, value.to_vec());
         Ok(())
     }
-    #[inline]
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn del_kt(&mut self, key: &DbString) -> Result<Option<Vec<u8>>> {
         let key_s = String::from_utf8_lossy(key).to_string();
         let r = self.mem.remove(&key_s);
         Ok(r)
@@ -306,18 +305,16 @@ impl<'a> MemoryDbMapDbIntInner<'a> {
 }
 
 impl<'a> DbXxx<DbInt> for MemoryDbMapDbIntInner<'a> {
-    #[inline]
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let r = self.mem.get(&(key.into())).cloned();
+    fn get_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.get(key).cloned();
         Ok(r)
     }
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
-        let _ = self.mem.insert(key.into(), value.to_vec());
+    fn put_kt(&mut self, key: &DbInt, value: &[u8]) -> Result<()> {
+        let _ = self.mem.insert(key.clone(), value.to_vec());
         Ok(())
     }
-    #[inline]
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let r = self.mem.remove(&(key.into()));
+    fn del_kt(&mut self, key: &DbInt) -> Result<Option<Vec<u8>>> {
+        let r = self.mem.remove(key);
         Ok(r)
     }
     fn read_fill_buffer(&mut self) -> Result<()> {
@@ -362,17 +359,15 @@ impl<'a> MemoryDbMapDbBytesInner<'a> {
 }
 
 impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytesInner<'a> {
-    #[inline]
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn get_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
         let r = self.mem.get(&(key.into())).cloned();
         Ok(r)
     }
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+    fn put_kt(&mut self, key: &DbBytes, value: &[u8]) -> Result<()> {
         let _ = self.mem.insert(key.into(), value.to_vec());
         Ok(())
     }
-    #[inline]
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn del_kt(&mut self, key: &DbBytes) -> Result<Option<Vec<u8>>> {
         let r = self.mem.remove(&(key.into()));
         Ok(r)
     }

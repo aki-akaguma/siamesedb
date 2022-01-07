@@ -111,16 +111,16 @@ impl<KT: DbXxxKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
 
 impl<KT: DbXxxKeyType> DbXxx<KT> for FileDbMap<KT> {
     #[inline]
-    fn get_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).get_k8(key)
+    fn get_kt(&mut self, key: &KT) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).get_kt(key)
     }
     #[inline]
-    fn put_k8(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
-        RefCell::borrow_mut(&self.0).put_k8(key, value)
+    fn put_kt(&mut self, key: &KT, value: &[u8]) -> Result<()> {
+        RefCell::borrow_mut(&self.0).put_kt(key, value)
     }
     #[inline]
-    fn del_k8(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        RefCell::borrow_mut(&self.0).del_k8(key)
+    fn del_kt(&mut self, key: &KT) -> Result<Option<Vec<u8>>> {
+        RefCell::borrow_mut(&self.0).del_kt(key)
     }
     #[inline]
     fn read_fill_buffer(&mut self) -> Result<()> {

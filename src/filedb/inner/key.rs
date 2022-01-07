@@ -141,22 +141,13 @@ impl<KT: DbXxxKeyType> KeyFile<KT> {
         locked.delete_record(offset)
     }
     #[inline]
-    pub fn _add_key_record(
+    pub fn add_key_record(
         &self,
         key: &KT,
         value_offset: ValueRecordOffset,
     ) -> Result<KeyRecord<KT>> {
         let mut locked = self.0.borrow_mut();
-        locked._add_key_record(key, value_offset)
-    }
-    #[inline]
-    pub fn add_key_record_with_slice(
-        &self,
-        key_slice: &[u8],
-        value_offset: ValueRecordOffset,
-    ) -> Result<KeyRecord<KT>> {
-        let mut locked = self.0.borrow_mut();
-        locked.add_key_record_with_slice(key_slice, value_offset)
+        locked.add_key_record(key, value_offset)
     }
 }
 
@@ -330,16 +321,7 @@ impl<KT: DbXxxKeyType> KeyRecord<KT> {
         }
     }
     #[inline]
-    pub fn _with_key_value(key: KT, value_offset: ValueRecordOffset) -> Self {
-        Self {
-            key,
-            value_offset,
-            ..Default::default()
-        }
-    }
-    #[inline]
-    pub fn with_key_slice_value(key_slice: &[u8], value_offset: ValueRecordOffset) -> Self {
-        let key = KT::from(key_slice);
+    pub fn with_key_value(key: KT, value_offset: ValueRecordOffset) -> Self {
         Self {
             key,
             value_offset,
@@ -348,15 +330,12 @@ impl<KT: DbXxxKeyType> KeyRecord<KT> {
     }
     #[cfg(feature = "htx")]
     pub fn hash_value(&self) -> u64 {
-        use std::hash::Hasher;
-        //
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.key.hash(&mut hasher);
-        hasher.finish()
+        self.key.hash_value()
     }
     //
     fn encoded_record_size(&self) -> (u32, u32, KeyLength) {
-        let key_len = KeyLength::new(self.key.byte_len() as u32);
+        let key = self.key.as_bytes();
+        let key_len = KeyLength::new(key.len().try_into().unwrap());
         //
         #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
         let (encorded_record_len, record_len) = {
@@ -416,26 +395,13 @@ impl<KT: DbXxxKeyType> VarFileKeyCache<KT> {
     }
 
     #[inline]
-    fn _add_key_record(
+    fn add_key_record(
         &mut self,
         key: &KT,
         value_offset: ValueRecordOffset,
     ) -> Result<KeyRecord<KT>> {
-        self.write_record(KeyRecord::_with_key_value(key.clone(), value_offset), true)
+        self.write_record(KeyRecord::with_key_value(key.clone(), value_offset), true)
     }
-
-    #[inline]
-    fn add_key_record_with_slice(
-        &mut self,
-        key_slice: &[u8],
-        value_offset: ValueRecordOffset,
-    ) -> Result<KeyRecord<KT>> {
-        self.write_record(
-            KeyRecord::with_key_slice_value(key_slice, value_offset),
-            true,
-        )
-    }
-
     fn write_record(&mut self, mut record: KeyRecord<KT>, is_new: bool) -> Result<KeyRecord<KT>> {
         debug_assert!(is_new || !record.offset.is_zero());
         //
@@ -498,7 +464,7 @@ impl<KT: DbXxxKeyType> VarFileKeyCache<KT> {
         debug_assert!(record_size.is_valid_key());
         let key_len = self.0.read_key_len()?;
         let maybe = self.0.read_exact_maybeslice(key_len.into())?;
-        let key = KT::from(&maybe);
+        let key = KT::from_bytes(&maybe);
         //
         #[cfg(feature = "htx")]
         let val_offset = self.0.read_value_record_offset()?;
@@ -548,7 +514,7 @@ impl<KT: DbXxxKeyType> VarFileKeyCache<KT> {
         self.0.seek_skip_to_record_key(offset)?;
         let key_len = self.0.read_key_len()?;
         let maybe_slice = self.0.read_exact_maybeslice(key_len.into())?;
-        Ok(KT::from(&maybe_slice))
+        Ok(KT::from_bytes(&maybe_slice))
     }
 
     #[inline]

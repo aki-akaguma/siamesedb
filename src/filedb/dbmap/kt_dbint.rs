@@ -13,19 +13,16 @@ pub struct DbInt(Vec<u8>);
 
 impl DbXxxKeyType for DbInt {
     #[inline]
+    fn from_bytes(bytes: &[u8]) -> Self {
+        DbInt(bytes.to_vec())
+    }
+    #[inline]
     fn signature() -> [u8; 8] {
-        [b'u', b'i', b'n', b't', b'6', b'4', 0u8, 0u8]
+        *b"uint64\0\0"
     }
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
-    }
-    #[inline]
-    fn from(bytes: &[u8]) -> Self {
-        DbInt(bytes.to_vec())
-    }
-    fn byte_len(&self) -> usize {
-        self.0.len()
     }
     fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering {
         self.0.as_slice().cmp(other)
@@ -109,5 +106,21 @@ impl From<&u64> for DbInt {
     #[inline]
     fn from(a: &u64) -> Self {
         DbInt(a.to_be_bytes().to_vec())
+    }
+}
+
+/*
+impl From<DbInt> for DbInt {
+    #[inline]
+    fn from(a: DbInt) -> Self {
+        DbInt(a.0)
+    }
+}
+*/
+
+impl From<&DbInt> for DbInt {
+    #[inline]
+    fn from(a: &DbInt) -> Self {
+        DbInt(a.0.clone())
     }
 }
