@@ -3,8 +3,9 @@ use super::super::{
     CheckFileDbMap, CountOfPerSize, FileDbParams, KeysCountStats, LengthStats, RecordSizeStats,
 };
 use super::semtype::*;
-use super::tr::{IdxNode, TreeNode};
+use super::tr::IdxNode;
 use super::{idx, key, val};
+use rabuf::SmallRead;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -21,7 +22,7 @@ pub struct FileDbXxxInner<KT: DbMapKeyType> {
     dirty: bool,
     //
     key_file: key::KeyFile<KT>,
-    val_file: val::ValueFile<KT>,
+    val_file: val::ValueFile,
     idx_file: idx::IdxFile,
     #[cfg(feature = "htx")]
     htx_file: htx::HtxFile,
@@ -60,41 +61,41 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
 // for utils
 impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     #[inline]
-    pub(crate) fn load_key_data(&self, record_offset: KeyRecordOffset) -> Result<KT> {
-        debug_assert!(!record_offset.is_zero());
-        self.key_file.read_record_only_key(record_offset)
+    pub(crate) fn load_key_data(&self, piece_offset: KeyPieceOffset) -> Result<KT> {
+        debug_assert!(!piece_offset.is_zero());
+        self.key_file.read_piece_only_key(piece_offset)
     }
     #[inline]
-    fn load_value(&self, record_offset: KeyRecordOffset) -> Result<Vec<u8>> {
-        debug_assert!(!record_offset.is_zero());
-        let value_offset = self.key_file.read_record_only_value_offset(record_offset)?;
-        self.val_file.read_record_only_value(value_offset)
+    fn load_value(&self, piece_offset: KeyPieceOffset) -> Result<Vec<u8>> {
+        debug_assert!(!piece_offset.is_zero());
+        let value_offset = self.key_file.read_piece_only_value_offset(piece_offset)?;
+        self.val_file.read_piece_only_value(value_offset)
     }
     #[inline]
-    fn load_key_record_size(&self, record_offset: KeyRecordOffset) -> Result<KeyRecordSize> {
-        self.key_file.read_record_only_size(record_offset)
+    fn load_key_piece_size(&self, piece_offset: KeyPieceOffset) -> Result<KeyPieceSize> {
+        self.key_file.read_piece_only_size(piece_offset)
     }
     #[inline]
-    fn load_value_record_size(&self, record_offset: KeyRecordOffset) -> Result<ValueRecordSize> {
-        let value_offset = self.key_file.read_record_only_value_offset(record_offset)?;
-        self.val_file.read_record_only_size(value_offset)
+    fn load_value_piece_size(&self, piece_offset: KeyPieceOffset) -> Result<ValuePieceSize> {
+        let value_offset = self.key_file.read_piece_only_value_offset(piece_offset)?;
+        self.val_file.read_piece_only_size(value_offset)
     }
     #[inline]
-    fn load_key_length(&self, record_offset: KeyRecordOffset) -> Result<KeyLength> {
-        self.key_file.read_record_only_key_length(record_offset)
+    fn load_key_length(&self, piece_offset: KeyPieceOffset) -> Result<KeyLength> {
+        self.key_file.read_piece_only_key_length(piece_offset)
     }
     #[inline]
-    fn load_value_length(&self, record_offset: KeyRecordOffset) -> Result<ValueLength> {
-        let value_offset = self.key_file.read_record_only_value_offset(record_offset)?;
-        self.val_file.read_record_only_value_length(value_offset)
+    fn load_value_length(&self, piece_offset: KeyPieceOffset) -> Result<ValueLength> {
+        let value_offset = self.key_file.read_piece_only_value_offset(piece_offset)?;
+        self.val_file.read_piece_only_value_length(value_offset)
     }
 
     #[cfg(any(feature = "vf_node_u32", feature = "vf_node_u64"))]
     fn keys_binary_search_uu_kt(
         &mut self,
-        node_offset: NodeOffset,
+        node_offset: NodePieceOffset,
         key_kt: &KT,
-    ) -> Result<std::result::Result<KeyRecordOffset, NodeOffset>> {
+    ) -> Result<std::result::Result<KeyPieceOffset, NodePieceOffset>> {
         #[cfg(feature = "vf_node_u32")]
         const OFFSET_BYTE_SIZE: u32 = 4;
         #[cfg(feature = "vf_node_u64")]
@@ -108,10 +109,10 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         let is_leaf = locked_idx.0.read_u8()?;
         let keys_count = locked_idx.0.read_keys_count()?;
         if keys_count.is_zero() {
-            return Ok(Err(NodeOffset::new(0)));
+            return Ok(Err(NodePieceOffset::new(0)));
         }
+        let keys_start: NodePieceOffset = locked_idx.0.seek_position()?;
         let keys_count = keys_count.as_value() as u32;
-        let keys_start: NodeOffset = locked_idx.0.seek_position()?;
         //
         let mut left = 0;
         let mut right = keys_count;
@@ -122,14 +123,14 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             //let key_offset = node.keys[mid];
             let _ = locked_idx
                 .0
-                .seek_from_start(keys_start + NodeSize::new(OFFSET_BYTE_SIZE * mid))?;
+                .seek_from_start(keys_start + NodePieceSize::new(OFFSET_BYTE_SIZE * mid))?;
             #[cfg(feature = "vf_node_u32")]
-            let key_offset: KeyRecordOffset = locked_idx.0.read_record_offset_u32()?;
+            let key_offset: KeyPieceOffset = locked_idx.0.read_piece_offset_u32()?;
             #[cfg(feature = "vf_node_u64")]
-            let key_offset: KeyRecordOffset = locked_idx.0.read_record_offset_u64()?;
+            let key_offset: KeyPieceOffset = locked_idx.0.read_piece_offset_u64()?;
             //
             debug_assert!(!key_offset.is_zero());
-            let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
+            let key_string = locked_key.read_piece_only_key_maybeslice(key_offset)?;
             match key_kt.cmp_u8(&key_string) {
                 Ordering::Greater => left = mid + 1,
                 Ordering::Equal => {
@@ -140,7 +141,7 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         }
         if is_leaf == 0 {
             let _ = locked_idx.0.seek_from_start(
-                keys_start + NodeSize::new(OFFSET_BYTE_SIZE * (keys_count + left)),
+                keys_start + NodePieceSize::new(OFFSET_BYTE_SIZE * (keys_count + left)),
             )?;
             #[cfg(feature = "vf_node_u32")]
             let node_offset = locked_idx.0.read_node_offset_u32()?;
@@ -148,30 +149,30 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             let node_offset = locked_idx.0.read_node_offset_u64()?;
             Ok(Err(node_offset))
         } else {
-            Ok(Err(NodeOffset::new(0)))
+            Ok(Err(NodePieceOffset::new(0)))
         }
     }
     //
     fn keys_binary_search_kt(
         &mut self,
-        node: &TreeNode,
+        keys: &[KeyPieceOffset],
         key_kt: &KT,
     ) -> Result<std::result::Result<usize, usize>> {
-        let mut locked = self.key_file.0.borrow_mut();
+        let mut locked_key = self.key_file.0.borrow_mut();
         //
-        let keys = node.keys();
+        let keys_count = keys.len();
+        //
         let mut left = 0;
-        let mut right = keys.len();
+        let mut right = keys_count;
         while left < right {
             let mid = (left + right) / 2;
             //
             // SAFETY: `mid` is limited by `[left; right)` bound.
-            //let key_offset = unsafe { node.keys_get_unchecked(mid) };
-            let key_offset = unsafe { *keys.get_unchecked(mid) };
             //let key_offset = node.keys[mid];
+            let key_offset = unsafe { *keys.get_unchecked(mid) };
             //
             debug_assert!(!key_offset.is_zero());
-            let key_string = locked.read_record_only_key_maybeslice(key_offset)?;
+            let key_string = locked_key.read_piece_only_key_maybeslice(key_offset)?;
             match key_kt.cmp_u8(&key_string) {
                 Ordering::Greater => left = mid + 1,
                 Ordering::Equal => {
@@ -233,22 +234,22 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
     fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         self.idx_file.count_of_free_node()
     }
-    /// count of the free key record
-    fn count_of_free_key_record(&self) -> Result<CountOfPerSize> {
-        self.key_file.count_of_free_key_record()
+    /// count of the free key piece
+    fn count_of_free_key_piece(&self) -> Result<CountOfPerSize> {
+        self.key_file.count_of_free_key_piece()
     }
-    /// count of the free value record
-    fn count_of_free_value_record(&self) -> Result<CountOfPerSize> {
-        self.val_file.count_of_free_value_record()
+    /// count of the free value piece
+    fn count_of_free_value_piece(&self) -> Result<CountOfPerSize> {
+        self.val_file.count_of_free_value_piece()
     }
-    /// count of the used record and the used node
+    /// count of the used piece and the used node
     fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)> {
         self.idx_file.count_of_used_node(|off| {
-            let ks = self.load_key_record_size(off);
+            let ks = self.load_key_piece_size(off);
             if let Err(err) = ks {
                 Err(err)
             } else {
-                let vs = self.load_value_record_size(off);
+                let vs = self.load_value_piece_size(off);
                 if let Err(err) = vs {
                     Err(err)
                 } else {
@@ -265,14 +266,14 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
         vec.append(&mut vec2);
         vec
     }
-    /// record size statistics
-    fn key_record_size_stats(&self) -> Result<RecordSizeStats<Key>> {
+    /// piece size statistics
+    fn key_piece_size_stats(&self) -> Result<RecordSizeStats<Key>> {
         self.idx_file
-            .record_size_stats(|off| self.load_key_record_size(off))
+            .piece_size_stats(|off| self.load_key_piece_size(off))
     }
-    fn value_record_size_stats(&self) -> Result<RecordSizeStats<Value>> {
+    fn value_piece_size_stats(&self) -> Result<RecordSizeStats<Value>> {
         self.idx_file
-            .record_size_stats(|off| self.load_value_record_size(off))
+            .piece_size_stats(|off| self.load_value_piece_size(off))
     }
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats> {
@@ -301,39 +302,37 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         let r = {
             let node = node_.get_ref();
             if node.keys_is_empty() {
-                let new_val_record = self.val_file.add_value_record(value)?;
-                let new_key_record = self
-                    .key_file
-                    .add_key_record(key_kt, new_val_record.offset)?;
+                let new_val_piece = self.val_file.add_value_piece(value)?;
+                let new_key_piece = self.key_file.add_key_piece(key_kt, new_val_piece.offset)?;
                 #[cfg(feature = "htx")]
                 {
-                    let off = new_key_record.offset;
-                    let hash = new_key_record.hash_value();
-                    self.htx_file.write_key_record_offset(hash, off)?;
+                    let off = new_key_piece.offset;
+                    let hash = new_key_piece.hash_value();
+                    self.htx_file.write_key_piece_offset(hash, off)?;
                 }
                 //
                 return Ok(IdxNode::new_active(
-                    new_key_record.offset,
-                    NodeOffset::new(0),
-                    NodeOffset::new(0),
+                    new_key_piece.offset,
+                    NodePieceOffset::new(0),
+                    NodePieceOffset::new(0),
                 ));
             }
-            self.keys_binary_search_kt(&node, key_kt)?
+            self.keys_binary_search_kt(node.keys(), key_kt)?
         };
         match r {
             Ok(k) => {
-                let record_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
-                //let record_offset = node.keys[k];
-                debug_assert!(record_offset != RecordOffset::new(0));
-                let new_record_offset = self.store_value_on_insert(record_offset, value)?;
-                if record_offset != new_record_offset {
+                let piece_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //let piece_offset = node.keys[k];
+                debug_assert!(!piece_offset.is_zero());
+                let new_piece_offset = self.store_value_on_insert(piece_offset, value)?;
+                if piece_offset != new_piece_offset {
                     #[cfg(feature = "htx")]
                     {
                         let hash = key_kt.hash_value();
                         self.htx_file
-                            .write_key_record_offset(hash, new_record_offset)?;
+                            .write_key_piece_offset(hash, new_piece_offset)?;
                     }
-                    node_.get_mut().keys_set(k, new_record_offset);
+                    node_.get_mut().keys_set(k, new_piece_offset);
                     return self.write_node(node_);
                 }
                 Ok(node_)
@@ -345,20 +344,19 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                     let node1_ = self.idx_file.read_node(node_offset1)?;
                     self.insert_into_node_tree_kt(node1_, key_kt, value)?
                 } else {
-                    let new_val_record = self.val_file.add_value_record(value)?;
-                    let new_key_record = self
-                        .key_file
-                        .add_key_record(key_kt, new_val_record.offset)?;
+                    let new_val_piece = self.val_file.add_value_piece(value)?;
+                    let new_key_piece =
+                        self.key_file.add_key_piece(key_kt, new_val_piece.offset)?;
                     #[cfg(feature = "htx")]
                     {
                         let hash = key_kt.hash_value();
                         self.htx_file
-                            .write_key_record_offset(hash, new_key_record.offset)?;
+                            .write_key_piece_offset(hash, new_key_piece.offset)?;
                     }
                     IdxNode::new_active(
-                        new_key_record.offset,
-                        NodeOffset::new(0),
-                        NodeOffset::new(0),
+                        new_key_piece.offset,
+                        NodePieceOffset::new(0),
+                        NodePieceOffset::new(0),
                     )
                 };
                 if node2_.is_active_on_insert() {
@@ -375,16 +373,20 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     #[inline]
     fn store_value_on_insert(
         &mut self,
-        record_offset: KeyRecordOffset,
+        piece_offset: KeyPieceOffset,
         value: &[u8],
-    ) -> Result<KeyRecordOffset> {
-        let mut key_record = self.key_file.read_record(record_offset)?;
-        let mut val_record = self.val_file.read_record(key_record.value_offset)?;
-        val_record.value = value.to_vec();
-        let new_value_record = self.val_file.write_record(val_record)?;
-        key_record.value_offset = new_value_record.offset;
-        let new_key_record = self.key_file.write_record(key_record)?;
-        Ok(new_key_record.offset)
+    ) -> Result<KeyPieceOffset> {
+        let mut key_piece = self.key_file.read_piece(piece_offset)?;
+        let mut val_piece = self.val_file.read_piece(key_piece.value_offset)?;
+        val_piece.value = value.to_vec();
+        let new_value_piece = self.val_file.write_piece(val_piece)?;
+        let new_key_piece = if key_piece.value_offset != new_value_piece.offset {
+            key_piece.value_offset = new_value_piece.offset;
+            self.key_file.write_piece(key_piece)?
+        } else {
+            key_piece
+        };
+        Ok(new_key_piece.offset)
     }
     #[inline]
     fn balance_on_insert(
@@ -395,15 +397,13 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     ) -> Result<IdxNode> {
         debug_assert!(active_node_.get_ref().is_active_on_insert());
         //
-        node_
-            .get_mut()
-            .keys_insert(i, active_node_.get_ref().keys_get(0));
-        node_
-            .get_mut()
-            .downs_set(i, active_node_.get_ref().downs_get(1));
-        node_
-            .get_mut()
-            .downs_insert(i, active_node_.get_ref().downs_get(0));
+        {
+            let mut node = node_.get_mut();
+            let active_node = active_node_.get_ref();
+            node.keys_insert(i, active_node.keys_get(0));
+            node.downs_set(i, active_node.downs_get(1));
+            node.downs_insert(i, active_node.downs_get(0));
+        }
         //
         if node_.borrow().is_over_len() {
             self.split_on_insert(node_)
@@ -418,22 +418,20 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         debug_assert!(node_.get_ref().downs_len() == idx::NODE_SLOTS_MAX as usize + 1);
         debug_assert!(node_.get_ref().keys_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
         debug_assert!(node_.get_ref().downs_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
-        let mut node1_ = IdxNode::new(NodeOffset::new(0));
-        node1_
-            .get_mut()
-            .keys_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
-        node1_
-            .get_mut()
-            .downs_extend_from_node(&node_.get_ref(), idx::NODE_SLOTS_MAX_HALF as usize);
+        let mut node1_ = IdxNode::new(NodePieceOffset::new(0));
+        {
+            let mut node1 = node1_.get_mut();
+            let node = node_.get_ref();
+            node1.keys_extend_from_node(&node, idx::NODE_SLOTS_MAX_HALF as usize);
+            node1.downs_extend_from_node(&node, idx::NODE_SLOTS_MAX_HALF as usize);
+        }
+        let key_offset1 = {
+            let mut node = node_.get_mut();
+            node.keys_resize(idx::NODE_SLOTS_MAX_HALF as usize);
+            node.downs_resize(idx::NODE_SLOTS_MAX_HALF as usize);
+            node.keys_pop().unwrap()
+        };
         //
-        node_
-            .get_mut()
-            .keys_resize(idx::NODE_SLOTS_MAX_HALF as usize);
-        node_
-            .get_mut()
-            .downs_resize(idx::NODE_SLOTS_MAX_HALF as usize);
-        //
-        let key_offset1 = node_.get_mut().keys_pop().unwrap();
         let node1_ = self.write_new_node(node1_)?;
         let node_ = self.write_node(node_)?;
         let node_offset = node_.get_ref().offset();
@@ -454,7 +452,7 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                 return Ok((node_, None));
             }
             let node = node_.get_ref();
-            self.keys_binary_search_kt(&node, key_kt)?
+            self.keys_binary_search_kt(node.keys(), key_kt)?
         };
         match r {
             Ok(k) => {
@@ -483,23 +481,19 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     }
     #[inline]
     fn delete_at(&mut self, mut node_: IdxNode, i: usize) -> Result<(IdxNode, Option<Vec<u8>>)> {
-        let record_offset = node_.get_ref().keys_get(i);
-        debug_assert!(
-            !record_offset.is_zero(),
-            "key_offset: {} != 0",
-            record_offset
-        );
+        let piece_offset = node_.get_ref().keys_get(i);
+        debug_assert!(!piece_offset.is_zero(), "key_offset: {} != 0", piece_offset);
         let opt_value = {
-            let record = self.key_file.read_record(record_offset)?;
+            let piece = self.key_file.read_piece(piece_offset)?;
             #[cfg(feature = "htx")]
             {
-                let hash = record.key.hash_value();
+                let hash = piece.key.hash_value();
                 self.htx_file
-                    .write_key_record_offset(hash, KeyRecordOffset::new(0))?;
+                    .write_key_piece_offset(hash, KeyPieceOffset::new(0))?;
             }
-            let value = self.val_file.read_record_only_value(record.value_offset)?;
-            self.val_file.delete_record(record.value_offset)?;
-            self.key_file.delete_record(record_offset)?;
+            let value = self.val_file.read_piece_only_value(piece.value_offset)?;
+            self.val_file.delete_piece(piece.value_offset)?;
+            self.key_file.delete_piece(piece_offset)?;
             Some(value)
         };
         let node_offset1 = node_.get_ref().downs_get(i);
@@ -510,8 +504,8 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             Ok((new_node_, opt_value))
         } else {
             let node1_ = self.idx_file.read_node(node_offset1)?;
-            let (record_offset, node1_) = self.delete_max(node1_)?;
-            node_.get_mut().keys_set(i, record_offset);
+            let (piece_offset, node1_) = self.delete_max(node1_)?;
+            node_.get_mut().keys_set(i, piece_offset);
             node_.get_mut().downs_set(i, node1_.get_ref().offset());
             let node_ = self.write_node(node_)?;
             let new_node_ = self.balance_left(node_, i)?;
@@ -519,7 +513,7 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         }
     }
     #[inline]
-    fn delete_max(&mut self, mut node_: IdxNode) -> Result<(KeyRecordOffset, IdxNode)> {
+    fn delete_max(&mut self, mut node_: IdxNode) -> Result<(KeyPieceOffset, IdxNode)> {
         let j = node_.get_ref().keys_len();
         let i = j - 1;
         let node_offset1 = node_.get_ref().downs_get(j);
@@ -629,11 +623,11 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     #[inline]
     fn move_a_node_from_right_to_left(
         &mut self,
-        record_offset: KeyRecordOffset,
+        piece_offset: KeyPieceOffset,
         node_l: &mut IdxNode,
         node_r: &mut IdxNode,
-    ) -> KeyRecordOffset {
-        node_l.get_mut().keys_push(record_offset);
+    ) -> KeyPieceOffset {
+        node_l.get_mut().keys_push(piece_offset);
         node_l
             .get_mut()
             .downs_push(node_r.get_mut().downs_remove(0));
@@ -642,13 +636,13 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     #[inline]
     fn move_left_right(
         &mut self,
-        record_offset: KeyRecordOffset,
+        piece_offset: KeyPieceOffset,
         node_l: &mut IdxNode,
         node_r: &mut IdxNode,
-    ) -> KeyRecordOffset {
+    ) -> KeyPieceOffset {
         let j = node_l.get_ref().keys_len();
         let i = j - 1;
-        node_r.get_mut().keys_insert(0, record_offset);
+        node_r.get_mut().keys_insert(0, piece_offset);
         node_r
             .get_mut()
             .downs_insert(0, node_l.get_mut().downs_remove(j));
@@ -672,7 +666,7 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
 impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     fn find_in_node_tree_kt(
         &mut self,
-        node_offset: NodeOffset,
+        node_offset: NodePieceOffset,
         key_kt: &KT,
     ) -> Result<Option<Vec<u8>>> {
         let r = self.keys_binary_search_uu_kt(node_offset, key_kt)?;
@@ -751,11 +745,11 @@ impl<KT: DbMapKeyType> DbXxxObjectSafe<KT> for FileDbXxxInner<KT> {
         #[cfg(feature = "htx")]
         {
             let hash = key_kt.hash_value();
-            let key_offset = self.htx_file.read_key_record_offset(hash)?;
+            let key_offset = self.htx_file.read_key_piece_offset(hash)?;
             if !key_offset.is_zero() {
                 let flg = {
                     let mut locked_key = self.key_file.0.borrow_mut();
-                    let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
+                    let key_string = locked_key.read_piece_only_key_maybeslice(key_offset)?;
                     match key_kt.cmp_u8(&key_string) {
                         Ordering::Equal => true,
                         Ordering::Greater => false,
@@ -788,11 +782,11 @@ impl<KT: DbMapKeyType> DbXxxObjectSafe<KT> for FileDbXxxInner<KT> {
         #[cfg(feature = "htx")]
         {
             let hash = key_kt.hash_value();
-            let key_offset = self.htx_file.read_key_record_offset(hash)?;
+            let key_offset = self.htx_file.read_key_piece_offset(hash)?;
             if !key_offset.is_zero() {
                 let flg = {
                     let mut locked_key = self.key_file.0.borrow_mut();
-                    let key_string = locked_key.read_record_only_key_maybeslice(key_offset)?;
+                    let key_string = locked_key.read_piece_only_key_maybeslice(key_offset)?;
                     match key_kt.cmp_u8(&key_string) {
                         Ordering::Equal => true,
                         Ordering::Greater => false,
@@ -803,8 +797,8 @@ impl<KT: DbMapKeyType> DbXxxObjectSafe<KT> for FileDbXxxInner<KT> {
                     #[cfg(feature = "htx_print_hits")]
                     self.htx_file.set_hits();
                     //
-                    let new_record_offset = self.store_value_on_insert(key_offset, value)?;
-                    assert!(key_offset == new_record_offset);
+                    let new_piece_offset = self.store_value_on_insert(key_offset, value)?;
+                    assert!(key_offset == new_piece_offset);
                     return Ok(());
                 } else {
                     #[cfg(feature = "htx_print_hits")]
@@ -865,7 +859,7 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
             depth_nodes,
         })
     }
-    fn next_record_offset(&mut self) -> Option<KeyRecordOffset> {
+    fn next_piece_offset(&mut self) -> Option<KeyPieceOffset> {
         if self.depth_nodes.is_empty() {
             return None;
         }
@@ -897,7 +891,7 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
                         let down_node = db_map_inner.idx_file.read_node(node_offset).unwrap();
                         self.depth_nodes.push((down_node, 0, 0));
                     }
-                    return self.next_record_offset();
+                    return self.next_piece_offset();
                 }
             };
             *keys_idx += 1;
@@ -953,7 +947,7 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
 impl<KT: DbMapKeyType> Iterator for DbXxxIterMut<KT> {
     type Item = (KT, Vec<u8>);
     fn next(&mut self) -> Option<(KT, Vec<u8>)> {
-        if let Some(key_offset) = self.next_record_offset() {
+        if let Some(key_offset) = self.next_piece_offset() {
             let db_map_inner = RefCell::borrow_mut(&self.db_map);
             let key = db_map_inner.load_key_data(key_offset).unwrap();
             let value_vec = db_map_inner.load_value(key_offset).unwrap();

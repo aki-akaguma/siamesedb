@@ -51,7 +51,7 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         for (k, v) in data {
-            db_map.put(k.into(), v.as_bytes()).unwrap();
+            db_map.put(k, v.as_bytes()).unwrap();
         }
         //
         db_map.sync_data().unwrap();
@@ -65,7 +65,7 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         for (k, v) in data {
-            db_map.put(k.into(), v.as_bytes()).unwrap();
+            db_map.put(k, v.as_bytes()).unwrap();
         }
         //
         db_map.sync_data().unwrap();
@@ -79,13 +79,13 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         db_map
-            .put_string("9909909900".into(), "TEST, v9909909900")
+            .put_string("9909909900", "TEST, v9909909900")
             .unwrap();
         db_map
-            .put_string("9909909901".into(), "TEST, v9909909901")
+            .put_string("9909909901", "TEST, v9909909901")
             .unwrap();
         db_map
-            .put_string("9909909902".into(), "TEST, v9909909902")
+            .put_string("9909909902", "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
     });
@@ -147,13 +147,13 @@ fn test_fixtures_fruits() {
     //
     do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
         db_map
-            .put_string("9909909900".into(), "TEST, v9909909900")
+            .put_string("9909909900", "TEST, v9909909900")
             .unwrap();
         db_map
-            .put_string("9909909901".into(), "TEST, v9909909901")
+            .put_string("9909909901", "TEST, v9909909901")
             .unwrap();
         db_map
-            .put_string("9909909902".into(), "TEST, v9909909902")
+            .put_string("9909909902", "TEST, v9909909902")
             .unwrap();
         db_map.sync_data().unwrap();
         _print_check_db_map(
@@ -200,16 +200,16 @@ fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     println!(
-        "key record free: {:?}",
-        db_map.count_of_free_key_record().unwrap()
+        "key piece free: {:?}",
+        db_map.count_of_free_key_piece().unwrap()
     );
     let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
-    println!("key record used: {:?}", key_rec_v);
+    println!("key piece used: {:?}", key_rec_v);
     println!(
-        "value record free: {:?}",
-        db_map.count_of_free_value_record().unwrap()
+        "value piece free: {:?}",
+        db_map.count_of_free_value_piece().unwrap()
     );
-    println!("value record used: {:?}", val_rec_v);
+    println!("value piece used: {:?}", val_rec_v);
     println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
@@ -224,11 +224,11 @@ fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
     println!(
-        "key_record_size_stats(): {}",
-        db_map.key_record_size_stats().unwrap()
+        "key_piece_size_stats(): {}",
+        db_map.key_piece_size_stats().unwrap()
     );
     println!(
-        "value_record_size_stats(): {}",
-        db_map.value_record_size_stats().unwrap()
+        "value_piece_size_stats(): {}",
+        db_map.value_piece_size_stats().unwrap()
     );
 }

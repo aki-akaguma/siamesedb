@@ -12,15 +12,15 @@ use std::num::TryFromIntError;
 #[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
 use std::convert::Infallible;
 
-pub type RecordOffset<T> = Offset<Record<T>>;
-pub type KeyRecordOffset = Offset<Record<Key>>;
-pub type ValueRecordOffset = Offset<Record<Value>>;
-pub type NodeOffset = Offset<Node>;
+pub type PieceOffset<T> = Offset<Piece<T>>;
+pub type KeyPieceOffset = PieceOffset<Key>;
+pub type ValuePieceOffset = PieceOffset<Value>;
+pub type NodePieceOffset = Offset<Piece<Node>>;
 
-pub type RecordSize<T> = Size<Record<T>>;
-pub type KeyRecordSize = Size<Record<Key>>;
-pub type ValueRecordSize = Size<Record<Value>>;
-pub type NodeSize = Size<Node>;
+pub type PieceSize<T> = Size<Piece<T>>;
+pub type KeyPieceSize = PieceSize<Key>;
+pub type ValuePieceSize = PieceSize<Value>;
+pub type NodePieceSize = Size<Piece<Node>>;
 
 pub type KeyLength = Length<Key>;
 pub type ValueLength = Length<Value>;
@@ -28,8 +28,8 @@ pub type ValueLength = Length<Value>;
 pub type KeysCount = Count<Key>;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct Record<T> {
-    _phantom: std::marker::PhantomData<T>,
+pub struct Piece<T> {
+    _phantom: PhantomData<fn() -> T>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -38,14 +38,14 @@ pub struct Node;
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Key;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Value;
 
-/// The offset in dat/idx file.
+/// The file offset of key-file, value-file, idx-file.
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Offset<T> {
     val: u64,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Offset<T> {
@@ -95,6 +95,14 @@ impl<T> std::ops::Add<Size<T>> for Offset<T> {
     }
 }
 
+impl<T> std::ops::Add<PieceSize<T>> for Offset<T> {
+    type Output = Offset<T>;
+    #[inline]
+    fn add(self, rhs: PieceSize<T>) -> Self::Output {
+        Offset::new(self.val + rhs.val as u64)
+    }
+}
+
 impl<T> std::ops::Sub<Offset<T>> for Offset<T> {
     type Output = Size<T>;
     #[inline]
@@ -112,11 +120,11 @@ impl<T> std::ops::Sub<Offset<T>> for Offset<T> {
     }
 }
 
-/// The size of record/node
+/// The size of key-piece, value-piece, node-piece
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Size<T> {
     val: u32,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Size<T> {
@@ -167,11 +175,11 @@ impl<T> From<Size<T>> for u32 {
     }
 }
 
-/// The byte length of key/value
+/// The byte length of key or value
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Length<T> {
     val: u32,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Length<T> {
@@ -226,7 +234,7 @@ impl<T> From<Length<T>> for u32 {
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Count<T> {
     val: u16,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Count<T> {
@@ -281,18 +289,18 @@ impl<T> From<Count<T>> for u16 {
 #[cfg(test)]
 mod debug {
     use super::{
-        KeyLength, KeyRecordOffset, KeyRecordSize, KeysCount, NodeOffset, NodeSize, ValueLength,
-        ValueRecordOffset, ValueRecordSize,
+        KeyLength, KeyPieceOffset, KeyPieceSize, KeysCount, NodePieceOffset, NodePieceSize,
+        ValueLength, ValuePieceOffset, ValuePieceSize,
     };
     //
     #[test]
     fn test_size_of() {
-        assert_eq!(std::mem::size_of::<KeyRecordOffset>(), 8);
-        assert_eq!(std::mem::size_of::<ValueRecordOffset>(), 8);
-        assert_eq!(std::mem::size_of::<NodeOffset>(), 8);
-        assert_eq!(std::mem::size_of::<KeyRecordSize>(), 4);
-        assert_eq!(std::mem::size_of::<ValueRecordSize>(), 4);
-        assert_eq!(std::mem::size_of::<NodeSize>(), 4);
+        assert_eq!(std::mem::size_of::<KeyPieceOffset>(), 8);
+        assert_eq!(std::mem::size_of::<ValuePieceOffset>(), 8);
+        assert_eq!(std::mem::size_of::<NodePieceOffset>(), 8);
+        assert_eq!(std::mem::size_of::<KeyPieceSize>(), 4);
+        assert_eq!(std::mem::size_of::<ValuePieceSize>(), 4);
+        assert_eq!(std::mem::size_of::<NodePieceSize>(), 4);
         assert_eq!(std::mem::size_of::<KeyLength>(), 4);
         assert_eq!(std::mem::size_of::<ValueLength>(), 4);
         assert_eq!(std::mem::size_of::<KeysCount>(), 2);

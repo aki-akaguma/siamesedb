@@ -69,19 +69,19 @@ pub trait CheckFileDbMap {
     fn depth_of_node_tree(&self) -> Result<u64>;
     /// count of the free node
     fn count_of_free_node(&self) -> Result<CountOfPerSize>;
-    /// count of the free key record
-    fn count_of_free_key_record(&self) -> Result<CountOfPerSize>;
-    /// count of the free key record
-    fn count_of_free_value_record(&self) -> Result<CountOfPerSize>;
-    /// count of the used record and the used node
+    /// count of the free key piece
+    fn count_of_free_key_piece(&self) -> Result<CountOfPerSize>;
+    /// count of the free key piece
+    fn count_of_free_value_piece(&self) -> Result<CountOfPerSize>;
+    /// count of the used piece and the used node
     fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)>;
     /// buffer statistics
     #[cfg(feature = "buf_stats")]
     fn buf_stats(&self) -> Vec<(String, i64)>;
-    /// key record size statistics
-    fn key_record_size_stats(&self) -> Result<RecordSizeStats<Key>>;
-    /// value record size statistics
-    fn value_record_size_stats(&self) -> Result<RecordSizeStats<Value>>;
+    /// key piece size statistics
+    fn key_piece_size_stats(&self) -> Result<RecordSizeStats<Key>>;
+    /// value piece size statistics
+    fn value_piece_size_stats(&self) -> Result<RecordSizeStats<Value>>;
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats>;
     /// key length statistics
@@ -92,21 +92,21 @@ pub trait CheckFileDbMap {
 
 pub type CountOfPerSize = Vec<(u32, u64)>;
 
-/// record size statistics.
+/// piece size statistics.
 #[derive(Debug, Default)]
-pub struct RecordSizeStats<T>(Vec<(RecordSize<T>, u64)>);
+pub struct RecordSizeStats<T>(Vec<(PieceSize<T>, u64)>);
 
 impl<T: Copy + Ord> RecordSizeStats<T> {
-    pub fn new(vec: Vec<(RecordSize<T>, u64)>) -> Self {
+    pub fn new(vec: Vec<(PieceSize<T>, u64)>) -> Self {
         Self(vec)
     }
-    pub fn touch_size(&mut self, record_size: RecordSize<T>) {
-        match self.0.binary_search_by_key(&record_size, |&(a, _b)| a) {
+    pub fn touch_size(&mut self, piece_size: PieceSize<T>) {
+        match self.0.binary_search_by_key(&piece_size, |&(a, _b)| a) {
             Ok(sz_idx) => {
                 self.0[sz_idx].1 += 1;
             }
             Err(sz_idx) => {
-                self.0.insert(sz_idx, (record_size, 1));
+                self.0.insert(sz_idx, (piece_size, 1));
             }
         }
     }
@@ -130,10 +130,10 @@ impl<T: Copy> std::fmt::Display for RecordSizeStats<T> {
     }
 }
 
-pub type KeyRecordSizeStats = RecordSizeStats<Key>;
+pub type KeyPieceSizeStats = RecordSizeStats<Key>;
 pub type ValueRecordSizeStats = RecordSizeStats<Value>;
 
-/// record size statistics.
+/// piece size statistics.
 #[derive(Debug, Default)]
 pub struct KeysCountStats(Vec<(KeysCount, u64)>);
 
@@ -284,7 +284,7 @@ impl FileDb {
 mod debug {
     use super::FileDbInner;
     use super::{FileDb, FileDbMapDbInt, FileDbMapDbString};
-    use super::{KeyRecordSizeStats, ValueRecordSizeStats};
+    use super::{KeyPieceSizeStats, ValueRecordSizeStats};
     //
     #[test]
     fn test_size_of() {
@@ -296,7 +296,7 @@ mod debug {
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 96);
             //
-            assert_eq!(std::mem::size_of::<KeyRecordSizeStats>(), 24);
+            assert_eq!(std::mem::size_of::<KeyPieceSizeStats>(), 24);
             assert_eq!(std::mem::size_of::<ValueRecordSizeStats>(), 24);
         }
         //
@@ -308,7 +308,7 @@ mod debug {
             //
             assert_eq!(std::mem::size_of::<FileDbInner>(), 48);
             //
-            assert_eq!(std::mem::size_of::<KeyRecordSizeStats>(), 12);
+            assert_eq!(std::mem::size_of::<KeyPieceSizeStats>(), 12);
             assert_eq!(std::mem::size_of::<ValueRecordSizeStats>(), 12);
         }
     }

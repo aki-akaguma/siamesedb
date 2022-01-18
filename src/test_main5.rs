@@ -27,16 +27,17 @@ fn open_db_map(db_name: &str) -> Result<FileDbMapDbString, std::io::Error> {
     db.db_map_string_with_params(
         "some_map1",
         FileDbParams {
-            key_buf_size: FileBufSizeParam::PerMille(1000),
-            idx_buf_size: FileBufSizeParam::PerMille(1000),
             htx_buf_size: FileBufSizeParam::PerMille(1000),
+            idx_buf_size: FileBufSizeParam::PerMille(1000),
+            key_buf_size: FileBufSizeParam::PerMille(1000),
+            val_buf_size: FileBufSizeParam::PerMille(1000),
             /*
             key_buf_size: FileBufSizeParam::PerMille(100),
             idx_buf_size: FileBufSizeParam::PerMille(300),
             key_buf_size: FileBufSizeParam::Auto,
             idx_buf_size: FileBufSizeParam::Auto,
             */
-            ..Default::default()
+            //..Default::default()
         },
     )
 }
@@ -83,33 +84,23 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
             break;
         }
         if ki % BULK_COUNT == 0 {
-            #[cfg(feature = "htx")]
             _test_write_one(&mut db_map, &kv_vec)?;
-            #[cfg(not(feature = "htx"))]
-            db_map.bulk_put_string(&kv_vec)?;
             kv_vec.clear();
         }
         let (k, v) = conv_to_kv_string(ki, vi);
         kv_vec.push((k, v));
     }
     if !kv_vec.is_empty() {
-        #[cfg(feature = "htx")]
         _test_write_one(&mut db_map, &kv_vec)?;
-        #[cfg(not(feature = "htx"))]
-        db_map.bulk_put_string(&kv_vec)?;
     }
     db_map.flush()
 }
 
-#[cfg(feature = "htx")]
 fn _test_write_one(
     db_map: &mut FileDbMapDbString,
     key_vec: &[(DbString, String)],
 ) -> Result<(), std::io::Error> {
-    let keys: Vec<(DbString, &[u8])> = key_vec
-        .iter()
-        .map(|(a, b)| (a.clone(), b.as_bytes()))
-        .collect();
+    let keys: Vec<(&DbString, &[u8])> = key_vec.iter().map(|(a, b)| (a, b.as_bytes())).collect();
     db_map.bulk_put(&keys)
 }
 

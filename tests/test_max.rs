@@ -16,12 +16,12 @@ mod test {
         let val2 = "abc".repeat(256 * 1024 * 1024);
         assert!(val2.len() >= 768 * 1024 * 1024);
         // put
-        db_map.put_string(key.into(), val).unwrap();
+        db_map.put_string(key, val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
         // modify
-        db_map.put_string(key.into(), &val2).unwrap();
+        db_map.put_string(key, &val2).unwrap();
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
         // delete

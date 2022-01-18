@@ -70,15 +70,15 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
     fn count_of_free_node(&self) -> Result<CountOfPerSize> {
         RefCell::borrow(&self.0).count_of_free_node()
     }
-    /// count of the free key record
-    fn count_of_free_key_record(&self) -> Result<CountOfPerSize> {
-        RefCell::borrow(&self.0).count_of_free_key_record()
+    /// count of the free key piece
+    fn count_of_free_key_piece(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_key_piece()
     }
-    /// count of the free value record
-    fn count_of_free_value_record(&self) -> Result<CountOfPerSize> {
-        RefCell::borrow(&self.0).count_of_free_value_record()
+    /// count of the free value piece
+    fn count_of_free_value_piece(&self) -> Result<CountOfPerSize> {
+        RefCell::borrow(&self.0).count_of_free_value_piece()
     }
-    /// count of the used record and the used node
+    /// count of the used piece and the used node
     fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)> {
         RefCell::borrow(&self.0).count_of_used_node()
     }
@@ -87,13 +87,13 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
     fn buf_stats(&self) -> Vec<(String, i64)> {
         RefCell::borrow(&self.0).buf_stats()
     }
-    /// key record size statistics
-    fn key_record_size_stats(&self) -> Result<RecordSizeStats<Key>> {
-        RefCell::borrow(&self.0).key_record_size_stats()
+    /// key piece size statistics
+    fn key_piece_size_stats(&self) -> Result<RecordSizeStats<Key>> {
+        RefCell::borrow(&self.0).key_piece_size_stats()
     }
-    /// value record size statistics
-    fn value_record_size_stats(&self) -> Result<RecordSizeStats<Value>> {
-        RefCell::borrow(&self.0).value_record_size_stats()
+    /// value piece size statistics
+    fn value_piece_size_stats(&self) -> Result<RecordSizeStats<Value>> {
+        RefCell::borrow(&self.0).value_piece_size_stats()
     }
     /// keys count statistics
     fn keys_count_stats(&self) -> Result<KeysCountStats> {

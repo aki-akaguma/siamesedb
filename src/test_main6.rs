@@ -83,33 +83,23 @@ fn _test_write(db_name: &str) -> Result<(), std::io::Error> {
             break;
         }
         if ki % BULK_COUNT == 0 {
-            #[cfg(feature = "htx")]
             _test_write_one(&mut db_map, &kv_vec)?;
-            #[cfg(not(feature = "htx"))]
-            db_map.bulk_put_string(&kv_vec)?;
             kv_vec.clear();
         }
         let (k, v) = conv_to_kv_string(ki, vi);
         kv_vec.push((k, v));
     }
     if !kv_vec.is_empty() {
-        #[cfg(feature = "htx")]
         _test_write_one(&mut db_map, &kv_vec)?;
-        #[cfg(not(feature = "htx"))]
-        db_map.bulk_put_string(&kv_vec)?;
     }
     db_map.flush()
 }
 
-#[cfg(feature = "htx")]
 fn _test_write_one(
     db_map: &mut FileDbMapDbBytes,
     key_vec: &[(DbBytes, String)],
 ) -> Result<(), std::io::Error> {
-    let keys: Vec<(DbBytes, &[u8])> = key_vec
-        .iter()
-        .map(|(a, b)| (a.clone(), b.as_bytes()))
-        .collect();
+    let keys: Vec<(&DbBytes, &[u8])> = key_vec.iter().map(|(a, b)| (a, b.as_bytes())).collect();
     db_map.bulk_put(&keys)
 }
 

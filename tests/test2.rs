@@ -39,7 +39,7 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             for (k, v) in &data {
-                db_map.put(k.into(), v.as_bytes()).unwrap();
+                db_map.put(k, v.as_bytes()).unwrap();
             }
             //
             db_map.sync_data().unwrap();
@@ -55,7 +55,7 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             for (k, v) in data {
-                db_map.put(k.into(), v.as_bytes()).unwrap();
+                db_map.put(k, v.as_bytes()).unwrap();
             }
             //
             db_map.flush().unwrap();
@@ -69,7 +69,7 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             for (k, v) in data {
-                db_map.put(k.into(), v.as_bytes()).unwrap();
+                db_map.put(k, v.as_bytes()).unwrap();
             }
             //
             db_map.flush().unwrap();
@@ -83,13 +83,13 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             db_map
-                .put_string("9909909900".into(), "TEST, v9909909900")
+                .put_string("9909909900", "TEST, v9909909900")
                 .unwrap();
             db_map
-                .put_string("9909909901".into(), "TEST, v9909909901")
+                .put_string("9909909901", "TEST, v9909909901")
                 .unwrap();
             db_map
-                .put_string("9909909902".into(), "TEST, v9909909902")
+                .put_string("9909909902", "TEST, v9909909902")
                 .unwrap();
             db_map.flush().unwrap();
         });
@@ -148,13 +148,13 @@ mod test2 {
         //
         do_file_map_string(db_name, |mut db_map: FileDbMapDbString| {
             db_map
-                .put_string("9909909900".into(), "TEST, v9909909900")
+                .put_string("9909909900", "TEST, v9909909900")
                 .unwrap();
             db_map
-                .put_string("9909909901".into(), "TEST, v9909909901")
+                .put_string("9909909901", "TEST, v9909909901")
                 .unwrap();
             db_map
-                .put_string("9909909902".into(), "TEST, v9909909902")
+                .put_string("9909909902", "TEST, v9909909902")
                 .unwrap();
             db_map.flush().unwrap();
         });

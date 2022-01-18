@@ -3,11 +3,11 @@ mod test_iter {
     //
     fn basic_test_map_string<T: DbMap<DbString>>(db_map: &mut T) {
         // insert
-        db_map.put_string("key01".into(), "value1").unwrap();
-        db_map.put_string("key02".into(), "value2").unwrap();
-        db_map.put_string("key03".into(), "value3").unwrap();
-        db_map.put_string("key04".into(), "value4").unwrap();
-        db_map.put_string("key05".into(), "value5").unwrap();
+        db_map.put_string("key01", "value1").unwrap();
+        db_map.put_string("key02", "value2").unwrap();
+        db_map.put_string("key03", "value3").unwrap();
+        db_map.put_string("key04", "value4").unwrap();
+        db_map.put_string("key05", "value5").unwrap();
         // iterator
         let mut iter = db_map.iter_mut();
         assert_eq!(iter.next(), Some(("key01".into(), "value1".into())));
@@ -77,7 +77,7 @@ mod test_iter {
         for i in 0..LOOP_MAX {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            db_map.put_string(key.into(), &value).unwrap();
+            db_map.put_string(&key, &value).unwrap();
         }
         // iterator
         let mut iter = db_map.iter_mut();
@@ -115,11 +115,11 @@ mod test_iter {
     }
     fn basic_test_map_dbint<T: DbMap<DbInt>>(db_map: &mut T) {
         // insert
-        db_map.put_string(12301.into(), "value1").unwrap();
-        db_map.put_string(12302.into(), "value2").unwrap();
-        db_map.put_string(12303.into(), "value3").unwrap();
-        db_map.put_string(12304.into(), "value4").unwrap();
-        db_map.put_string(12305.into(), "value5").unwrap();
+        db_map.put_string(&12301, "value1").unwrap();
+        db_map.put_string(&12302, "value2").unwrap();
+        db_map.put_string(&12303, "value3").unwrap();
+        db_map.put_string(&12304, "value4").unwrap();
+        db_map.put_string(&12305, "value5").unwrap();
         // iterator
         let mut iter = db_map.iter_mut();
         assert_eq!(iter.next(), Some((12301.into(), b"value1".to_vec())));
@@ -189,7 +189,7 @@ mod test_iter {
         for i in 0..LOOP_MAX {
             let key = 12300u64 + i as u64;
             let value = format!("value{}", i);
-            db_map.put_string(key.into(), &value).unwrap();
+            db_map.put_string(&key, &value).unwrap();
         }
         // iterator
         let mut iter = db_map.iter_mut();
@@ -301,7 +301,7 @@ mod test_iter {
         for i in 0..LOOP_MAX {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            db_map.put_string(key.into(), &value).unwrap();
+            db_map.put_string(&key, &value).unwrap();
         }
         // iterator
         let mut iter = db_map.iter_mut();

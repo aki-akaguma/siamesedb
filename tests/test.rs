@@ -6,11 +6,11 @@ mod test {
         let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string("key1".into(), "value1").unwrap();
-        db_map.put_string("key2".into(), "value2").unwrap();
-        db_map.put_string("key3".into(), "value3").unwrap();
-        db_map.put_string("key4".into(), "value4").unwrap();
-        db_map.put_string("key5".into(), "value5").unwrap();
+        db_map.put_string("key1", "value1").unwrap();
+        db_map.put_string("key2", "value2").unwrap();
+        db_map.put_string("key3", "value3").unwrap();
+        db_map.put_string("key4", "value4").unwrap();
+        db_map.put_string("key5", "value5").unwrap();
         // get hits
         let r = db_map.get_string("key1").unwrap();
         assert_eq!(r, Some("value1".to_string()));
@@ -19,7 +19,7 @@ mod test {
         let r = db_map.get_string("key5").unwrap();
         assert_eq!(r, Some("value5".to_string()));
         // modify
-        db_map.put_string("key3".into(), "VALUEVALUE3").unwrap();
+        db_map.put_string("key3", "VALUEVALUE3").unwrap();
         let r = db_map.get_string("key3").unwrap();
         assert_eq!(r, Some("VALUEVALUE3".to_string()));
         // delete
@@ -32,7 +32,7 @@ mod test {
         let val = &"value8".repeat(70);
         let val2 = &"value9".repeat(70);
         // insert
-        db_map.put_string(key.into(), val).unwrap();
+        db_map.put_string(key, val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
@@ -41,7 +41,7 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string(key.into(), val2).unwrap();
+        db_map.put_string(key, val2).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
@@ -55,7 +55,7 @@ mod test {
         let r = db_map.get_string("").unwrap();
         assert_eq!(r, None);
         // insert empty key
-        db_map.put_string("".into(), val2).unwrap();
+        db_map.put_string("", val2).unwrap();
         // get empty key
         let r = db_map.get_string("").unwrap();
         assert_eq!(r, Some(val2.to_string()));
@@ -67,11 +67,11 @@ mod test {
         let r = db_map.get_string(&1023).unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string(1021.into(), "value1").unwrap();
-        db_map.put_string(1022.into(), "value2").unwrap();
-        db_map.put_string(1023.into(), "value3").unwrap();
-        db_map.put_string(1024.into(), "value4").unwrap();
-        db_map.put_string(1025.into(), "value5").unwrap();
+        db_map.put_string(&1021, "value1").unwrap();
+        db_map.put_string(&1022, "value2").unwrap();
+        db_map.put_string(&1023, "value3").unwrap();
+        db_map.put_string(&1024, "value4").unwrap();
+        db_map.put_string(&1025, "value5").unwrap();
         // get hits
         let r = db_map.get_string(&1021).unwrap();
         assert_eq!(r, Some("value1".to_string()));
@@ -80,7 +80,7 @@ mod test {
         let r = db_map.get_string(&1025).unwrap();
         assert_eq!(r, Some("value5".to_string()));
         // modify
-        db_map.put_string(1023.into(), "VALUEVALUE3").unwrap();
+        db_map.put_string(&1023, "VALUEVALUE3").unwrap();
         let r = db_map.get_string(&1023).unwrap();
         assert_eq!(r, Some("VALUEVALUE3".to_string()));
         // delete
@@ -95,11 +95,11 @@ mod test {
         let r = db_map.get_string(b"key1").unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string(b"key1".into(), "value1").unwrap();
-        db_map.put_string(b"key2".into(), "value2").unwrap();
-        db_map.put_string(b"key3".into(), "value3").unwrap();
-        db_map.put_string(b"key4".into(), "value4").unwrap();
-        db_map.put_string(b"key5".into(), "value5").unwrap();
+        db_map.put_string(b"key1", "value1").unwrap();
+        db_map.put_string(b"key2", "value2").unwrap();
+        db_map.put_string(b"key3", "value3").unwrap();
+        db_map.put_string(b"key4", "value4").unwrap();
+        db_map.put_string(b"key5", "value5").unwrap();
         // get hits
         let r = db_map.get_string(b"key1").unwrap();
         assert_eq!(r, Some("value1".to_string()));
@@ -108,7 +108,7 @@ mod test {
         let r = db_map.get_string(b"key5").unwrap();
         assert_eq!(r, Some("value5".to_string()));
         // modify
-        db_map.put_string(b"key3".into(), "VALUEVALUE3").unwrap();
+        db_map.put_string(b"key3", "VALUEVALUE3").unwrap();
         let r = db_map.get_string(b"key3").unwrap();
         assert_eq!(r, Some("VALUEVALUE3".to_string()));
         // delete
@@ -121,7 +121,7 @@ mod test {
         let val = &"value8".repeat(70);
         let val2 = &"value9".repeat(70);
         // insert
-        db_map.put_string(key.into(), val).unwrap();
+        db_map.put_string(key, val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
@@ -130,7 +130,7 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
         // insert
-        db_map.put_string(key.into(), val2).unwrap();
+        db_map.put_string(key, val2).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
@@ -144,7 +144,7 @@ mod test {
         let r = db_map.get_string(b"").unwrap();
         assert_eq!(r, None);
         // insert empty key
-        db_map.put_string(b"".into(), val2).unwrap();
+        db_map.put_string(b"", val2).unwrap();
         // get empty key
         let r = db_map.get_string(b"").unwrap();
         assert_eq!(r, Some(val2.to_string()));
@@ -161,12 +161,12 @@ mod test {
      gloomy February morning some seven or eight years ago and gave Mr.
      Sherlock Holmes a puzzled quarter of an hour.";
         // put
-        db_map.put_string(key.into(), val).unwrap();
+        db_map.put_string(key, val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
         // modify
-        db_map.put_string(key.into(), val2).unwrap();
+        db_map.put_string(key, val2).unwrap();
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
         // delete
@@ -183,12 +183,12 @@ mod test {
      but I have a particular recollection of one which reached us on a
      gloomy February morning some seven or eight years ago and gave Mr.
      Sherlock Holmes a puzzled quarter of an hour.";
-        db_map.put_string(key.into(), val).unwrap();
+        db_map.put_string(&key, val).unwrap();
         // get hits
         let r = db_map.get_string(&key).unwrap();
         assert_eq!(r, Some(val.to_string()));
         // modify
-        db_map.put_string(key.into(), val2).unwrap();
+        db_map.put_string(&key, val2).unwrap();
         let r = db_map.get_string(&key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
         // delete
@@ -206,12 +206,12 @@ mod test {
      gloomy February morning some seven or eight years ago and gave Mr.
      Sherlock Holmes a puzzled quarter of an hour.";
         // put
-        db_map.put_string(key.into(), val).unwrap();
+        db_map.put_string(key, val).unwrap();
         // get hits
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val.to_string()));
         // modify
-        db_map.put_string(key.into(), val2).unwrap();
+        db_map.put_string(key, val2).unwrap();
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, Some(val2.to_string()));
         // delete

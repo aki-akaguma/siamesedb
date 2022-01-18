@@ -51,7 +51,7 @@ fn main() -> std::io::Result<()> {
     //
     let r = db_map.get_string("key1")?;
     assert_eq!(r, None);
-    db_map.put_string("key1".into(), "value1")?;
+    db_map.put_string("key1", "value1")?;
     let r = db_map.get_string("key1")?;
     assert_eq!(r, Some("value1".into()));
     db_map.sync_data()?;
@@ -73,7 +73,7 @@ fn main() -> std::io::Result<()> {
     let mut db_map = db.db_map_int("some_list1")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, None);
-    db_map.put_string(120.into(), "value120")?;
+    db_map.put_string(&120, "value120")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, Some("value120".to_string()));
     db_map.sync_data()?;
@@ -96,9 +96,9 @@ fn main() -> std::io::Result<()> {
     let mut db_map = db.db_map_string("some_map1")?;
     //
     // insert
-    db_map.put_string("key01".into(), "value1").unwrap();
-    db_map.put_string("key02".into(), "value2").unwrap();
-    db_map.put_string("key03".into(), "value3").unwrap();
+    db_map.put_string("key01", "value1").unwrap();
+    db_map.put_string("key02", "value2").unwrap();
+    db_map.put_string("key03", "value3").unwrap();
     //
     // iterator
     let mut iter = db_map.iter();

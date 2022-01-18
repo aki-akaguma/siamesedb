@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.15"
+version = "0.1.16"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -40,8 +40,9 @@ path = "src/check_main.rs"
 
 [features]
 default = ["vf_vu64", "node_cache", "buf_default", "htx"]
-#default = ["vf_vu64", "node_cache", "buf_default", "htx", "print_hits"]
-#default = ["vf_u32u32", "node_cache", "buf_default", "htx"]
+#default = ["vf_vu64", "node_cache", "buf_default", "htx", "print_hits", "tr_dirty"]
+#default = ["vf_u64u64", "node_cache", "buf_default", "htx", "print_hits", "tr_dirty"]
+#default = ["vf_u32u32", "node_cache", "buf_default", "htx", "print_hits", "tr_dirty"]
 #default = ["vf_u64u64", "node_cache", "buf_default", "htx"]
 
 # for developping
@@ -52,23 +53,29 @@ vf_vu64 = ["vf_node_u64"]
 vf_node_u32 = []
 vf_node_u64 = []
 
-buf_default = ["buf_auto_buf_size", "buf_overf_rem_all", "buf_pin_zero"]
+buf_default = ["buf_auto_buf_size", "buf_overf_rem_all", "buf_pin_zero", "buf_hash_turbo"]
 
 buf_auto_buf_size = ["rabuf/buf_auto_buf_size"]
 buf_overf_rem_all = ["rabuf/buf_overf_rem_all"]
 buf_overf_rem_half = ["rabuf/buf_overf_rem_half"]
 buf_pin_zero = ["rabuf/buf_pin_zero"]
+buf_hash_turbo = ["rabuf/buf_hash_turbo"]
 
 buf_lru = ["rabuf/buf_lru"]
 buf_print_hits = ["rabuf/buf_print_hits"]
 buf_stats = ["rabuf/buf_stats"]
 
-node_cache = []
+node_cache = ["oi_hash_turbo"]
 
-htx = []
+htx = ["myhasher"]
+myhasher = []
 
 # under development
 print_hits = ["nc_print_hits", "htx_print_hits", "buf_print_hits"]
+
+oi_hash_turbo = ["oi_myhash"]
+oi_myhash = []
+tr_dirty = []
 
 nc_lfu = []
 nc_lru = []

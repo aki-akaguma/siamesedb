@@ -50,7 +50,7 @@ fn main() -> std::io::Result<()> {
     //
     let r = db_map.get_string("key1")?;
     assert_eq!(r, None);
-    db_map.put_string("key1".into(), "value1")?;
+    db_map.put_string("key1", "value1")?;
     let r = db_map.get_string("key1")?;
     assert_eq!(r, Some("value1".into()));
     db_map.sync_data()?;
@@ -72,7 +72,7 @@ fn main() -> std::io::Result<()> {
     let mut db_map = db.db_map_int("some_list1")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, None);
-    db_map.put_string(120.into(), "value120")?;
+    db_map.put_string(&120, "value120")?;
     let r = db_map.get_string(&120)?;
     assert_eq!(r, Some("value120".to_string()));
     db_map.sync_data()?;
@@ -95,9 +95,9 @@ fn main() -> std::io::Result<()> {
     let mut db_map = db.db_map_string("some_map1")?;
     //
     // insert
-    db_map.put_string("key01".into(), "value1").unwrap();
-    db_map.put_string("key02".into(), "value2").unwrap();
-    db_map.put_string("key03".into(), "value3").unwrap();
+    db_map.put_string("key01", "value1").unwrap();
+    db_map.put_string("key02", "value2").unwrap();
+    db_map.put_string("key03", "value3").unwrap();
     //
     // iterator
     let mut iter = db_map.iter();
@@ -219,26 +219,33 @@ pub trait DbXxx<KT: DbMapKeyType>: DbXxxObjectSafe<KT> {
 
     /// inserts a key-value pair into the db.
     #[inline]
-    fn put(&mut self, key_kt: KT, value: &[u8]) -> Result<()> {
+    fn put<'a, Q>(&mut self, key: &'a Q, value: &[u8]) -> Result<()>
+    where
+        KT: From<&'a Q>,
+        Q: Ord + ?Sized,
+    {
+        let key_kt: KT = From::from(key);
         self.put_kt(&key_kt, value)
     }
 
     /// inserts a key-value pair into the db-map. the value is `&str` and it is converted to `&[u8]`
     #[inline]
-    fn put_string(&mut self, key: KT, value: &str) -> Result<()>
+    fn put_string<'a, Q>(&mut self, key: &'a Q, value: &str) -> Result<()>
     where
-        KT: Ord,
+        KT: From<&'a Q>,
+        Q: Ord + ?Sized,
     {
         self.put(key, value.as_bytes())
     }
 
     /// inserts bulk key-value pairs into the db.
-    fn bulk_put(&mut self, bulk: &[(KT, &[u8])]) -> Result<()>
+    fn bulk_put<'a, Q>(&mut self, bulk: &[(&'a Q, &[u8])]) -> Result<()>
     where
-        KT: Ord + Clone,
+        KT: From<&'a Q>,
+        Q: Ord + ?Sized,
     {
         let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(&(a.0)));
+        vec.sort_by(|a, b| b.0.cmp(a.0));
         while let Some(kv) = vec.pop() {
             self.put(kv.0, kv.1)?;
         }
@@ -247,12 +254,13 @@ pub trait DbXxx<KT: DbMapKeyType>: DbXxxObjectSafe<KT> {
 
     /// inserts bulk key-value pairs into the db.
     #[inline]
-    fn bulk_put_string(&mut self, bulk: &[(KT, String)]) -> Result<()>
+    fn bulk_put_string<'a, Q>(&mut self, bulk: &[(&'a Q, String)]) -> Result<()>
     where
-        KT: Ord + Clone,
+        KT: From<&'a Q>,
+        Q: Ord + ?Sized,
     {
         let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(&(a.0)));
+        vec.sort_by(|a, b| b.0.cmp(a.0));
         while let Some(kv) = vec.pop() {
             self.put(kv.0, kv.1.as_bytes())?;
         }
@@ -349,8 +357,46 @@ pub trait HashValue: Hash {
     /// hash value for htx
     fn hash_value(&self) -> u64 {
         use std::hash::Hasher;
+        #[cfg(not(feature = "myhasher"))]
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        #[cfg(feature = "myhasher")]
+        let mut hasher = MyHasher::default();
         self.hash(&mut hasher);
         hasher.finish()
     }
+}
+
+#[derive(Default)]
+struct MyHasher(u64);
+
+impl std::hash::Hasher for MyHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk8 in bytes.chunks(8) {
+            let len = chunk8.len();
+            if len == 8 {
+                let mut ary = [0u8; 8];
+                ary.copy_from_slice(chunk8);
+                let a = u64::from_le_bytes(ary);
+                self.0 = _xorshift64s(self.0.wrapping_add(a));
+            } else {
+                let mut a = 0;
+                for b in chunk8 {
+                    a = (a << 8) | *b as u64;
+                }
+                self.0 = _xorshift64s(self.0.wrapping_add(a));
+            }
+        }
+    }
+}
+
+#[inline]
+fn _xorshift64s(a: u64) -> u64 {
+    let mut x = a;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    x
 }

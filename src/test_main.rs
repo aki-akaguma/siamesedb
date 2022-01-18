@@ -53,26 +53,26 @@ fn _test_a1() {
     */
     /*
     finish put: 9.634µs/op
-    record free: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
-    record used: [(16, 100), (24, 999900), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    piece free: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    piece used: [(16, 100), (24, 999900), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
     node free: [(32, 524), (72, 0), (104, 0), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     node used: [(32, 0), (72, 138135), (104, 20984), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     db_map.is_balanced(): true
     db_map.is_dense(): true
     db_map.depth_of_node_tree(): 7
-    record_size_stats(): [(16, 100), (24, 999900)]
+    piece_size_stats(): [(16, 100), (24, 999900)]
     start get
     finish get: 4.097µs/op
     start delete
     finish delete: 7.555µs/op
-    record free: [(16, 100), (24, 999900), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
-    record used: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    piece free: [(16, 100), (24, 999900), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    piece used: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
     node free: [(32, 524), (72, 138134), (104, 20984), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     node used: [(32, 0), (72, 1), (104, 0), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     db_map.is_balanced(): true
     db_map.is_dense(): true
     db_map.depth_of_node_tree(): 1
-    record_size_stats(): []
+    piece_size_stats(): []
     21.65user 0.82system 0:23.24elapsed 96%CPU (0avgtext+0avgdata 2792maxresident)k
     672inputs+141216outputs (4major+353minor)pagefaults 0swaps
     0
@@ -178,13 +178,13 @@ fn _test_a2() {
     //
     // 100m
     //
-    // record free: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
-    // record used: [(16, 100), (24, 999900), (32, 99000000), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    // piece free: [(16, 0), (24, 0), (32, 0), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
+    // piece used: [(16, 100), (24, 999900), (32, 99000000), (48, 0), (64, 0), (256, 0), (512, 0), (2048, 0)]
     // node free: [(32, 503), (72, 1), (104, 0), (144, 0), (176, 0), (216, 0), (232, 0), (256, 0)]
     // node used: [(32, 0), (72, 8605028), (104, 5307029), (144, 2000655), (176, 0), (216, 0), (232, 0), (256, 0)]
     // db_map.is_balanced(): true
     // db_map.is_dense(): true
-    // record_size_stats(): [(16, 100), (24, 999900), (32, 99000000)]
+    // piece_size_stats(): [(16, 100), (24, 999900), (32, 99000000)]
     //
     /*
     finish put: 12.99µs/op
@@ -213,16 +213,16 @@ fn _test00_map() {
     let mut db_map = db.db_map_string("some_map1").unwrap();
     //
     {
-        db_map.put_string("key1".into(), "value1").unwrap();
-        db_map.put_string("key2".into(), "value2").unwrap();
-        db_map.put_string("key3".into(), "value3").unwrap();
-        db_map.put_string("key4".into(), "value4").unwrap();
-        db_map.put_string("key5".into(), "value5").unwrap();
+        db_map.put_string("key1", "value1").unwrap();
+        db_map.put_string("key2", "value2").unwrap();
+        db_map.put_string("key3", "value3").unwrap();
+        db_map.put_string("key4", "value4").unwrap();
+        db_map.put_string("key5", "value5").unwrap();
         //
-        db_map.put_string("key6".into(), "value6").unwrap();
-        db_map.put_string("key7".into(), "value7").unwrap();
-        db_map.put_string("key8".into(), "value8").unwrap();
-        db_map.put_string("key9".into(), "value9").unwrap();
+        db_map.put_string("key6", "value6").unwrap();
+        db_map.put_string("key7", "value7").unwrap();
+        db_map.put_string("key8", "value8").unwrap();
+        db_map.put_string("key9", "value9").unwrap();
         //
         db_map.sync_data().unwrap();
     }
@@ -271,24 +271,24 @@ fn _test00_map_iter() {
     //
     {
         // insert
-        db_map.put_string("key01".into(), "value1").unwrap();
-        db_map.put_string("key02".into(), "value2").unwrap();
-        db_map.put_string("key03".into(), "value3").unwrap();
-        db_map.put_string("key04".into(), "value4").unwrap();
-        db_map.put_string("key05".into(), "value5").unwrap();
-        db_map.put_string("key06".into(), "value6").unwrap();
-        db_map.put_string("key07".into(), "value7").unwrap();
-        db_map.put_string("key08".into(), "value8").unwrap();
-        db_map.put_string("key09".into(), "value9").unwrap();
-        db_map.put_string("key10".into(), "value10").unwrap();
-        db_map.put_string("key11".into(), "value11").unwrap();
-        db_map.put_string("key12".into(), "value12").unwrap();
-        db_map.put_string("key13".into(), "value13").unwrap();
-        db_map.put_string("key14".into(), "value14").unwrap();
-        db_map.put_string("key15".into(), "value15").unwrap();
-        db_map.put_string("key16".into(), "value16").unwrap();
-        db_map.put_string("key17".into(), "value17").unwrap();
-        db_map.put_string("key18".into(), "value18").unwrap();
+        db_map.put_string("key01", "value1").unwrap();
+        db_map.put_string("key02", "value2").unwrap();
+        db_map.put_string("key03", "value3").unwrap();
+        db_map.put_string("key04", "value4").unwrap();
+        db_map.put_string("key05", "value5").unwrap();
+        db_map.put_string("key06", "value6").unwrap();
+        db_map.put_string("key07", "value7").unwrap();
+        db_map.put_string("key08", "value8").unwrap();
+        db_map.put_string("key09", "value9").unwrap();
+        db_map.put_string("key10", "value10").unwrap();
+        db_map.put_string("key11", "value11").unwrap();
+        db_map.put_string("key12", "value12").unwrap();
+        db_map.put_string("key13", "value13").unwrap();
+        db_map.put_string("key14", "value14").unwrap();
+        db_map.put_string("key15", "value15").unwrap();
+        db_map.put_string("key16", "value16").unwrap();
+        db_map.put_string("key17", "value17").unwrap();
+        db_map.put_string("key18", "value18").unwrap();
         //
         println!("{}", db_map.graph_string_with_key_string().unwrap());
         //
@@ -333,7 +333,7 @@ fn _test00_map_iter2() {
         for i in 0..100 {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
-            db_map.put_string(key.into(), &value).unwrap();
+            db_map.put_string(&key, &value).unwrap();
         }
         //
         println!("{}", db_map.graph_string_with_key_string().unwrap());
@@ -358,16 +358,16 @@ fn _test00_list() {
     let mut db_list = db.db_map_int("some_list1").unwrap();
     //
     {
-        db_list.put_string(1.into(), "value1").unwrap();
-        db_list.put_string(2.into(), "value2").unwrap();
-        db_list.put_string(3.into(), "value3").unwrap();
-        db_list.put_string(4.into(), "value4").unwrap();
-        db_list.put_string(5.into(), "value5").unwrap();
+        db_list.put_string(&1, "value1").unwrap();
+        db_list.put_string(&2, "value2").unwrap();
+        db_list.put_string(&3, "value3").unwrap();
+        db_list.put_string(&4, "value4").unwrap();
+        db_list.put_string(&5, "value5").unwrap();
         //
-        db_list.put_string(6.into(), "value6").unwrap();
-        db_list.put_string(7.into(), "value7").unwrap();
-        db_list.put_string(8.into(), "value8").unwrap();
-        db_list.put_string(9.into(), "value9").unwrap();
+        db_list.put_string(&6, "value6").unwrap();
+        db_list.put_string(&7, "value7").unwrap();
+        db_list.put_string(&8, "value8").unwrap();
+        db_list.put_string(&9, "value9").unwrap();
         /*
          */
         /*
@@ -430,25 +430,25 @@ fn _test01() {
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, None);
     //
-    db_map.put_string("key1".into(), "value1").unwrap();
+    db_map.put_string("key1", "value1").unwrap();
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value1".to_string()));
     //
-    db_map.put_string("key2".into(), "value2").unwrap();
+    db_map.put_string("key2", "value2").unwrap();
     let r = db_map.get_string("key2").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key0".into(), "value0").unwrap();
+    db_map.put_string("key0", "value0").unwrap();
     let r = db_map.get_string("key0").unwrap();
     assert_eq!(r, Some("value0".to_string()));
     //
     println!("{}", db_map.graph_string_with_key_string().unwrap());
-    db_map.put_string("key1".into(), "value2").unwrap();
+    db_map.put_string("key1", "value2").unwrap();
     println!("{}", db_map.graph_string_with_key_string().unwrap());
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value2".to_string()));
     //
-    db_map.put_string("key1".into(), "value99").unwrap();
+    db_map.put_string("key1", "value99").unwrap();
     let r = db_map.get_string("key1").unwrap();
     assert_eq!(r, Some("value99".to_string()));
     //
@@ -474,19 +474,19 @@ fn _test02() {
     for i in 1..20 {
         let key = format!("key{:02}", i);
         let val = format!("value{:02}", i);
-        db_map.put_string(key.into(), &val).unwrap();
+        db_map.put_string(&key, &val).unwrap();
     }
     //
     db_map.sync_data().unwrap();
     //
     println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!(
-        "key record free: {:?}",
-        db_map.count_of_free_key_record().unwrap()
+        "key piece free: {:?}",
+        db_map.count_of_free_key_piece().unwrap()
     );
     println!(
-        "value record free: {:?}",
-        db_map.count_of_free_value_record().unwrap()
+        "value piece free: {:?}",
+        db_map.count_of_free_value_piece().unwrap()
     );
     println!("free: {:?}", db_map.count_of_free_node().unwrap());
     println!("used: {:?}", db_map.count_of_used_node().unwrap());
@@ -536,12 +536,12 @@ fn _test02() {
     //println!("{}", db_map.graph_string().unwrap());
     println!("{}", db_map.graph_string_with_key_string().unwrap());
     println!(
-        "key record free: {:?}",
-        db_map.count_of_free_key_record().unwrap()
+        "key piece free: {:?}",
+        db_map.count_of_free_key_piece().unwrap()
     );
     println!(
-        "value record free: {:?}",
-        db_map.count_of_free_value_record().unwrap()
+        "value piece free: {:?}",
+        db_map.count_of_free_value_piece().unwrap()
     );
     println!("free: {:?}", db_map.count_of_free_node().unwrap());
     println!("used: {:?}", db_map.count_of_used_node().unwrap());
@@ -593,7 +593,7 @@ where
         for i in 0..test_cnf.max_cnt {
             let key = fmt_key_func(i);
             let val = fmt_val_func(i);
-            db_map.put_string(key.into(), &val).unwrap();
+            db_map.put_string(&key, &val).unwrap();
         }
         let instant_ed = std::time::Instant::now();
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
@@ -661,7 +661,7 @@ where
             */
             let key = fmt_key_func(i);
             let val = fmt_val_func(i);
-            db_list.put_string(key.into(), &val).unwrap();
+            db_list.put_string(&key, &val).unwrap();
         }
         let instant_ed = std::time::Instant::now();
         let instant_per_op = (instant_ed - instant_st) / test_cnf.max_cnt.try_into().unwrap();
@@ -712,16 +712,16 @@ fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     println!(
-        "key record free: {:?}",
-        db_map.count_of_free_key_record().unwrap()
+        "key piece free: {:?}",
+        db_map.count_of_free_key_piece().unwrap()
     );
     let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
-    println!("key record used: {:?}", key_rec_v);
+    println!("key piece used: {:?}", key_rec_v);
     println!(
-        "value record free: {:?}",
-        db_map.count_of_free_value_record().unwrap()
+        "value piece free: {:?}",
+        db_map.count_of_free_value_piece().unwrap()
     );
-    println!("value record used: {:?}", val_rec_v);
+    println!("value piece used: {:?}", val_rec_v);
     println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
     println!("db_map.is_balanced(): {}", db_map.is_balanced().unwrap());
@@ -736,12 +736,12 @@ fn _print_check_db_map(db_map: &FileDbMapDbString, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
     println!(
-        "key_record_size_stats(): {}",
-        db_map.key_record_size_stats().unwrap()
+        "key_piece_size_stats(): {}",
+        db_map.key_piece_size_stats().unwrap()
     );
     println!(
-        "value_record_size_stats(): {}",
-        db_map.value_record_size_stats().unwrap()
+        "value_piece_size_stats(): {}",
+        db_map.value_piece_size_stats().unwrap()
     );
 }
 
@@ -750,16 +750,16 @@ fn _print_check_db_list(db_map: &FileDbMapDbInt, check_cnf: CheckC) {
         println!("{}", db_map.graph_string_with_key_string().unwrap());
     }
     println!(
-        "key record free: {:?}",
-        db_map.count_of_free_key_record().unwrap()
+        "key piece free: {:?}",
+        db_map.count_of_free_key_piece().unwrap()
     );
     let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
-    println!("key record used: {:?}", key_rec_v);
+    println!("key piece used: {:?}", key_rec_v);
     println!(
-        "value record free: {:?}",
-        db_map.count_of_free_value_record().unwrap()
+        "value piece free: {:?}",
+        db_map.count_of_free_value_piece().unwrap()
     );
-    println!("value record used: {:?}", val_rec_v);
+    println!("value piece used: {:?}", val_rec_v);
     println!("node free: {:?}", db_map.count_of_free_node().unwrap());
     println!("node used: {:?}", node_v);
     println!("db_list.is_balanced(): {}", db_map.is_balanced().unwrap());
@@ -774,12 +774,12 @@ fn _print_check_db_list(db_map: &FileDbMapDbInt, check_cnf: CheckC) {
     #[cfg(feature = "buf_stats")]
     println!("db_list.buf_stats(): {:?}", db_map.buf_stats());
     println!(
-        "key_record_size_stats(): {}",
-        db_map.key_record_size_stats().unwrap()
+        "key_piece_size_stats(): {}",
+        db_map.key_piece_size_stats().unwrap()
     );
     println!(
-        "value_record_size_stats(): {}",
-        db_map.value_record_size_stats().unwrap()
+        "value_piece_size_stats(): {}",
+        db_map.value_piece_size_stats().unwrap()
     );
 }
 

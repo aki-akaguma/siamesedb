@@ -2,6 +2,16 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.16 (2022-01-18)
+=====
+
+* organize source code.
+* add `myhasher` to features.
+* add `prepare()` to `VarFile`.
+* change `put()` to `put<'a, Q>()`
+* rename `Record` to `Piece`.
+* adds `buf_hash_turbo` to feature. important for performance.
+
 0.1.15 (2022-01-07)
 =====
 

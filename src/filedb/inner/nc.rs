@@ -4,8 +4,10 @@ use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::io::Result;
 
+//const CACHE_SIZE: usize = 8;
+const CACHE_SIZE: usize = 16;
 //const CACHE_SIZE: usize = 32;
-const CACHE_SIZE: usize = 64;
+//const CACHE_SIZE: usize = 64;
 
 //const CACHE_SIZE: usize = 128;
 //const CACHE_SIZE: usize = 256;
@@ -15,15 +17,15 @@ const CACHE_SIZE: usize = 64;
 #[derive(Debug)]
 struct NodeCacheBean {
     node: Option<IdxNode>,
-    node_offset: NodeOffset,
-    node_size: NodeSize,
+    node_offset: NodePieceOffset,
+    node_size: NodePieceSize,
     dirty: bool,
     #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
     uses: u32,
 }
 
 impl NodeCacheBean {
-    fn new(node: IdxNode, node_size: NodeSize, dirty: bool) -> Self {
+    fn new(node: IdxNode, node_size: NodePieceSize, dirty: bool) -> Self {
         let node_offset = node.get_ref().offset();
         Self {
             node: Some(node),
@@ -114,7 +116,7 @@ impl NodeCache {
         self.vec.len()
     }
     #[inline]
-    pub fn get(&mut self, offset: &NodeOffset) -> Option<IdxNode> {
+    pub fn get(&mut self, offset: &NodePieceOffset) -> Option<IdxNode> {
         match self.map.get(&offset.as_value()) {
             Some(idx) => {
                 #[cfg(feature = "nc_print_hits")]
@@ -146,7 +148,7 @@ impl NodeCache {
         }
     }
     #[inline]
-    pub fn get_node_size(&mut self, offset: &NodeOffset) -> Option<NodeSize> {
+    pub fn get_node_size(&mut self, offset: &NodePieceOffset) -> Option<NodePieceSize> {
         match self.map.get(&offset.as_value()) {
             Some(idx) => {
                 #[cfg(feature = "nc_print_hits")]
@@ -170,7 +172,7 @@ impl NodeCache {
         &mut self,
         file: &mut VarFile,
         node: IdxNode,
-        node_size: NodeSize,
+        node_size: NodePieceSize,
         dirty: bool,
     ) -> Result<IdxNode> {
         let node_offset = node.get_ref().offset();
@@ -271,7 +273,7 @@ impl NodeCache {
         }
         */
     }
-    pub fn delete(&mut self, node_offset: &NodeOffset) -> Option<NodeSize> {
+    pub fn delete(&mut self, node_offset: &NodePieceOffset) -> Option<NodePieceSize> {
         match self.map.remove(&node_offset.as_value()) {
             Some(idx) => {
                 let ncb = self.vec.get_mut(idx).unwrap();

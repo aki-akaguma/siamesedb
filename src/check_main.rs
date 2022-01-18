@@ -119,16 +119,16 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
         }
         //
         println!(
-            "key record free: {:?}",
-            db_map.count_of_free_key_record().unwrap()
+            "key piece free: {:?}",
+            db_map.count_of_free_key_piece().unwrap()
         );
         let (key_rec_v, val_rec_v, node_v) = db_map.count_of_used_node().unwrap();
-        println!("key record used: {:?}", key_rec_v);
+        println!("key piece used: {:?}", key_rec_v);
         println!(
-            "value record free: {:?}",
-            db_map.count_of_free_value_record().unwrap()
+            "value piece free: {:?}",
+            db_map.count_of_free_value_piece().unwrap()
         );
-        println!("value record used: {:?}", val_rec_v);
+        println!("value piece used: {:?}", val_rec_v);
         println!("node free: {:?}", db_map.count_of_free_node().unwrap());
         println!("node used: {:?}", node_v);
         //
@@ -142,12 +142,12 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
         println!("db_map.buf_stats(): {:?}", db_map.buf_stats());
         //
         println!(
-            "key_record_size_stats(): {}",
-            db_map.key_record_size_stats().unwrap()
+            "key_piece_size_stats(): {}",
+            db_map.key_piece_size_stats().unwrap()
         );
         println!(
-            "value_record_size_stats(): {}",
-            db_map.value_record_size_stats().unwrap()
+            "value_piece_size_stats(): {}",
+            db_map.value_piece_size_stats().unwrap()
         );
         println!("keys_count_stats(): {}", db_map.keys_count_stats().unwrap());
         println!("key_length_stats(): {}", db_map.key_length_stats().unwrap());
