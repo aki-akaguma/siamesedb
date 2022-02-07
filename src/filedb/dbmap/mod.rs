@@ -107,6 +107,10 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbMap<KT> {
     fn value_length_stats(&self) -> Result<LengthStats<Value>> {
         RefCell::borrow(&self.0).value_length_stats()
     }
+    #[cfg(feature = "htx")]
+    fn htx_filling_rate_per_mill(&self) -> Result<(u64, u32)> {
+        RefCell::borrow(&self.0).htx_filling_rate_per_mill()
+    }
 }
 
 impl<KT: DbMapKeyType> DbXxxBase for FileDbMap<KT> {

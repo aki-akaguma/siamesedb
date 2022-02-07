@@ -5,7 +5,6 @@ use super::super::{
 use super::semtype::*;
 use super::tr::IdxNode;
 use super::{idx, key, val};
-use rabuf::SmallRead;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -13,6 +12,12 @@ use std::convert::TryInto;
 use std::io::Result;
 use std::path::Path;
 use std::rc::Rc;
+
+#[cfg(all(
+    feature = "idx_find_uu",
+    any(feature = "vf_node_u32", feature = "vf_node_u64")
+))]
+use rabuf::SmallRead;
 
 #[cfg(feature = "htx")]
 use super::htx;
@@ -66,14 +71,19 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         self.key_file.read_piece_only_key(piece_offset)
     }
     #[inline]
+    fn load_key_piece_size(&self, piece_offset: KeyPieceOffset) -> Result<KeyPieceSize> {
+        self.key_file.read_piece_only_size(piece_offset)
+    }
+    #[inline]
+    fn load_key_length(&self, piece_offset: KeyPieceOffset) -> Result<KeyLength> {
+        self.key_file.read_piece_only_key_length(piece_offset)
+    }
+    //
+    #[inline]
     fn load_value(&self, piece_offset: KeyPieceOffset) -> Result<Vec<u8>> {
         debug_assert!(!piece_offset.is_zero());
         let value_offset = self.key_file.read_piece_only_value_offset(piece_offset)?;
         self.val_file.read_piece_only_value(value_offset)
-    }
-    #[inline]
-    fn load_key_piece_size(&self, piece_offset: KeyPieceOffset) -> Result<KeyPieceSize> {
-        self.key_file.read_piece_only_size(piece_offset)
     }
     #[inline]
     fn load_value_piece_size(&self, piece_offset: KeyPieceOffset) -> Result<ValuePieceSize> {
@@ -81,16 +91,15 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         self.val_file.read_piece_only_size(value_offset)
     }
     #[inline]
-    fn load_key_length(&self, piece_offset: KeyPieceOffset) -> Result<KeyLength> {
-        self.key_file.read_piece_only_key_length(piece_offset)
-    }
-    #[inline]
     fn load_value_length(&self, piece_offset: KeyPieceOffset) -> Result<ValueLength> {
         let value_offset = self.key_file.read_piece_only_value_offset(piece_offset)?;
         self.val_file.read_piece_only_value_length(value_offset)
     }
 
-    #[cfg(any(feature = "vf_node_u32", feature = "vf_node_u64"))]
+    #[cfg(all(
+        feature = "idx_find_uu",
+        any(feature = "vf_node_u32", feature = "vf_node_u64")
+    ))]
     fn keys_binary_search_uu_kt(
         &mut self,
         node_offset: NodePieceOffset,
@@ -106,7 +115,7 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         //
         let _ = locked_idx.0.seek_from_start(node_offset)?;
         let _ = locked_idx.0.read_node_size()?;
-        let is_leaf = locked_idx.0.read_u8()?;
+        let is_leaf = locked_idx.0.read_u16_le()?;
         let keys_count = locked_idx.0.read_keys_count()?;
         if keys_count.is_zero() {
             return Ok(Err(NodePieceOffset::new(0)));
@@ -153,6 +162,7 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         }
     }
     //
+    #[cfg(not(feature = "tr_has_short_key"))]
     fn keys_binary_search_kt(
         &mut self,
         keys: &[KeyPieceOffset],
@@ -179,6 +189,55 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                     return Ok(Ok(mid));
                 }
                 Ordering::Less => right = mid,
+            }
+        }
+        Ok(Err(left))
+    }
+    #[cfg(feature = "tr_has_short_key")]
+    fn keys_binary_search_kt(
+        &mut self,
+        keys: &[KeyPieceOffset],
+        short_keys: &[Option<Vec<u8>>],
+        key_kt: &KT,
+    ) -> Result<std::result::Result<usize, usize>> {
+        let mut locked_key = self.key_file.0.borrow_mut();
+        //
+        let keys_count = keys.len();
+        //
+        let mut left = 0;
+        let mut right = keys_count;
+        while left < right {
+            let mid = (left + right) / 2;
+            //
+            #[cfg(feature = "siamese_debug")]
+            let short_key = &short_keys[mid];
+            #[cfg(not(feature = "siamese_debug"))]
+            let short_key = unsafe { &*short_keys.get_unchecked(mid) };
+            //
+            if let Some(key_string_vec) = short_key {
+                match key_kt.cmp_u8(&key_string_vec) {
+                    Ordering::Greater => left = mid + 1,
+                    Ordering::Equal => {
+                        return Ok(Ok(mid));
+                    }
+                    Ordering::Less => right = mid,
+                }
+            } else {
+                // SAFETY: `mid` is limited by `[left; right)` bound.
+                #[cfg(feature = "siamese_debug")]
+                let key_offset = keys[mid];
+                #[cfg(not(feature = "siamese_debug"))]
+                let key_offset = unsafe { *keys.get_unchecked(mid) };
+                //
+                debug_assert!(!key_offset.is_zero());
+                let key_string = locked_key.read_piece_only_key_maybeslice(key_offset)?;
+                match key_kt.cmp_u8(&key_string) {
+                    Ordering::Greater => left = mid + 1,
+                    Ordering::Equal => {
+                        return Ok(Ok(mid));
+                    }
+                    Ordering::Less => right = mid,
+                }
             }
         }
         Ok(Err(left))
@@ -289,6 +348,10 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
         self.idx_file
             .length_stats::<Value, _>(|off| self.load_value_length(off))
     }
+    #[cfg(feature = "htx")]
+    fn htx_filling_rate_per_mill(&self) -> Result<(u64, u32)> {
+        self.htx_file.htx_filling_rate_per_mill()
+    }
 }
 
 // insert: NEW
@@ -302,44 +365,57 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         let r = {
             let node = node_.get_ref();
             if node.keys_is_empty() {
-                let new_val_piece = self.val_file.add_value_piece(value)?;
-                let new_key_piece = self.key_file.add_key_piece(key_kt, new_val_piece.offset)?;
-                #[cfg(feature = "htx")]
-                {
-                    let off = new_key_piece.offset;
-                    let hash = new_key_piece.hash_value();
-                    self.htx_file.write_key_piece_offset(hash, off)?;
-                }
-                //
-                return Ok(IdxNode::new_active(
-                    new_key_piece.offset,
-                    NodePieceOffset::new(0),
-                    NodePieceOffset::new(0),
-                ));
+                return self.keys_is_empty_on_insert_(key_kt, value);
             }
-            self.keys_binary_search_kt(node.keys(), key_kt)?
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let r = self.keys_binary_search_kt(node.keys(), key_kt)?;
+            #[cfg(feature = "tr_has_short_key")]
+            let r = self.keys_binary_search_kt(node.keys(), node.short_keys(), key_kt)?;
+            //
+            r
         };
         match r {
             Ok(k) => {
-                let piece_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
-                //let piece_offset = node.keys[k];
-                debug_assert!(!piece_offset.is_zero());
-                let new_piece_offset = self.store_value_on_insert(piece_offset, value)?;
-                if piece_offset != new_piece_offset {
+                #[cfg(not(feature = "tr_has_short_key"))]
+                #[cfg(feature = "siamese_debug")]
+                let key_offset = node_.get_ref().keys_get(k);
+                #[cfg(not(feature = "tr_has_short_key"))]
+                #[cfg(not(feature = "siamese_debug"))]
+                let key_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //
+                #[cfg(feature = "tr_has_short_key")]
+                #[cfg(feature = "siamese_debug")]
+                let (key_offset, short_key) = node_.get_ref().keys_get(k);
+                #[cfg(feature = "tr_has_short_key")]
+                #[cfg(not(feature = "siamese_debug"))]
+                let (key_offset, short_key) = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //
+                debug_assert!(!key_offset.is_zero());
+                let new_key_offset = self.store_value_on_insert(key_offset, value)?;
+                if key_offset == new_key_offset {
+                    Ok(node_)
+                } else {
                     #[cfg(feature = "htx")]
                     {
                         let hash = key_kt.hash_value();
-                        self.htx_file
-                            .write_key_piece_offset(hash, new_piece_offset)?;
+                        self.htx_file.write_key_piece_offset(hash, new_key_offset)?;
                     }
-                    node_.get_mut().keys_set(k, new_piece_offset);
-                    return self.write_node(node_);
+                    #[cfg(not(feature = "tr_has_short_key"))]
+                    node_.get_mut().keys_set(k, new_key_offset);
+                    #[cfg(feature = "tr_has_short_key")]
+                    node_
+                        .get_mut()
+                        .keys_set(k, new_key_offset, short_key.map(|o| o.to_vec()));
+                    //
+                    self.write_node(node_)
                 }
-                Ok(node_)
             }
             Err(k) => {
+                #[cfg(feature = "siamese_debug")]
+                let node_offset1 = node_.get_ref().downs_get(k);
+                #[cfg(not(feature = "siamese_debug"))]
                 let node_offset1 = unsafe { node_.get_ref().downs_get_unchecked(k) };
-                //let node_offset1 = node.downs[k];
+                //
                 let node2_ = if !node_offset1.is_zero() {
                     let node1_ = self.idx_file.read_node(node_offset1)?;
                     self.insert_into_node_tree_kt(node1_, key_kt, value)?
@@ -353,22 +429,59 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                         self.htx_file
                             .write_key_piece_offset(hash, new_key_piece.offset)?;
                     }
-                    IdxNode::new_active(
+                    //
+                    #[cfg(not(feature = "tr_has_short_key"))]
+                    let new_active_node = IdxNode::new_active(
                         new_key_piece.offset,
                         NodePieceOffset::new(0),
                         NodePieceOffset::new(0),
-                    )
+                    );
+                    #[cfg(feature = "tr_has_short_key")]
+                    let new_active_node = IdxNode::new_active(
+                        new_key_piece.offset,
+                        NodePieceOffset::new(0),
+                        NodePieceOffset::new(0),
+                        key_kt.as_short_bytes().map(|o| o.to_vec()),
+                    );
+                    //
+                    new_active_node
                 };
-                if node2_.is_active_on_insert() {
-                    self.balance_on_insert(node_, k, &node2_)
-                } else {
+                if !node2_.is_active_on_insert() {
                     debug_assert!(!node2_.get_ref().offset().is_zero());
                     let node2_ = self.write_node(node2_)?;
                     node_.get_mut().downs_set(k, node2_.get_ref().offset());
                     self.write_node(node_)
+                } else {
+                    self.balance_on_insert(node_, k, &node2_)
                 }
             }
         }
+    }
+    fn keys_is_empty_on_insert_(&mut self, key_kt: &KT, value: &[u8]) -> Result<IdxNode> {
+        let new_val_piece = self.val_file.add_value_piece(value)?;
+        let new_key_piece = self.key_file.add_key_piece(key_kt, new_val_piece.offset)?;
+        #[cfg(feature = "htx")]
+        {
+            let off = new_key_piece.offset;
+            let hash = new_key_piece.hash_value();
+            self.htx_file.write_key_piece_offset(hash, off)?;
+        }
+        //
+        #[cfg(not(feature = "tr_has_short_key"))]
+        let new_active_node = IdxNode::new_active(
+            new_key_piece.offset,
+            NodePieceOffset::new(0),
+            NodePieceOffset::new(0),
+        );
+        #[cfg(feature = "tr_has_short_key")]
+        let new_active_node = IdxNode::new_active(
+            new_key_piece.offset,
+            NodePieceOffset::new(0),
+            NodePieceOffset::new(0),
+            key_kt.as_short_bytes().map(|o| o.to_vec()),
+        );
+        //
+        Ok(new_active_node)
     }
     #[inline]
     fn store_value_on_insert(
@@ -380,11 +493,11 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         let mut val_piece = self.val_file.read_piece(key_piece.value_offset)?;
         val_piece.value = value.to_vec();
         let new_value_piece = self.val_file.write_piece(val_piece)?;
-        let new_key_piece = if key_piece.value_offset != new_value_piece.offset {
+        let new_key_piece = if key_piece.value_offset == new_value_piece.offset {
+            key_piece
+        } else {
             key_piece.value_offset = new_value_piece.offset;
             self.key_file.write_piece(key_piece)?
-        } else {
-            key_piece
         };
         Ok(new_key_piece.offset)
     }
@@ -400,16 +513,44 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         {
             let mut node = node_.get_mut();
             let active_node = active_node_.get_ref();
-            node.keys_insert(i, active_node.keys_get(0));
-            node.downs_set(i, active_node.downs_get(1));
-            node.downs_insert(i, active_node.downs_get(0));
+            //
+            #[cfg(not(feature = "tr_has_short_key"))]
+            #[cfg(feature = "siamese_debug")]
+            let key_0 = active_node.keys_get(0);
+            #[cfg(not(feature = "tr_has_short_key"))]
+            #[cfg(not(feature = "siamese_debug"))]
+            let key_0 = unsafe { active_node.keys_get_unchecked(0) };
+            //
+            #[cfg(feature = "tr_has_short_key")]
+            #[cfg(feature = "siamese_debug")]
+            let (key_0, short_key_0) = active_node.keys_get(0);
+            #[cfg(feature = "tr_has_short_key")]
+            #[cfg(not(feature = "siamese_debug"))]
+            let (key_0, short_key_0) = unsafe { active_node.keys_get_unchecked(0) };
+            //
+            #[cfg(feature = "siamese_debug")]
+            let down_0 = active_node.downs_get(0);
+            #[cfg(not(feature = "siamese_debug"))]
+            let down_0 = unsafe { active_node.downs_get_unchecked(0) };
+            //
+            #[cfg(feature = "siamese_debug")]
+            let down_1 = active_node.downs_get(1);
+            #[cfg(not(feature = "siamese_debug"))]
+            let down_1 = unsafe { active_node.downs_get_unchecked(1) };
+            //
+            node.downs_set(i, down_1);
+            node.downs_insert(i, down_0);
+            #[cfg(not(feature = "tr_has_short_key"))]
+            node.keys_insert(i, key_0);
+            #[cfg(feature = "tr_has_short_key")]
+            node.keys_insert(i, key_0, short_key_0.map(|o| o.to_vec()));
         }
         //
-        if node_.borrow().is_over_len() {
-            self.split_on_insert(node_)
-        } else {
+        if !node_.borrow().is_over_len() {
             let node = self.write_node(node_)?;
             Ok(node)
+        } else {
+            self.split_on_insert(node_)
         }
     }
     #[inline]
@@ -418,25 +559,33 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         debug_assert!(node_.get_ref().downs_len() == idx::NODE_SLOTS_MAX as usize + 1);
         debug_assert!(node_.get_ref().keys_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
         debug_assert!(node_.get_ref().downs_len() >= idx::NODE_SLOTS_MAX_HALF as usize);
-        let mut node1_ = IdxNode::new(NodePieceOffset::new(0));
+        let mut node1_ = IdxNode::new_empty();
         {
             let mut node1 = node1_.get_mut();
             let node = node_.get_ref();
-            node1.keys_extend_from_node(&node, idx::NODE_SLOTS_MAX_HALF as usize);
-            node1.downs_extend_from_node(&node, idx::NODE_SLOTS_MAX_HALF as usize);
+            node1.keys_downs_extend_from_node(&node, idx::NODE_SLOTS_MAX_HALF as usize);
         }
-        let key_offset1 = {
-            let mut node = node_.get_mut();
-            node.keys_resize(idx::NODE_SLOTS_MAX_HALF as usize);
-            node.downs_resize(idx::NODE_SLOTS_MAX_HALF as usize);
-            node.keys_pop().unwrap()
-        };
+        #[cfg(not(feature = "tr_has_short_key"))]
+        let key_offset1 = node_
+            .get_mut()
+            .keys_downs_resize(idx::NODE_SLOTS_MAX_HALF as usize);
+        #[cfg(feature = "tr_has_short_key")]
+        let (key_offset1, short_key1) = node_
+            .get_mut()
+            .keys_downs_resize(idx::NODE_SLOTS_MAX_HALF as usize);
         //
         let node1_ = self.write_new_node(node1_)?;
         let node_ = self.write_node(node_)?;
         let node_offset = node_.get_ref().offset();
         let node1_offset = node1_.get_ref().offset();
-        Ok(IdxNode::new_active(key_offset1, node_offset, node1_offset))
+        //
+        #[cfg(not(feature = "tr_has_short_key"))]
+        let new_active_node = IdxNode::new_active(key_offset1, node_offset, node1_offset);
+        #[cfg(feature = "tr_has_short_key")]
+        let new_active_node =
+            IdxNode::new_active(key_offset1, node_offset, node1_offset, short_key1);
+        //
+        Ok(new_active_node)
     }
 }
 
@@ -452,7 +601,11 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                 return Ok((node_, None));
             }
             let node = node_.get_ref();
-            self.keys_binary_search_kt(node.keys(), key_kt)?
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let r = self.keys_binary_search_kt(node.keys(), key_kt)?;
+            #[cfg(feature = "tr_has_short_key")]
+            let r = self.keys_binary_search_kt(node.keys(), node.short_keys(), key_kt)?;
+            r
         };
         match r {
             Ok(k) => {
@@ -460,8 +613,11 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                 return Ok((node_, val));
             }
             Err(k) => {
-                let node_offset1 = unsafe { node_.get_mut().downs_get_unchecked(k) };
-                //let node_offset1 = node.downs[k];
+                #[cfg(feature = "siamese_debug")]
+                let node_offset1 = node_.get_ref().downs_get(k);
+                #[cfg(not(feature = "siamese_debug"))]
+                let node_offset1 = unsafe { node_.get_ref().downs_get_unchecked(k) };
+                //
                 if !node_offset1.is_zero() {
                     let node1_ = self.idx_file.read_node(node_offset1)?;
                     let (node1_, val) = self.delete_from_node_tree_kt(node1_, key_kt)?;
@@ -481,19 +637,25 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
     }
     #[inline]
     fn delete_at(&mut self, mut node_: IdxNode, i: usize) -> Result<(IdxNode, Option<Vec<u8>>)> {
-        let piece_offset = node_.get_ref().keys_get(i);
-        debug_assert!(!piece_offset.is_zero(), "key_offset: {} != 0", piece_offset);
+        #[cfg(not(feature = "tr_has_short_key"))]
+        let key_offset = node_.get_ref().keys_get(i);
+        #[cfg(feature = "tr_has_short_key")]
+        let (key_offset, _short_key) = node_.get_ref().keys_get(i);
+        debug_assert!(!key_offset.is_zero(), "key_offset: {} != 0", key_offset);
+        //
         let opt_value = {
-            let piece = self.key_file.read_piece(piece_offset)?;
+            let key_piece = self.key_file.read_piece(key_offset)?;
             #[cfg(feature = "htx")]
             {
-                let hash = piece.key.hash_value();
+                let hash = key_piece.key.hash_value();
                 self.htx_file
                     .write_key_piece_offset(hash, KeyPieceOffset::new(0))?;
             }
-            let value = self.val_file.read_piece_only_value(piece.value_offset)?;
-            self.val_file.delete_piece(piece.value_offset)?;
-            self.key_file.delete_piece(piece_offset)?;
+            let value = self
+                .val_file
+                .read_piece_only_value(key_piece.value_offset)?;
+            self.val_file.delete_piece(key_piece.value_offset)?;
+            self.key_file.delete_piece(key_offset)?;
             Some(value)
         };
         let node_offset1 = node_.get_ref().downs_get(i);
@@ -504,14 +666,23 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             Ok((new_node_, opt_value))
         } else {
             let node1_ = self.idx_file.read_node(node_offset1)?;
-            let (piece_offset, node1_) = self.delete_max(node1_)?;
-            node_.get_mut().keys_set(i, piece_offset);
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let (key_offset, node1_) = self.delete_max(node1_)?;
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, short_key, node1_) = self.delete_max(node1_)?;
+            //
+            #[cfg(not(feature = "tr_has_short_key"))]
+            node_.get_mut().keys_set(i, key_offset);
+            #[cfg(feature = "tr_has_short_key")]
+            node_.get_mut().keys_set(i, key_offset, short_key);
+            //
             node_.get_mut().downs_set(i, node1_.get_ref().offset());
             let node_ = self.write_node(node_)?;
             let new_node_ = self.balance_left(node_, i)?;
             Ok((new_node_, opt_value))
         }
     }
+    #[cfg(not(feature = "tr_has_short_key"))]
     #[inline]
     fn delete_max(&mut self, mut node_: IdxNode) -> Result<(KeyPieceOffset, IdxNode)> {
         let j = node_.get_ref().keys_len();
@@ -531,6 +702,29 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             Ok((key_offset2, new_node_))
         }
     }
+    #[cfg(feature = "tr_has_short_key")]
+    #[inline]
+    fn delete_max(
+        &mut self,
+        mut node_: IdxNode,
+    ) -> Result<(KeyPieceOffset, Option<Vec<u8>>, IdxNode)> {
+        let j = node_.get_ref().keys_len();
+        let i = j - 1;
+        let node_offset1 = node_.get_ref().downs_get(j);
+        if node_offset1.is_zero() {
+            node_.get_mut().downs_remove(j);
+            let (key_offset2, short_key2) = node_.get_mut().keys_remove(i);
+            let new_node_ = self.write_node(node_)?;
+            Ok((key_offset2, short_key2, new_node_))
+        } else {
+            let node1_ = self.idx_file.read_node(node_offset1)?;
+            let (key_offset2, short_key2, node1_) = self.delete_max(node1_)?;
+            node_.get_mut().downs_set(j, node1_.get_ref().offset());
+            let node_ = self.write_node(node_)?;
+            let new_node_ = self.balance_right(node_, j)?;
+            Ok((key_offset2, short_key2, new_node_))
+        }
+    }
     #[inline]
     fn balance_left(&mut self, mut node_: IdxNode, i: usize) -> Result<IdxNode> {
         let node_offset1 = node_.get_ref().downs_get(i);
@@ -542,19 +736,29 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             return Ok(node_);
         }
         let j = i + 1;
+        //
+        #[cfg(not(feature = "tr_has_short_key"))]
         let key_offset2 = node_.get_ref().keys_get(i);
+        #[cfg(feature = "tr_has_short_key")]
+        let (key_offset2, short_key2) = node_.get_ref().keys_get(i);
+        debug_assert!(!key_offset2.is_zero(), "key_offset2: {} != 0", key_offset2);
+        //
         let node_offset2 = node_.get_ref().downs_get(j);
         debug_assert!(!node_offset2.is_zero());
         if !node_offset2.is_zero() {
             let mut node2_ = self.idx_file.read_node(node_offset2)?;
             if node2_.get_ref().downs_len() == idx::NODE_SLOTS_MAX_HALF as usize {
                 // unification
+                #[cfg(not(feature = "tr_has_short_key"))]
                 node1_.get_mut().keys_push(key_offset2);
-                //
-                node1_.get_mut().keys_extend_from_node(&node2_.get_ref(), 0);
+                #[cfg(feature = "tr_has_short_key")]
                 node1_
                     .get_mut()
-                    .downs_extend_from_node(&node2_.get_ref(), 0);
+                    .keys_push(key_offset2, short_key2.map(|o| o.to_vec()));
+                //
+                node1_
+                    .get_mut()
+                    .keys_downs_extend_from_node(&node2_.get_ref(), 0);
                 self.idx_file.delete_node(node2_)?;
                 //
                 node_.get_mut().keys_remove(i);
@@ -563,9 +767,22 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                 let node1_ = self.write_node(node1_)?;
                 node_.get_mut().downs_set(i, node1_.get_ref().offset());
             } else {
+                #[cfg(not(feature = "tr_has_short_key"))]
                 let key_offset3 =
                     self.move_a_node_from_right_to_left(key_offset2, &mut node1_, &mut node2_);
+                #[cfg(feature = "tr_has_short_key")]
+                let (key_offset3, short_key3) = self.move_a_node_from_right_to_left(
+                    key_offset2,
+                    short_key2.map(|o| o.to_vec()),
+                    &mut node1_,
+                    &mut node2_,
+                );
+                //
+                #[cfg(not(feature = "tr_has_short_key"))]
                 node_.get_mut().keys_set(i, key_offset3);
+                #[cfg(feature = "tr_has_short_key")]
+                node_.get_mut().keys_set(i, key_offset3, short_key3);
+                //
                 let node2_ = self.write_node(node2_)?;
                 let node1_ = self.write_node(node1_)?;
                 node_.get_mut().downs_set(j, node2_.get_ref().offset());
@@ -587,19 +804,28 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             return Ok(node_);
         }
         let i = j - 1;
+        #[cfg(not(feature = "tr_has_short_key"))]
         let key_offset2 = node_.get_ref().keys_get(i);
+        #[cfg(feature = "tr_has_short_key")]
+        let (key_offset2, short_key2) = node_.get_ref().keys_get(i);
+        debug_assert!(!key_offset2.is_zero(), "key_offset2: {} != 0", key_offset2);
+        //
         let node_offset2 = node_.get_ref().downs_get(i);
         debug_assert!(!node_offset2.is_zero());
         if !node_offset2.is_zero() {
             let mut node2_ = self.idx_file.read_node(node_offset2)?;
             if node2_.get_ref().downs_len() == idx::NODE_SLOTS_MAX_HALF as usize {
                 // unification
+                #[cfg(not(feature = "tr_has_short_key"))]
                 node2_.get_mut().keys_push(key_offset2);
-                //
-                node2_.get_mut().keys_extend_from_node(&node1_.get_ref(), 0);
+                #[cfg(feature = "tr_has_short_key")]
                 node2_
                     .get_mut()
-                    .downs_extend_from_node(&node1_.get_ref(), 0);
+                    .keys_push(key_offset2, short_key2.map(|o| o.to_vec()));
+                //
+                node2_
+                    .get_mut()
+                    .keys_downs_extend_from_node(&node1_.get_ref(), 0);
                 self.idx_file.delete_node(node1_)?;
                 //
                 node_.get_mut().keys_remove(i);
@@ -608,8 +834,21 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
                 let node2_ = self.write_node(node2_)?;
                 node_.get_mut().downs_set(i, node2_.get_ref().offset());
             } else {
+                #[cfg(not(feature = "tr_has_short_key"))]
                 let key_offset3 = self.move_left_right(key_offset2, &mut node2_, &mut node1_);
+                #[cfg(feature = "tr_has_short_key")]
+                let (key_offset3, short_key3) = self.move_left_right(
+                    key_offset2,
+                    short_key2.map(|o| o.to_vec()),
+                    &mut node2_,
+                    &mut node1_,
+                );
+                //
+                #[cfg(not(feature = "tr_has_short_key"))]
                 node_.get_mut().keys_set(i, key_offset3);
+                #[cfg(feature = "tr_has_short_key")]
+                node_.get_mut().keys_set(i, key_offset3, short_key3);
+                //
                 let node1_ = self.write_node(node1_)?;
                 let node2_ = self.write_node(node2_)?;
                 node_.get_mut().downs_set(j, node1_.get_ref().offset());
@@ -620,29 +859,63 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
         }
         Ok(node_)
     }
+    #[cfg(not(feature = "tr_has_short_key"))]
     #[inline]
     fn move_a_node_from_right_to_left(
         &mut self,
-        piece_offset: KeyPieceOffset,
+        key_offset: KeyPieceOffset,
         node_l: &mut IdxNode,
         node_r: &mut IdxNode,
     ) -> KeyPieceOffset {
-        node_l.get_mut().keys_push(piece_offset);
+        node_l.get_mut().keys_push(key_offset);
         node_l
             .get_mut()
             .downs_push(node_r.get_mut().downs_remove(0));
         node_r.get_mut().keys_remove(0)
     }
+    #[cfg(feature = "tr_has_short_key")]
+    #[inline]
+    fn move_a_node_from_right_to_left(
+        &mut self,
+        key_offset: KeyPieceOffset,
+        short_key: Option<Vec<u8>>,
+        node_l: &mut IdxNode,
+        node_r: &mut IdxNode,
+    ) -> (KeyPieceOffset, Option<Vec<u8>>) {
+        node_l.get_mut().keys_push(key_offset, short_key);
+        node_l
+            .get_mut()
+            .downs_push(node_r.get_mut().downs_remove(0));
+        node_r.get_mut().keys_remove(0)
+    }
+    #[cfg(not(feature = "tr_has_short_key"))]
     #[inline]
     fn move_left_right(
         &mut self,
-        piece_offset: KeyPieceOffset,
+        key_offset: KeyPieceOffset,
         node_l: &mut IdxNode,
         node_r: &mut IdxNode,
     ) -> KeyPieceOffset {
         let j = node_l.get_ref().keys_len();
         let i = j - 1;
-        node_r.get_mut().keys_insert(0, piece_offset);
+        node_r.get_mut().keys_insert(0, key_offset);
+        node_r
+            .get_mut()
+            .downs_insert(0, node_l.get_mut().downs_remove(j));
+        node_l.get_mut().keys_remove(i)
+    }
+    #[cfg(feature = "tr_has_short_key")]
+    #[inline]
+    fn move_left_right(
+        &mut self,
+        key_offset: KeyPieceOffset,
+        short_key: Option<Vec<u8>>,
+        node_l: &mut IdxNode,
+        node_r: &mut IdxNode,
+    ) -> (KeyPieceOffset, Option<Vec<u8>>) {
+        let j = node_l.get_ref().keys_len();
+        let i = j - 1;
+        node_r.get_mut().keys_insert(0, key_offset, short_key);
         node_r
             .get_mut()
             .downs_insert(0, node_l.get_mut().downs_remove(j));
@@ -664,7 +937,11 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
 
 // find: NEW
 impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
-    fn find_in_node_tree_kt(
+    #[cfg(all(
+        feature = "idx_find_uu",
+        any(feature = "vf_node_u32", feature = "vf_node_u64")
+    ))]
+    fn find_in_node_tree_uu_kt(
         &mut self,
         node_offset: NodePieceOffset,
         key_kt: &KT,
@@ -677,7 +954,55 @@ impl<KT: DbMapKeyType> FileDbXxxInner<KT> {
             }
             Err(node_offset) => {
                 if !node_offset.is_zero() {
-                    self.find_in_node_tree_kt(node_offset, key_kt)
+                    self.find_in_node_tree_uu_kt(node_offset, key_kt)
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+    #[cfg(not(all(
+        feature = "idx_find_uu",
+        any(feature = "vf_node_u32", feature = "vf_node_u64")
+    )))]
+    fn find_in_node_tree_kt(&mut self, node_: IdxNode, key_kt: &KT) -> Result<Option<Vec<u8>>> {
+        let r = {
+            let node = node_.get_ref();
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let r = self.keys_binary_search_kt(node.keys(), key_kt)?;
+            #[cfg(feature = "tr_has_short_key")]
+            let r = self.keys_binary_search_kt(node.keys(), node.short_keys(), key_kt)?;
+            //
+            r
+        };
+        match r {
+            Ok(k) => {
+                #[cfg(not(feature = "tr_has_short_key"))]
+                #[cfg(feature = "siamese_debug")]
+                let key_offset = node_.get_ref().keys_get(k);
+                #[cfg(not(feature = "tr_has_short_key"))]
+                #[cfg(not(feature = "siamese_debug"))]
+                let key_offset = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //
+                #[cfg(feature = "tr_has_short_key")]
+                #[cfg(feature = "siamese_debug")]
+                let (key_offset, _short_key) = node_.get_ref().keys_get(k);
+                #[cfg(feature = "tr_has_short_key")]
+                #[cfg(not(feature = "siamese_debug"))]
+                let (key_offset, _short_key) = unsafe { node_.get_ref().keys_get_unchecked(k) };
+                //
+                debug_assert!(!key_offset.is_zero());
+                self.load_value(key_offset).map(Some)
+            }
+            Err(k) => {
+                #[cfg(feature = "siamese_debug")]
+                let node_offset = node_.get_ref().downs_get(k);
+                #[cfg(not(feature = "siamese_debug"))]
+                let node_offset = unsafe { node_.get_ref().downs_get_unchecked(k) };
+                //
+                if !node_offset.is_zero() {
+                    let node1_ = self.idx_file.read_node(node_offset)?;
+                    self.find_in_node_tree_kt(node1_, key_kt)
                 } else {
                     Ok(None)
                 }
@@ -740,6 +1065,10 @@ impl<KT: DbMapKeyType> DbXxxBase for FileDbXxxInner<KT> {
 
 // impl trait: DbXxxObjectSafe<KT>
 impl<KT: DbMapKeyType> DbXxxObjectSafe<KT> for FileDbXxxInner<KT> {
+    #[cfg(all(
+        feature = "idx_find_uu",
+        any(feature = "vf_node_u32", feature = "vf_node_u64")
+    ))]
     #[inline]
     fn get_kt(&mut self, key_kt: &KT) -> Result<Option<Vec<u8>>> {
         #[cfg(feature = "htx")]
@@ -775,7 +1104,40 @@ impl<KT: DbMapKeyType> DbXxxObjectSafe<KT> for FileDbXxxInner<KT> {
             let mut locked_idx = self.idx_file.0.borrow_mut();
             locked_idx.0.read_top_node_offset()?
         };
-        self.find_in_node_tree_kt(node_offset, key_kt)
+        self.find_in_node_tree_uu_kt(node_offset, key_kt)
+    }
+    #[cfg(not(all(
+        feature = "idx_find_uu",
+        any(feature = "vf_node_u32", feature = "vf_node_u64")
+    )))]
+    #[inline]
+    fn get_kt(&mut self, key_kt: &KT) -> Result<Option<Vec<u8>>> {
+        #[cfg(feature = "htx")]
+        {
+            let hash = key_kt.hash_value();
+            let key_offset = self.htx_file.read_key_piece_offset(hash)?;
+            if !key_offset.is_zero() {
+                let flg = {
+                    let mut locked_key = self.key_file.0.borrow_mut();
+                    let key_string = locked_key.read_piece_only_key_maybeslice(key_offset)?;
+                    match key_kt.cmp_u8(&key_string) {
+                        Ordering::Equal => true,
+                        Ordering::Greater => false,
+                        Ordering::Less => false,
+                    }
+                };
+                if flg {
+                    #[cfg(feature = "htx_print_hits")]
+                    self.htx_file.set_hits();
+                    return self.load_value(key_offset).map(Some);
+                } else {
+                    #[cfg(feature = "htx_print_hits")]
+                    self.htx_file.set_miss();
+                }
+            }
+        }
+        let top_node = self.idx_file.read_top_node()?;
+        self.find_in_node_tree_kt(top_node, key_kt)
     }
     #[inline]
     fn put_kt(&mut self, key_kt: &KT, value: &[u8]) -> Result<()> {
@@ -871,9 +1233,10 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
         }
         */
         //
-        let (rec_offset, sw) = {
+        let (key_offset, sw) = {
             let (idx_node, keys_idx, downs_idx) = self.depth_nodes.last_mut().unwrap();
-            let rec_offset = if *keys_idx < *downs_idx {
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = if *keys_idx < *downs_idx {
                 if *keys_idx < idx_node.get_ref().keys_len().try_into().unwrap() {
                     idx_node.get_ref().keys_get((*keys_idx).try_into().unwrap())
                 } else {
@@ -894,6 +1257,30 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
                     return self.next_piece_offset();
                 }
             };
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = if *keys_idx < *downs_idx {
+                if *keys_idx < idx_node.get_ref().keys_len().try_into().unwrap() {
+                    idx_node.get_ref().keys_get((*keys_idx).try_into().unwrap())
+                } else {
+                    return None;
+                }
+            } else {
+                let node_offset = idx_node
+                    .get_ref()
+                    .downs_get((*downs_idx).try_into().unwrap());
+                if node_offset.is_zero() {
+                    idx_node.get_ref().keys_get((*keys_idx).try_into().unwrap())
+                } else {
+                    {
+                        let db_map_inner = RefCell::borrow(&self.db_map);
+                        let down_node = db_map_inner.idx_file.read_node(node_offset).unwrap();
+                        self.depth_nodes.push((down_node, 0, 0));
+                    }
+                    return self.next_piece_offset();
+                }
+            };
+            debug_assert!(!key_offset.is_zero());
+            //
             *keys_idx += 1;
             if *keys_idx >= idx_node.get_ref().keys_len().try_into().unwrap() {
                 //eprintln!("CHECK 002");
@@ -906,20 +1293,20 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
                         let db_map_inner = RefCell::borrow(&self.db_map);
                         let down_node = db_map_inner.idx_file.read_node(node_offset).unwrap();
                         self.depth_nodes.push((down_node, 0, 0));
-                        (rec_offset, 1)
+                        (key_offset, 1)
                     } else {
                         //eprintln!("CHECK 002.2");
-                        (rec_offset, 2)
+                        (key_offset, 2)
                     }
                 } else {
                     //eprintln!("CHECK 002.3");
                     let (_, _, _) = self.depth_nodes.pop().unwrap();
                     let (_, _keys_idx, downs_idx) = self.depth_nodes.last_mut().unwrap();
                     *downs_idx += 1;
-                    (rec_offset, 3)
+                    (key_offset, 3)
                 }
             } else {
-                (rec_offset, 0)
+                (key_offset, 0)
             }
         };
         if sw == 2 {
@@ -939,7 +1326,7 @@ impl<KT: DbMapKeyType> DbXxxIterMut<KT> {
             }
         }
         //
-        Some(rec_offset)
+        Some(key_offset)
     }
 }
 

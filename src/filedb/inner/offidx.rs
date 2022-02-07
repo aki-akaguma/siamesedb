@@ -9,7 +9,19 @@ use std::hash::Hasher;
 
 #[cfg(feature = "oi_myhash")]
 #[derive(Debug, Default)]
-struct MyHasher(u64);
+pub(crate) struct MyHasher(u64);
+
+#[cfg(feature = "oi_myhash")]
+impl MyHasher {
+    fn conv_u64(&self, val: u64) -> u64 {
+        let mut a = val;
+        a = a.rotate_right(3);
+        a = a ^ a >> 12;
+        a = a ^ a << 25;
+        a = a ^ a >> 27;
+        a
+    }
+}
 
 #[cfg(feature = "oi_myhash")]
 impl Hasher for MyHasher {
@@ -18,11 +30,8 @@ impl Hasher for MyHasher {
         if bytes_len == 8 {
             let mut ary = [0u8; 8];
             ary.copy_from_slice(bytes);
-            let mut a = u64::from_ne_bytes(ary);
-            a = a ^ a >> 12;
-            a = a ^ a << 25;
-            a = a ^ a >> 27;
-            self.0 = a;
+            let val = u64::from_ne_bytes(ary);
+            self.0 = self.conv_u64(val);
         } else {
             for i in 0..bytes.len() {
                 let a = unsafe { *bytes.get_unchecked(i) };
@@ -31,11 +40,7 @@ impl Hasher for MyHasher {
         }
     }
     fn write_u64(&mut self, val: u64) {
-        let mut a = val;
-        a = a ^ a >> 12;
-        a = a ^ a << 25;
-        a = a ^ a >> 27;
-        self.0 = a;
+        self.0 = self.conv_u64(val);
     }
     fn finish(&self) -> u64 {
         self.0
@@ -47,31 +52,33 @@ impl Hasher for MyHasher {
 /// the value is the index of vec<>.
 #[derive(Debug)]
 pub(crate) struct OffsetIndex {
+    #[cfg(not(feature = "oi_hash_turbo"))]
     pub(crate) vec: Vec<(u64, usize)>,
     #[cfg(feature = "oi_hash_turbo")]
     #[cfg(not(feature = "oi_myhash"))]
     map: HashMap<u64, usize>,
     #[cfg(feature = "oi_hash_turbo")]
     #[cfg(feature = "oi_myhash")]
-    map: HashMap<u64, usize, BuildHasherDefault<MyHasher>>,
+    pub(crate) map: HashMap<u64, usize, BuildHasherDefault<MyHasher>>,
 }
 impl OffsetIndex {
     pub(crate) fn with_capacity(_cap: usize) -> Self {
         Self {
+            #[cfg(not(feature = "oi_hash_turbo"))]
             vec: Vec::with_capacity(_cap),
             #[cfg(feature = "oi_hash_turbo")]
             #[cfg(not(feature = "oi_myhash"))]
             map: HashMap::with_capacity(_cap),
             #[cfg(feature = "oi_hash_turbo")]
             #[cfg(feature = "oi_myhash")]
-            map: HashMap::with_capacity_and_hasher(_cap, Default::default()),
+            map: HashMap::with_capacity_and_hasher(_cap * 2, Default::default()),
         }
     }
     #[inline]
     pub(crate) fn get(&mut self, offset: &u64) -> Option<usize> {
         #[cfg(feature = "oi_hash_turbo")]
         {
-            self.map.get(offset).map(|&o| o)
+            self.map.get(offset).copied()
         }
         #[cfg(not(feature = "oi_hash_turbo"))]
         {
@@ -82,23 +89,6 @@ impl OffsetIndex {
                 None
             }
         }
-        /*
-        let slice = &self.vec;
-        if slice.is_empty() {
-            return None;
-        }
-        if *offset < slice[0].0 {
-            return None;
-        }
-        if *offset > slice[slice.len() - 1].0 {
-            return None;
-        }
-        if let Ok(x) = slice.binary_search_by(|a| a.0.cmp(offset)) {
-            Some(slice[x].1)
-        } else {
-            None
-        }
-        */
     }
     #[inline]
     pub(crate) fn insert(&mut self, offset: &u64, idx: usize) {
@@ -106,12 +96,15 @@ impl OffsetIndex {
         {
             let _ = self.map.insert(*offset, idx);
         }
-        match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
-            Ok(x) => {
-                self.vec[x].1 = idx;
-            }
-            Err(x) => {
-                self.vec.insert(x, (*offset, idx));
+        #[cfg(not(feature = "oi_hash_turbo"))]
+        {
+            match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
+                Ok(x) => {
+                    self.vec[x].1 = idx;
+                }
+                Err(x) => {
+                    self.vec.insert(x, (*offset, idx));
+                }
             }
         }
     }
@@ -119,11 +112,14 @@ impl OffsetIndex {
     pub(crate) fn remove(&mut self, offset: &u64) -> Option<usize> {
         #[cfg(feature = "oi_hash_turbo")]
         {
-            let _ = self.map.remove(offset);
+            self.map.remove(offset)
         }
-        match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
-            Ok(x) => Some(self.vec.remove(x).1),
-            Err(_x) => None,
+        #[cfg(not(feature = "oi_hash_turbo"))]
+        {
+            match self.vec.binary_search_by(|a| a.0.cmp(offset)) {
+                Ok(x) => Some(self.vec.remove(x).1),
+                Err(_x) => None,
+            }
         }
     }
     #[inline]
@@ -132,7 +128,10 @@ impl OffsetIndex {
         {
             self.map.clear();
         }
-        self.vec.clear();
+        #[cfg(not(feature = "oi_hash_turbo"))]
+        {
+            self.vec.clear();
+        }
     }
 }
 
@@ -148,7 +147,7 @@ mod debug {
             #[cfg(not(feature = "oi_hash_turbo"))]
             assert_eq!(std::mem::size_of::<OffsetIndex>(), 24);
             #[cfg(feature = "oi_hash_turbo")]
-            assert_eq!(std::mem::size_of::<OffsetIndex>(), 56);
+            assert_eq!(std::mem::size_of::<OffsetIndex>(), 32);
             assert_eq!(std::mem::size_of::<(u64, usize)>(), 16);
         }
         #[cfg(target_pointer_width = "32")]
@@ -156,7 +155,7 @@ mod debug {
             #[cfg(not(feature = "oi_hash_turbo"))]
             assert_eq!(std::mem::size_of::<OffsetIndex>(), 12);
             #[cfg(feature = "oi_hash_turbo")]
-            assert_eq!(std::mem::size_of::<OffsetIndex>(), 28);
+            assert_eq!(std::mem::size_of::<OffsetIndex>(), 16);
             #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
             assert_eq!(std::mem::size_of::<(u64, usize)>(), 12);
             #[cfg(any(target_arch = "arm", target_arch = "mips"))]

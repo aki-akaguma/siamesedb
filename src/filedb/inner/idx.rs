@@ -5,7 +5,7 @@ use super::super::{
 use super::dbxxx::FileDbXxxInner;
 use super::piece::PieceMgr;
 use super::semtype::*;
-use super::tr::{IdxNode, TreeNode};
+use super::tr::IdxNode;
 use super::vfile::VarFile;
 use rabuf::{SmallRead, SmallWrite};
 use std::cell::RefCell;
@@ -19,7 +19,8 @@ type HeaderSignature = [u8; 8];
 
 //const CHUNK_SIZE: u32 = 4 * 1024;
 //const CHUNK_SIZE: u32 = 4 * 4 * 1024;
-const CHUNK_SIZE: u32 = 4 * 4 * 4 * 1024;
+//const CHUNK_SIZE: u32 = 4 * 4 * 4 * 1024;
+const CHUNK_SIZE: u32 = 128 * 1024;
 const IDX_HEADER_SZ: u64 = 128;
 const IDX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'T', 0u8];
 const IDX_HEADER_TOP_NODE_OFFSET: u64 = 16;
@@ -32,11 +33,11 @@ use super::nc::NodeCache;
 
 #[cfg(not(feature = "node_cache"))]
 #[derive(Debug)]
-pub struct VarFileNodeCache(pub VarFile, PhantomData<i32>);
+pub struct VarFileNodeCache(pub VarFile, PhantomData<i32>, NodePieceOffset);
 
 #[cfg(feature = "node_cache")]
 #[derive(Debug)]
-pub struct VarFileNodeCache(pub VarFile, NodeCache);
+pub struct VarFileNodeCache(pub VarFile, NodeCache, NodePieceOffset);
 
 #[derive(Debug, Clone)]
 pub struct IdxFile(pub Rc<RefCell<VarFileNodeCache>>);
@@ -76,18 +77,21 @@ impl IdxFile {
         let file_length: NodePieceOffset = file.seek_to_end()?;
         //
         #[cfg(not(feature = "node_cache"))]
-        let mut file_nc = VarFileNodeCache(file, PhantomData);
+        let mut file_nc = VarFileNodeCache(file, PhantomData, NodePieceOffset::new(0));
         #[cfg(feature = "node_cache")]
-        let mut file_nc = VarFileNodeCache(file, NodeCache::new());
+        let mut file_nc = VarFileNodeCache(file, NodeCache::new(), NodePieceOffset::new(0));
         //
         if file_length.is_zero() {
             write_idxf_init_header(&mut file_nc.0, sig2)?;
             // writing top node
             let top_node = IdxNode::new(NodePieceOffset::new(IDX_HEADER_SZ));
-            let _new_node_ = file_nc.write_node(top_node, true)?;
-            debug_assert!(_new_node_.get_ref().offset() == NodePieceOffset::new(IDX_HEADER_SZ));
+            let new_top_node_ = file_nc.write_node(top_node, true)?;
+            debug_assert!(new_top_node_.get_ref().offset() == NodePieceOffset::new(IDX_HEADER_SZ));
+            file_nc.2 = new_top_node_.get_ref().offset();
         } else {
             check_idxf_header(&mut file_nc.0, sig2)?;
+            let top_node_offset = file_nc.0.read_top_node_offset()?;
+            file_nc.2 = top_node_offset;
         }
         //
         Ok(Self(Rc::new(RefCell::new(file_nc))))
@@ -127,33 +131,47 @@ impl IdxFile {
     //
     #[inline]
     pub fn read_top_node(&self) -> Result<IdxNode> {
-        let offset = {
+        let top_node_offset = {
+            let locked = RefCell::borrow(&self.0);
+            locked.2
+            /*
+             */
+            /*
             let mut locked = RefCell::borrow_mut(&self.0);
             locked.0.read_top_node_offset()?
+            */
         };
-        self.read_node(offset)
+        self.read_node(top_node_offset)
     }
     pub fn write_top_node(&self, node: IdxNode) -> Result<IdxNode> {
         if node.get_ref().offset().is_zero() {
             let new_top_node = self.write_new_node(node)?;
+            let new_top_node_offset = new_top_node.get_ref().offset();
             {
                 let mut locked = RefCell::borrow_mut(&self.0);
-                locked
-                    .0
-                    .write_top_node_offset(new_top_node.get_ref().offset())?;
+                if new_top_node_offset != locked.2 {
+                    locked.0.write_top_node_offset(new_top_node_offset)?;
+                    locked.2 = new_top_node_offset;
+                }
             }
             Ok(new_top_node)
         } else {
             let top_node_offset = {
+                let locked = RefCell::borrow(&self.0);
+                locked.2
+                /*
                 let mut locked = RefCell::borrow_mut(&self.0);
                 locked.0.read_top_node_offset()?
+                */
             };
             let new_top_node = self.write_node(node)?;
-            if new_top_node.get_ref().offset() != top_node_offset {
+            let new_top_node_offset = new_top_node.get_ref().offset();
+            if new_top_node_offset != top_node_offset {
                 let mut locked = RefCell::borrow_mut(&self.0);
-                locked
-                    .0
-                    .write_top_node_offset(new_top_node.get_ref().offset())?;
+                if locked.2 != new_top_node_offset {
+                    locked.0.write_top_node_offset(new_top_node_offset)?;
+                    locked.2 = new_top_node_offset;
+                }
             }
             Ok(new_top_node)
         }
@@ -188,8 +206,12 @@ impl IdxFile {
         //let mut locked = RefCell::borrow_mut(&self.0);
         //let idx_node = locked.read_node(offset)?;
         let idx_node = self.read_node(offset)?;
-        let keys_len = idx_node.get_ref().keys_len();
-        Ok(KeysCount::new(keys_len.try_into().unwrap()))
+        #[cfg(feature = "siamese_debug")]
+        let keys_len = idx_node.get_ref().keys_len().try_into().unwrap();
+        #[cfg(not(feature = "siamese_debug"))]
+        let keys_len = idx_node.get_ref().keys_len() as u16;
+        //
+        Ok(KeysCount::new(keys_len))
     }
 }
 
@@ -268,9 +290,13 @@ impl IdxFile {
         if node.get_ref().keys_is_empty() {
             return Ok(true);
         }
-        let piece_offset = node.get_ref().keys_get(0);
-        let key_string = if !piece_offset.is_zero() {
-            dbxxx.load_key_data(piece_offset)?
+        #[cfg(not(feature = "tr_has_short_key"))]
+        let key_offset = node.get_ref().keys_get(0);
+        #[cfg(feature = "tr_has_short_key")]
+        let (key_offset, _short_key) = node.get_ref().keys_get(0);
+        //
+        let key_string = if !key_offset.is_zero() {
+            dbxxx.load_key_data(key_offset)?
         } else {
             Default::default()
         };
@@ -286,9 +312,18 @@ impl IdxFile {
         }
         //
         for i in 1..node.get_ref().keys_len() {
+            #[cfg(not(feature = "tr_has_short_key"))]
             let key_offset1 = node.get_ref().keys_get(i - 1);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset1, _short_key1) = node.get_ref().keys_get(i - 1);
+            //
+            #[cfg(not(feature = "tr_has_short_key"))]
             let key_offset2 = node.get_ref().keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset2, _short_key2) = node.get_ref().keys_get(i);
+            //
             let node_offset = node.get_ref().downs_get(i);
+            //
             let key_string1 = if !key_offset1.is_zero() {
                 dbxxx.load_key_data(key_offset1)?
             } else {
@@ -313,12 +348,16 @@ impl IdxFile {
             }
         }
         //
-        let piece_offset = node.get_ref().keys_get(node.get_ref().keys_len() - 1);
+        #[cfg(not(feature = "tr_has_short_key"))]
+        let key_offset = node.get_ref().keys_get(node.get_ref().keys_len() - 1);
+        #[cfg(feature = "tr_has_short_key")]
+        let (key_offset, _short_key) = node.get_ref().keys_get(node.get_ref().keys_len() - 1);
+        //
         let node_offset = node.get_ref().downs_get(node.get_ref().keys_len());
         if !node_offset.is_zero() {
             let node1 = self.read_node(node_offset)?;
-            if !piece_offset.is_zero() {
-                let key_string = dbxxx.load_key_data(piece_offset)?;
+            if !key_offset.is_zero() {
+                let key_string = dbxxx.load_key_data(key_offset)?;
                 if !self.is_large(&key_string, &node1, dbxxx)? {
                     return Ok(false);
                 }
@@ -343,9 +382,13 @@ impl IdxFile {
                     return Ok(false);
                 }
             }
-            let piece_offset = node.get_ref().keys_get(i);
-            if !piece_offset.is_zero() {
-                let key_string1 = dbxxx.load_key_data(piece_offset)?;
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.get_ref().keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.get_ref().keys_get(i);
+            //
+            if !key_offset.is_zero() {
+                let key_string1 = dbxxx.load_key_data(key_offset)?;
                 if key <= &key_string1 {
                     return Ok(false);
                 }
@@ -380,9 +423,13 @@ impl IdxFile {
                     return Ok(false);
                 }
             }
-            let piece_offset11 = node.get_ref().keys_get(i);
-            if !piece_offset11.is_zero() {
-                let ket_string11 = dbxxx.load_key_data(piece_offset11)?;
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset11 = node.get_ref().keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset11, _short_key11) = node.get_ref().keys_get(i);
+            //
+            if !key_offset11.is_zero() {
+                let ket_string11 = dbxxx.load_key_data(key_offset11)?;
                 if key1 >= &ket_string11 {
                     return Ok(false);
                 }
@@ -414,9 +461,13 @@ impl IdxFile {
                     return Ok(false);
                 }
             }
-            let piece_offset = node.get_ref().keys_get(i);
-            if !piece_offset.is_zero() {
-                let ket_string1 = dbxxx.load_key_data(piece_offset)?;
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.get_ref().keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.get_ref().keys_get(i);
+            //
+            if !key_offset.is_zero() {
+                let ket_string1 = dbxxx.load_key_data(key_offset)?;
                 if key >= &ket_string1 {
                     return Ok(false);
                 }
@@ -499,6 +550,17 @@ impl IdxFile {
         }
         Ok(vec)
     }
+    //
+    pub fn keys_count_stats(&self) -> Result<KeysCountStats> {
+        let mut keys_count_stats = KeysCountStats::default();
+        //
+        let top_node = self.read_top_node()?;
+        let mut locked = RefCell::borrow_mut(&self.0);
+        locked.idx_keys_count_stats(&top_node, &mut keys_count_stats)?;
+        //
+        Ok(keys_count_stats)
+    }
+    //
     pub fn count_of_used_node<F>(
         &self,
         read_key_value_piece_size_func: F,
@@ -535,6 +597,7 @@ impl IdxFile {
         //
         Ok((key_piece_vec, value_piece_vec, node_vec))
     }
+    //
     pub fn piece_size_stats<KV, F>(&self, read_piece_size_func: F) -> Result<RecordSizeStats<KV>>
     where
         F: Fn(KeyPieceOffset) -> Result<PieceSize<KV>> + std::marker::Copy,
@@ -548,15 +611,7 @@ impl IdxFile {
         //
         Ok(piece_size_stats)
     }
-    pub fn keys_count_stats(&self) -> Result<KeysCountStats> {
-        let mut keys_count_stats = KeysCountStats::default();
-        //
-        let top_node = self.read_top_node()?;
-        let mut locked = RefCell::borrow_mut(&self.0);
-        locked.idx_keys_count_stats(&top_node, &mut keys_count_stats)?;
-        //
-        Ok(keys_count_stats)
-    }
+    //
     pub fn length_stats<KV: Default + Copy + Ord, F>(
         &self,
         read_key_length_func: F,
@@ -748,21 +803,24 @@ pub const NODE_SLOTS_MAX: u16 = 128;
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u64u64")]
 const NODE_SIZE_ARY: [u32; 8] = [
-    16 * 4 * 2 * 4,
-    16 * 4 * 2 * 8,
-    16 * 4 * 2 * 10,
-    16 * 4 * 2 * 12,
-    16 * 4 * 2 * 14,
-    16 * 4 * 2 * 16,
+    16 * 4 * 2 * 4, //
+    16 * 4 * 2 * 8, //
+    16 * 4 * 2 * 16, //
     16 * 4 * 2 * 17,
+    16 * 4 * 2 * 18,
+    16 * 4 * 2 * 19,
     16 * 4 * 2 * 20,
+    16 * 4 * 2 * 21,
 ];
 */
+/* */
 #[cfg(not(feature = "small_node_slots"))]
+#[cfg(not(feature = "oi_hash_turbo"))]
 #[cfg(feature = "vf_u64u64")]
 pub const NODE_SLOTS_MAX: u16 = 64;
 
 #[cfg(not(feature = "small_node_slots"))]
+#[cfg(not(feature = "oi_hash_turbo"))]
 #[cfg(feature = "vf_u64u64")]
 const NODE_SIZE_ARY: [u32; 8] = [
     16 * 4 * 2,
@@ -774,6 +832,26 @@ const NODE_SIZE_ARY: [u32; 8] = [
     16 * 4 * 2 * 11,
     16 * 4 * 2 * 12,
 ];
+
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "oi_hash_turbo")]
+#[cfg(feature = "vf_u64u64")]
+pub const NODE_SLOTS_MAX: u16 = 64;
+
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "oi_hash_turbo")]
+#[cfg(feature = "vf_u64u64")]
+const NODE_SIZE_ARY: [u32; 8] = [
+    16 * 4 * 2 * 2,  //
+    16 * 4 * 2 * 4,  //
+    16 * 4 * 2 * 8,  //
+    16 * 4 * 2 * 16, // +
+    16 * 4 * 2 * 32,
+    16 * 4 * 2 * 34,
+    16 * 4 * 2 * 36,
+    16 * 4 * 2 * 38,
+];
+
 /*
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u64u64")]
@@ -782,19 +860,16 @@ pub const NODE_SLOTS_MAX: u16 = 32;
 #[cfg(not(feature = "small_node_slots"))]
 #[cfg(feature = "vf_u64u64")]
 const NODE_SIZE_ARY: [u32; 8] = [
-    16 * 4 * 2,
-    16 * 4 * 4,
-    16 * 4 * 5,
+    16 * 4,
+    16 * 4 * 2, //
+    16 * 4 * 4, //
     16 * 4 * 6,
-    16 * 4 * 7,
-    16 * 4 * 8,
+    16 * 4 * 8, //
     16 * 4 * 9,
     16 * 4 * 10,
+    16 * 4 * 11,
 ];
 */
-
-#[cfg(not(feature = "small_node_slots"))]
-#[cfg(feature = "vf_vu64")]
 /*
 db_map.depth_of_node_tree(): 4
 
@@ -819,18 +894,23 @@ const NODE_SIZE_ARY: [u32; 8] = [
 db_map.depth_of_node_tree(): 4
 */
 /*
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "oi_hash_turbo")]
+#[cfg(feature = "vf_vu64")]
 pub const NODE_SLOTS_MAX: u16 = 256;
 
 #[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "oi_hash_turbo")]
+#[cfg(feature = "vf_vu64")]
 const NODE_SIZE_ARY: [u32; 8] = [
-    16 * 4 * 2 * 11,
+    16 * 4 * 2 * 8, // +
+    16 * 4 * 2 * 16,
+    16 * 4 * 2 * 17,
     16 * 4 * 2 * 18,
+    16 * 4 * 2 * 19,
     16 * 4 * 2 * 20,
+    16 * 4 * 2 * 21,
     16 * 4 * 2 * 22,
-    16 * 4 * 2 * 24,
-    16 * 4 * 2 * 26,
-    16 * 4 * 2 * 28,
-    16 * 4 * 2 * 30,
 ];
 */
 /*
@@ -839,19 +919,24 @@ const NODE_SIZE_ARY: [u32; 8] = [
 395M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 4
 */
-/*
+/* *
+#[cfg(not(feature = "small_node_slots"))]
+//#[cfg(feature = "oi_hash_turbo")]
+#[cfg(feature = "vf_vu64")]
 pub const NODE_SLOTS_MAX: u16 = 128;
 
 #[cfg(not(feature = "small_node_slots"))]
+//#[cfg(feature = "oi_hash_turbo")]
+#[cfg(feature = "vf_vu64")]
 const NODE_SIZE_ARY: [u32; 8] = [
-    16 * 4 * 2 * 4,
-    16 * 4 * 2 * 5,
-    16 * 4 * 2 * 6,
-    16 * 4 * 2 * 7,
-    16 * 4 * 2 * 8,
+    16 * 4 * 2 * 4, // +
+    16 * 4 * 2 * 8, //
     16 * 4 * 2 * 9,
     16 * 4 * 2 * 10,
     16 * 4 * 2 * 11,
+    16 * 4 * 2 * 12,
+    16 * 4 * 2 * 13,
+    16 * 4 * 2 * 14,
 ];
 */
 /*
@@ -875,43 +960,51 @@ const NODE_SIZE_ARY: [u32; 8] = [
 383M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 5
 */
-/**/
+/* */
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(not(feature = "tr_has_short_key"))]
+#[cfg(feature = "vf_vu64")]
 pub const NODE_SLOTS_MAX: u16 = 64;
 
 #[cfg(not(feature = "small_node_slots"))]
+#[cfg(not(feature = "tr_has_short_key"))]
 #[cfg(feature = "vf_vu64")]
 const NODE_SIZE_ARY: [u32; 8] = [
     16 * 4 * 2,
-    16 * 4 * 4, //
-    16 * 4 * 8, //
+    16 * 4 * 4,  //
+    16 * 4 * 8,  //
     16 * 4 * 16, //
     16 * 4 * 18,
     16 * 4 * 20,
     16 * 4 * 22,
     16 * 4 * 24,
 ];
+
 /*
 313.65user 76.71system 6:34.52elapsed 98%CPU (0avgtext+0avgdata 13072maxresident)k
 0inputs+2014176outputs (0major+62696minor)pagefaults 0swaps
 386M	./cmp_siamesedb/target/bench-db.siamesedb
 db_map.depth_of_node_tree(): 6
 */
-/* *
+/* */
+#[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "tr_has_short_key")]
+#[cfg(feature = "vf_vu64")]
 pub const NODE_SLOTS_MAX: u16 = 32;
 
 #[cfg(not(feature = "small_node_slots"))]
+#[cfg(feature = "tr_has_short_key")]
 #[cfg(feature = "vf_vu64")]
 const NODE_SIZE_ARY: [u32; 8] = [
-    16 * 4 * 2,
-    16 * 4 * 4,
-    16 * 4 * 5,
-    16 * 4 * 6,
-    16 * 4 * 7,
-    16 * 4 * 8,
-    16 * 4 * 9,
-    16 * 4 * 10,
+    16 * 4 * 3 * 3,
+    16 * 4 * 3 * 4,
+    16 * 4 * 3 * 5,
+    16 * 4 * 3 * 6,
+    16 * 4 * 3 * 7,
+    16 * 4 * 3 * 8,
+    16 * 4 * 3 * 9,
+    16 * 4 * 3 * 10,
 ];
-*/
 
 /*
 -g
@@ -1076,10 +1169,13 @@ impl VarFileNodeCache {
         debug_assert!((node_.get_ref().offset().as_value() & 0x0F) == 0);
         //
         let new_node_size = {
+            #[cfg(feature = "siamese_debug")]
             let buf_len: u32 = node_.get_ref().encoded_node_size().try_into().unwrap();
+            #[cfg(not(feature = "siamese_debug"))]
+            let buf_len: u32 = node_.get_ref().encoded_node_size() as u32;
             //
             #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
-            let encoded_len: u32 = 4;
+            let encoded_len: u32 = 2;
             #[cfg(feature = "vf_vu64")]
             let encoded_len: u32 = {
                 let encoded_len = if buf_len < 128 { 1 } else { 2 };
@@ -1153,99 +1249,51 @@ impl VarFileNodeCache {
                 (free_node_offset, node_size)
             } else {
                 let node_offset: NodePieceOffset = self.0.seek_to_end()?;
-                //self.0.write_node_clear(node_offset, new_node_size)?;
+                self.0.write_node_clear(node_offset, new_node_size)?;
+                #[cfg(debug_assertions)]
+                {
+                    let _current_pos = self.0.seek_position()?;
+                    debug_assert!(
+                        node_offset + new_node_size == _current_pos,
+                        "node_offset: {} + new_node_size: {} == _current_pos: {}",
+                        node_offset,
+                        new_node_size,
+                        _current_pos,
+                    );
+                }
                 (node_offset, new_node_size)
             };
             debug_assert!(!new_node_offset.is_zero());
             debug_assert!((new_node_offset.as_value() & 0x0F) == 0);
             {
-                let mut node = node_.get_mut();
-                node.set_offset(new_node_offset);
-                node.set_size(new_node_size);
-                node.idx_write_node_one(&mut self.0)?;
-            }
-        }
-        //
-        Ok(node_)
-    }
-
-    fn read_node_no_cache(&mut self, offset: NodePieceOffset) -> Result<(IdxNode, NodePieceSize)> {
-        debug_assert!(!offset.is_zero());
-        debug_assert!((offset.as_value() & 0x0F) == 0);
-        //
-        let _start_pos = self.0.seek_from_start(offset)?;
-        let node_size = self.0.read_node_size()?;
-        debug_assert!(
-            !node_size.is_zero(),
-            "!node_size.is_zero(), offset: {}",
-            offset
-        );
-        let is_leaf = self.0.read_u8()?;
-        let keys_count = self.0.read_keys_count()?;
-        debug_assert!(
-            keys_count.as_value() < NODE_SLOTS_MAX,
-            "keys_count: {} < NODE_SLOTS_MAX",
-            keys_count
-        );
-        let keys_count: usize = keys_count.try_into().unwrap();
-        //
-        let mut keys = TreeNode::create_empty_keys_vec();
-        let mut downs = TreeNode::create_empty_downs_vec();
-        {
-            keys.resize(keys_count, KeyPieceOffset::new(0));
-            for _i in 0..keys_count {
-                #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
-                let piece_offset = self
-                    .0
-                    .read_piece_offset()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                #[cfg(feature = "vf_node_u32")]
-                let piece_offset = self
-                    .0
-                    .read_piece_offset_u32()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                #[cfg(feature = "vf_node_u64")]
-                let piece_offset = self
-                    .0
-                    .read_piece_offset_u64()
-                    .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                debug_assert!(!piece_offset.is_zero());
-                //keys[_i] = piece_offset;
-                *unsafe { keys.get_unchecked_mut(_i) } = piece_offset;
-            }
-            downs.resize(keys_count + 1, NodePieceOffset::new(0));
-            if is_leaf == 0 {
-                for _i in 0..(keys_count + 1) {
-                    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
-                    let node_offset = self
-                        .0
-                        .read_node_offset()
-                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                    #[cfg(feature = "vf_node_u32")]
-                    let node_offset = self
-                        .0
-                        .read_node_offset_u32()
-                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                    #[cfg(feature = "vf_node_u64")]
-                    let node_offset = self
-                        .0
-                        .read_node_offset_u64()
-                        .unwrap_or_else(|_| panic!("offset:{}, i:{}", offset, _i));
-                    debug_assert!(
-                        (node_offset.as_value() & 0x0F) == 0,
-                        "(node_offset.as_value(): {} & 0x0F) == 0, offset: {}",
-                        node_offset,
-                        offset.as_value()
-                    );
-                    //downs[_i] = node_offset;
-                    *unsafe { downs.get_unchecked_mut(_i) } = node_offset;
+                {
+                    let mut node = node_.get_mut();
+                    node.set_offset(new_node_offset);
+                    node.set_size(new_node_size);
+                }
+                #[cfg(not(feature = "node_cache"))]
+                {
+                    node_.idx_write_node_one(&mut self.0)?;
+                    Ok(node_)
+                }
+                #[cfg(feature = "node_cache")]
+                {
+                    //
+                    // BUG: the buggy nc on non nc_large. why?
+                    //
+                    #[cfg(feature = "nc_large")]
+                    let node_ = self.1.put(&mut self.0, node_, new_node_size, true)?;
+                    #[cfg(not(feature = "nc_large"))]
+                    node_.idx_write_node_one(&mut self.0)?;
+                    //
+                    Ok(node_)
                 }
             }
         }
-        let node_ = IdxNode::with_node_size_vec(offset, node_size, keys, downs);
-        debug_assert!(_start_pos + node_size >= self.0.seek_position()?);
-        //
-        Ok((node_, node_size))
+    }
+
+    fn read_node_no_cache(&mut self, offset: NodePieceOffset) -> Result<(IdxNode, NodePieceSize)> {
+        IdxNode::idx_read_node_one(&mut self.0, offset)
     }
     #[cfg(not(feature = "node_cache"))]
     fn read_node(&mut self, offset: NodePieceOffset) -> Result<IdxNode> {
@@ -1294,8 +1342,12 @@ impl VarFileNodeCache {
         }
         while i > 0 {
             i -= 1;
-            let piece_offset = node.keys_get(i);
-            gs += &format!("{}{:04x}\n", head, piece_offset.as_value());
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.keys_get(i);
+            //
+            gs += &format!("{}{:04x}\n", head, key_offset.as_value());
             let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
                 let node = self
@@ -1338,10 +1390,14 @@ impl VarFileNodeCache {
         }
         while i > 0 {
             i -= 1;
-            let piece_offset = node.keys_get(i);
-            if !piece_offset.is_zero() {
-                let key_string = dbxxx.load_key_data(piece_offset)?;
-                gs += &format!("{}{:04x}:'{}'\n", head, piece_offset.as_value(), key_string);
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.keys_get(i);
+            //
+            if !key_offset.is_zero() {
+                let key_string = dbxxx.load_key_data(key_offset)?;
+                gs += &format!("{}{:04x}:'{}'\n", head, key_offset.as_value(), key_string);
             }
             let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
@@ -1356,6 +1412,40 @@ impl VarFileNodeCache {
         gs += &format!("{}{}\n", head, GRAPH_NODE_ED);
         //
         Ok(gs)
+    }
+
+    fn idx_keys_count_stats(
+        &mut self,
+        node_: &IdxNode,
+        keys_vec: &mut KeysCountStats,
+    ) -> Result<()> {
+        let node = node_.get_ref();
+        let mut i = node.downs_len() - 1;
+        let node_offset = node.downs_get(i);
+        if !node_offset.is_zero() {
+            let node = self
+                .read_node(node_offset)
+                .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
+            self.idx_keys_count_stats(&node, keys_vec)?;
+        }
+        while i > 0 {
+            i -= 1;
+            //
+            let node_offset = node.downs_get(i);
+            if !node_offset.is_zero() {
+                let node = self
+                    .read_node(node_offset)
+                    .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
+                let keys_count = node.get_ref().keys_len();
+                #[cfg(feature = "siamese_debug")]
+                keys_vec.touch_size(KeysCount::new(keys_count.try_into().unwrap()));
+                #[cfg(not(feature = "siamese_debug"))]
+                keys_vec.touch_size(KeysCount::new(keys_count as u16));
+                self.idx_keys_count_stats(&node, keys_vec)?;
+            }
+        }
+        //
+        Ok(())
     }
 
     fn count_of_used_node<F>(
@@ -1397,10 +1487,14 @@ impl VarFileNodeCache {
         while i > 0 {
             i -= 1;
             //
-            let piece_offset = node.keys_get(i);
-            if !piece_offset.is_zero() {
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.keys_get(i);
+            //
+            if !key_offset.is_zero() {
                 let (key_piece_size, value_piece_size) =
-                    read_key_value_piece_size_func(piece_offset)?;
+                    read_key_value_piece_size_func(key_offset)?;
                 match key_piece_vec
                     .iter()
                     .position(|v| v.0 == key_piece_size.as_value())
@@ -1467,9 +1561,13 @@ impl VarFileNodeCache {
         while i > 0 {
             i -= 1;
             //
-            let piece_offset = node.keys_get(i);
-            if !piece_offset.is_zero() {
-                let piece_size = read_piece_size_func(piece_offset)?;
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.keys_get(i);
+            //
+            if !key_offset.is_zero() {
+                let piece_size = read_piece_size_func(key_offset)?;
                 piece_vec.touch_size(piece_size);
             }
             //
@@ -1479,37 +1577,6 @@ impl VarFileNodeCache {
                     .read_node(node_offset)
                     .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
                 self.idx_piece_size_stats(&node, piece_vec, read_piece_size_func)?;
-            }
-        }
-        //
-        Ok(())
-    }
-
-    fn idx_keys_count_stats(
-        &mut self,
-        node_: &IdxNode,
-        keys_vec: &mut KeysCountStats,
-    ) -> Result<()> {
-        let node = node_.get_ref();
-        let mut i = node.downs_len() - 1;
-        let node_offset = node.downs_get(i);
-        if !node_offset.is_zero() {
-            let node = self
-                .read_node(node_offset)
-                .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-            self.idx_keys_count_stats(&node, keys_vec)?;
-        }
-        while i > 0 {
-            i -= 1;
-            //
-            let node_offset = node.downs_get(i);
-            if !node_offset.is_zero() {
-                let node = self
-                    .read_node(node_offset)
-                    .unwrap_or_else(|_| panic!("offset: {:04x}", node_offset.as_value()));
-                let keys_count = node.get_ref().keys_len();
-                keys_vec.touch_size(KeysCount::new(keys_count.try_into().unwrap()));
-                self.idx_keys_count_stats(&node, keys_vec)?;
             }
         }
         //
@@ -1537,9 +1604,13 @@ impl VarFileNodeCache {
         while i > 0 {
             i -= 1;
             //
-            let piece_offset = node.keys_get(i);
-            if !piece_offset.is_zero() {
-                let key_length = read_kv_length_func(piece_offset)?;
+            #[cfg(not(feature = "tr_has_short_key"))]
+            let key_offset = node.keys_get(i);
+            #[cfg(feature = "tr_has_short_key")]
+            let (key_offset, _short_key) = node.keys_get(i);
+            //
+            if !key_offset.is_zero() {
+                let key_length = read_kv_length_func(key_offset)?;
                 length_vec.touch_length(key_length);
             }
             //
@@ -1567,13 +1638,18 @@ used node piece:
 | offset | bytes | name        | comment                           |
 +--------+-------+-------------+-----------------------------------+
 | 0      | 1..5  | node size   | size in bytes of this node: vu32  |
-| 1      | 1     | key-count   | count of keys                     |
-| 2      | 1..9  | key1        | offset of key-value               |
+| --     | 2     | status      | is_leaf, has_key ...etc           |
+| --     | 1     | key-count   | count of keys                     |
+| --     | 1..9  | key1        | offset of key-value               |
 |        |       | ...         |                                   |
 |        |       | key4        |                                   |
 | --     | 1..9  | down1       | offset of next node               |
 |        |       | ...         |                                   |
 |        |       | down5       |                                   |
+|        | 1..9  | down1       | offset of next node               |
+| --     | 1..9  | keybody1    | key body data (at has_key)        |
+|        |       | ...         |                                   |
+|        |       | keybody4    |                                   |
 +--------+-------+-------------+-----------------------------------+
 ```
 */

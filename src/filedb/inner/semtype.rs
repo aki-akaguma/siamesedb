@@ -108,7 +108,8 @@ impl<T> std::ops::Sub<Offset<T>> for Offset<T> {
     #[inline]
     fn sub(self, rhs: Offset<T>) -> Self::Output {
         let val = self.val - rhs.val;
-        Size::new(val.try_into().unwrap_or_else(|err| {
+        #[cfg(feature = "siamese_debug")]
+        let val = val.try_into().unwrap_or_else(|err| {
             panic!(
                 "{} - {} = {} : {}",
                 self.as_value(),
@@ -116,7 +117,11 @@ impl<T> std::ops::Sub<Offset<T>> for Offset<T> {
                 val,
                 err
             )
-        }))
+        });
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = val as u32;
+        //
+        Size::new(val)
     }
 }
 

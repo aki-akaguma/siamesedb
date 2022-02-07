@@ -155,6 +155,15 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
             "value_length_stats(): {}",
             db_map.value_length_stats().unwrap()
         );
+        #[cfg(feature = "htx")]
+        {
+            let (count, per_mill) = db_map.htx_filling_rate_per_mill().unwrap();
+            println!(
+                "htx_filling_rate(): {:.2}%, count: {}",
+                per_mill as f64/10.0,
+                count
+            );
+        }
     }
     if check_cnf.f_mst {
         println!("db_map.is_mst_valid(): {}", db_map.is_mst_valid().unwrap());

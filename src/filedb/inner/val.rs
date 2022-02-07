@@ -14,7 +14,8 @@ type HeaderSignature = [u8; 8];
 
 //const CHUNK_SIZE: u32 = 4 * 1024;
 //const CHUNK_SIZE: u32 = 4 * 4 * 1024;
-const CHUNK_SIZE: u32 = 4 * 4 * 4 * 1024;
+//const CHUNK_SIZE: u32 = 4 * 4 * 4 * 1024;
+const CHUNK_SIZE: u32 = 128 * 1024;
 const _DAT_HEADER_SZ: u64 = 192;
 const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'V', 0u8];
 
@@ -306,6 +307,9 @@ impl ValuePiece {
     }
     //
     fn encoded_piece_size(&self) -> (u32, u32, ValueLength) {
+        #[cfg(feature = "siamese_debug")]
+        let value_len = ValueLength::new(self.value.len().try_into().unwrap());
+        #[cfg(not(feature = "siamese_debug"))]
         let value_len = ValueLength::new(self.value.len() as u32);
         //
         #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
@@ -330,12 +334,15 @@ impl ValuePiece {
         assert!(!self.size.is_zero());
         //
         let value = &self.value;
+        #[cfg(feature = "siamese_debug")]
         let value_len = ValueLength::new(value.len().try_into().unwrap());
+        #[cfg(not(feature = "siamese_debug"))]
+        let value_len = ValueLength::new(value.len() as u32);
         //
         file.seek_from_start(self.offset)?;
         file.write_piece_size(self.size)?;
         file.write_value_len(value_len)?;
-        file.write_all(value)?;
+        file.write_all_small(value)?;
         file.write_zero_to_offset(self.offset + self.size)?;
         //
         Ok(())
@@ -455,7 +462,7 @@ impl VarFileValueCache {
         //
         let val_len = self.0.read_value_len()?;
         let maybe_slice = self.0.read_exact_maybeslice(val_len.into())?;
-        let value = maybe_slice.to_vec();
+        let value = maybe_slice.into_vec();
         //
         Ok(value)
     }
@@ -482,7 +489,7 @@ free piece:
 +--------+-------+-------------+-----------------------------------+
 | 0      | 1..5  | piece size  | size in bytes of this piece: u32  |
 | --     | 1     | val len     | always zero                       |
-| --     | 8     | next        | next free piece offset           |
+| --     | 8     | next        | next free piece offset            |
 | --     | --    | reserve     | reserved free space               |
 +--------+-------+-------------+-----------------------------------+
 ```

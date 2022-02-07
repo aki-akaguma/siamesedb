@@ -23,6 +23,7 @@ impl DbMapKeyType for DbBytes {
     fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
     }
+    #[inline]
     fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering {
         self.0.as_slice().cmp(other)
     }

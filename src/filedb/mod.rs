@@ -29,23 +29,23 @@ pub enum FileBufSizeParam {
 /// chunk_size is MUST power of 2.
 #[derive(Debug, Clone)]
 pub struct FileDbParams {
-    /// buffer size of key file buffer. None is auto buffer size.
-    pub key_buf_size: FileBufSizeParam,
-    /// buffer size of val file buffer. None is auto buffer size.
+    /// buffer size of val file buffer. Default is auto buffer size.
     pub val_buf_size: FileBufSizeParam,
-    /// buffer size of idx file buffer. None is auto buffer size.
+    /// buffer size of key file buffer. Default is full buffer size.
+    pub key_buf_size: FileBufSizeParam,
+    /// buffer size of idx file buffer. Default is full buffer size.
     pub idx_buf_size: FileBufSizeParam,
-    /// buffer size of htx file buffer. None is auto buffer size.
+    /// buffer size of htx file buffer. Default is full buffer size.
     pub htx_buf_size: FileBufSizeParam,
 }
 
 impl std::default::Default for FileDbParams {
     fn default() -> Self {
         Self {
-            key_buf_size: FileBufSizeParam::Auto,
             val_buf_size: FileBufSizeParam::Auto,
-            idx_buf_size: FileBufSizeParam::Auto,
-            htx_buf_size: FileBufSizeParam::Auto,
+            key_buf_size: FileBufSizeParam::PerMille(1000),
+            idx_buf_size: FileBufSizeParam::PerMille(1000),
+            htx_buf_size: FileBufSizeParam::PerMille(1000),
         }
     }
 }
@@ -88,6 +88,9 @@ pub trait CheckFileDbMap {
     fn key_length_stats(&self) -> Result<LengthStats<Key>>;
     /// value length statistics
     fn value_length_stats(&self) -> Result<LengthStats<Value>>;
+    /// htx filling rate per mill
+    #[cfg(feature = "htx")]
+    fn htx_filling_rate_per_mill(&self) -> Result<(u64, u32)>;
 }
 
 pub type CountOfPerSize = Vec<(u32, u64)>;

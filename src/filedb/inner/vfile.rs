@@ -4,6 +4,7 @@ use rabuf::{BufFile, FileSetLen, FileSync, MaybeSlice, SmallRead, SmallWrite};
 use std::fs::File;
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 
+#[cfg(feature = "siamese_debug")]
 #[cfg(not(feature = "vf_u64u64"))]
 use std::convert::TryInto;
 
@@ -95,6 +96,7 @@ impl VarFile {
         self.prepare(offset)?;
         Ok(pos)
     }
+    #[cfg(any(feature = "vf_vu64", feature = "vf_u64u64"))]
     #[inline]
     pub fn seek_skip_length<T: PartialEq + Copy>(
         &mut self,
@@ -134,7 +136,7 @@ impl VarFile {
     }
     ///
     #[inline]
-    pub fn write_zero<T>(&mut self, size: Size<T>) -> Result<()> {
+    pub fn _write_zero<T>(&mut self, size: Size<T>) -> Result<()> {
         self.buf_file.write_zero(size.into())
     }
     #[inline]
@@ -149,7 +151,7 @@ impl VarFile {
     }
     ///
     #[inline]
-    pub fn write_piece_clear<T: Copy + PartialEq>(
+    pub fn write_piece_clear<T: Copy + PartialEq + PartialOrd>(
         &mut self,
         offset: PieceOffset<T>,
         size: PieceSize<T>,
@@ -168,9 +170,29 @@ impl VarFile {
             );
         }
         self.seek_from_start(offset)?;
-        self.write_zero(size)?;
-        self.seek_from_start(offset)?;
         self.write_piece_size(size)?;
+        self.write_zero_to_offset(offset + size)?;
+        Ok(())
+    }
+    ///
+    #[inline]
+    pub fn write_node_clear(&mut self, offset: NodePieceOffset, size: NodePieceSize) -> Result<()> {
+        debug_assert!(!size.is_zero());
+        #[cfg(debug_assertions)]
+        {
+            self.seek_from_start(offset)?;
+            let _piece_size = self.read_piece_size()?;
+            debug_assert!(
+                _piece_size.is_zero() || size == _piece_size,
+                "size: {} == _piece_size: {}, offset: {}",
+                size,
+                _piece_size,
+                offset
+            );
+        }
+        self.seek_from_start(offset)?;
+        self.write_node_size(size)?;
+        self.write_zero_to_offset(offset + size)?;
         Ok(())
     }
 }
@@ -249,6 +271,14 @@ impl rabuf::SmallWrite for VarFile {
         self.buf_file.write_u64_le(val)
     }
     #[inline]
+    fn write_u64_le_slice(&mut self, val_slice: &[u64]) -> Result<()> {
+        self.buf_file.write_u64_le_slice(val_slice)
+    }
+    #[inline]
+    fn write_u64_le_slice2(&mut self, val_slice1: &[u64], val_slice2: &[u64]) -> Result<()> {
+        self.buf_file.write_u64_le_slice2(val_slice1, val_slice2)
+    }
+    #[inline]
     fn write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         self.buf_file.write_all_small(buf)
     }
@@ -267,11 +297,14 @@ impl VarFile {
     #[inline]
     pub fn write_piece_offset_u32<T: Copy>(&mut self, piece_offset: PieceOffset<T>) -> Result<()> {
         debug_assert!(piece_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(
-            piece_offset
-                .try_into()
-                .unwrap_or_else(|err| panic!("piece_offset: {}: {}", piece_offset.as_value(), err)),
-        )
+        #[cfg(feature = "siamese_debug")]
+        let val = piece_offset
+            .try_into()
+            .unwrap_or_else(|err| panic!("piece_offset: {}: {}", piece_offset.as_value(), err));
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = piece_offset.as_value() as u32;
+        //
+        self.write_u32_le(val)
     }
     #[inline]
     pub fn read_node_offset_u32(&mut self) -> Result<NodePieceOffset> {
@@ -280,11 +313,14 @@ impl VarFile {
     #[inline]
     pub fn write_node_offset_u32(&mut self, node_offset: NodePieceOffset) -> Result<()> {
         debug_assert!(node_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(
-            node_offset
-                .try_into()
-                .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err)),
-        )
+        #[cfg(feature = "siamese_debug")]
+        let val = node_offset
+            .try_into()
+            .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err));
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = node_offset.as_value() as u32;
+        //
+        self.write_u32_le(val)
     }
 }
 
@@ -294,22 +330,57 @@ impl VarFile {
     pub fn read_piece_offset_u64<T>(&mut self) -> Result<PieceOffset<T>> {
         self.read_u64_le().map(PieceOffset::new)
     }
+    #[cfg(not(feature = "idx_straight"))]
     #[inline]
     pub fn write_piece_offset_u64<T: Copy>(&mut self, piece_offset: PieceOffset<T>) -> Result<()> {
         self.write_u64_le(piece_offset.into())
+    }
+    #[cfg(feature = "idx_straight")]
+    #[inline]
+    pub fn write_piece_offset_u64_slice<T: Copy>(
+        &mut self,
+        piece_offset_slice: &[PieceOffset<T>],
+    ) -> Result<()> {
+        let u64_slice =
+            unsafe { std::mem::transmute::<&[PieceOffset<T>], &[u64]>(piece_offset_slice) };
+        self.write_u64_le_slice(u64_slice)
     }
     #[inline]
     pub fn read_node_offset_u64(&mut self) -> Result<NodePieceOffset> {
         self.read_u64_le().map(NodePieceOffset::new)
     }
+    #[cfg(not(feature = "idx_straight"))]
     #[inline]
     pub fn write_node_offset_u64(&mut self, node_offset: NodePieceOffset) -> Result<()> {
         self.write_u64_le(node_offset.into())
     }
+    #[cfg(feature = "idx_straight")]
+    #[inline]
+    pub fn _write_node_offset_u64_slice(
+        &mut self,
+        node_offset_slice: &[NodePieceOffset],
+    ) -> Result<()> {
+        let u64_slice =
+            unsafe { std::mem::transmute::<&[NodePieceOffset], &[u64]>(node_offset_slice) };
+        self.write_u64_le_slice(u64_slice)
+    }
+    #[cfg(feature = "idx_straight")]
+    #[inline]
+    pub fn write_piece_offset_and_node_offset_u64_slice<T: Copy>(
+        &mut self,
+        piece_offset_slice: &[PieceOffset<T>],
+        node_offset_slice: &[NodePieceOffset],
+    ) -> Result<()> {
+        let u64_slice1 =
+            unsafe { std::mem::transmute::<&[PieceOffset<T>], &[u64]>(piece_offset_slice) };
+        let u64_slice2 =
+            unsafe { std::mem::transmute::<&[NodePieceOffset], &[u64]>(node_offset_slice) };
+        self.write_u64_le_slice2(u64_slice1, u64_slice2)
+    }
 }
 
 #[cfg(feature = "vf_u32u32")]
-#[cfg(feature = "htx")]
+#[cfg(any(feature = "htx", feature = "idx_straight"))]
 impl VarFile {
     #[inline]
     pub fn read_value_piece_offset<T>(&mut self) -> Result<PieceOffset<T>> {
@@ -321,16 +392,19 @@ impl VarFile {
         piece_offset: PieceOffset<T>,
     ) -> Result<()> {
         debug_assert!(piece_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(
-            piece_offset
-                .try_into()
-                .unwrap_or_else(|err| panic!("piece_offset: {}: {}", piece_offset.as_value(), err)),
-        )
+        #[cfg(feature = "siamese_debug")]
+        let val = piece_offset
+            .try_into()
+            .unwrap_or_else(|err| panic!("piece_offset: {}: {}", piece_offset.as_value(), err));
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = piece_offset.as_value() as u32;
+        //
+        self.write_u32_le(val)
     }
 }
 
 #[cfg(any(feature = "vf_u64u64", feature = "vf_vu64"))]
-#[cfg(feature = "htx")]
+#[cfg(any(feature = "htx", feature = "idx_straight"))]
 impl VarFile {
     #[inline]
     pub fn read_value_piece_offset<T>(&mut self) -> Result<PieceOffset<T>> {
@@ -351,27 +425,33 @@ impl VarFile {
     #[inline]
     pub fn write_free_piece_offset<T: Copy>(&mut self, offset: Offset<T>) -> Result<()> {
         debug_assert!(offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(
-            offset
-                .try_into()
-                .unwrap_or_else(|err| panic!("piece_offset: {}: {}", offset.as_value(), err)),
-        )
+        #[cfg(feature = "siamese_debug")]
+        let val = offset
+            .try_into()
+            .unwrap_or_else(|err| panic!("piece_offset: {}: {}", offset.as_value(), err));
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = offset.as_value() as u32;
+        //
+        self.write_u32_le(val)
     }
     //
-    #[cfg(not(feature = "htx"))]
+    #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
     #[inline]
     pub fn read_piece_offset<T>(&mut self) -> Result<PieceOffset<T>> {
         self.read_u32_le().map(|o| PieceOffset::<T>::new(o as u64))
     }
-    #[cfg(not(feature = "htx"))]
+    #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
     #[inline]
     pub fn write_piece_offset<T: Copy>(&mut self, piece_offset: PieceOffset<T>) -> Result<()> {
         debug_assert!(piece_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(
-            piece_offset
-                .try_into()
-                .unwrap_or_else(|err| panic!("piece_offset: {}: {}", piece_offset.as_value(), err)),
-        )
+        #[cfg(feature = "siamese_debug")]
+        let val = piece_offset
+            .try_into()
+            .unwrap_or_else(|err| panic!("piece_offset: {}: {}", piece_offset.as_value(), err));
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = piece_offset.as_value() as u32;
+        //
+        self.write_u32_le(val)
     }
     #[inline]
     pub fn read_piece_size<T>(&mut self) -> Result<PieceSize<T>> {
@@ -406,19 +486,23 @@ impl VarFile {
     #[inline]
     pub fn _write_node_offset(&mut self, node_offset: NodePieceOffset) -> Result<()> {
         debug_assert!(node_offset.as_value() <= u32::MAX as u64);
-        self.write_u32_le(
-            node_offset
-                .try_into()
-                .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err)),
-        )
+        #[cfg(feature = "siamese_debug")]
+        let val = node_offset
+            .try_into()
+            .unwrap_or_else(|err| panic!("node_offset: {}: {}", node_offset.as_value(), err));
+        #[cfg(not(feature = "siamese_debug"))]
+        let val = node_offset.as_value() as u32;
+        //
+        self.write_u32_le(val)
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodePieceSize> {
-        self.read_u32_le().map(NodePieceSize::new)
+        self.read_u16_le().map(|n| NodePieceSize::new(n as u32))
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: NodePieceSize) -> Result<()> {
-        self.write_u32_le(node_size.into())
+        debug_assert!(node_size.as_value() <= u16::MAX as u32);
+        self.write_u16_le(node_size.as_value() as u16)
     }
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
@@ -441,12 +525,18 @@ impl VarFile {
         self.write_u64_le(offset.into())
     }
     //
-    #[cfg(not(feature = "htx"))]
+    #[cfg(any(
+        not(any(feature = "htx", feature = "idx_straight")),
+        not(any(feature = "vf_node_u32", feature = "vf_node_u64"))
+    ))]
     #[inline]
     pub fn read_piece_offset<T>(&mut self) -> Result<PieceOffset<T>> {
         self.read_u64_le().map(PieceOffset::<T>::new)
     }
-    #[cfg(not(feature = "htx"))]
+    #[cfg(any(
+        not(any(feature = "htx", feature = "idx_straight")),
+        not(any(feature = "vf_node_u32", feature = "vf_node_u64"))
+    ))]
     #[inline]
     pub fn write_piece_offset<T>(&mut self, piece_offset: PieceOffset<T>) -> Result<()> {
         self.write_u64_le(piece_offset.into())
@@ -477,21 +567,24 @@ impl VarFile {
         self.write_u32_le(value_len.into())
     }
     //
+    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
     #[inline]
-    pub fn _read_node_offset(&mut self) -> Result<NodePieceOffset> {
+    pub fn read_node_offset(&mut self) -> Result<NodePieceOffset> {
         self.read_u64_le().map(NodePieceOffset::new)
     }
+    #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
     #[inline]
-    pub fn _write_node_offset(&mut self, node_offset: NodePieceOffset) -> Result<()> {
+    pub fn write_node_offset(&mut self, node_offset: NodePieceOffset) -> Result<()> {
         self.write_u64_le(node_offset.into())
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodePieceSize> {
-        self.read_u32_le().map(NodePieceSize::new)
+        self.read_u16_le().map(|n| NodePieceSize::new(n as u32))
     }
     #[inline]
     pub fn write_node_size(&mut self, node_size: NodePieceSize) -> Result<()> {
-        self.write_u32_le(node_size.into())
+        debug_assert!(node_size.as_value() <= u16::MAX as u32);
+        self.write_u16_le(node_size.as_value() as u16)
     }
     #[inline]
     pub fn read_keys_count(&mut self) -> Result<KeysCount> {
@@ -515,23 +608,10 @@ impl ReadVu64 for VarFile {
         self.buf_file.read_exact_small(buf)
     }
     /// reads `vu64` bytes and decods it to `u64`
-    #[inline]
     fn read_and_decode_vu64(&mut self) -> Result<u64> {
         /*
-        let byte_1st = self.buf_file.read_one_byte()?;
-        let len = vu64::decoded_len(byte_1st);
-        let maybe_slice = self.buf_file.read_exact_maybeslice(len as usize - 1)?;
-        match vu64::decode_with_first_and_follow(len, byte_1st, &maybe_slice) {
-            Ok(i) => Ok(i),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("{}", err),
-            )),
-        }
-        */
-        /*
         let mut buf = [0u8; vu64::MAX_BYTES-1];
-        let byte_1st = self.buf_file.read_one_byte()?;
+        let byte_1st = self.buf_file.read_u8()?;
         let len = vu64::decoded_len(byte_1st);
         if len > 1 {
             self.buf_file.read_exact_small(&mut buf[..len as usize - 1])?;
@@ -544,16 +624,41 @@ impl ReadVu64 for VarFile {
             )),
         }
         */
+        /*
         let byte_1st = self.buf_file.read_u8()?;
         let len = vu64::decoded_len(byte_1st);
-        let max_8_bytes = self.buf_file.read_max_8_bytes(len as usize - 1)?;
-        match vu64::decode_with_first_and_follow_le(len, byte_1st, max_8_bytes) {
+        let maybe_slice = self.buf_file.read_exact_maybeslice(len as usize - 1)?;
+        match vu64::decode_with_first_and_follow(len, byte_1st, &maybe_slice) {
             Ok(i) => Ok(i),
             Err(err) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("{}", err),
             )),
         }
+        */
+        let byte_1st = self.buf_file.read_u8()?;
+        if byte_1st < 128 {
+            Ok(byte_1st as u64)
+        } else {
+            let len = vu64::decoded_len(byte_1st);
+            let follow_len = len as usize - 1;
+            let max_8_bytes = match follow_len {
+                0 => 0,
+                1 => self.buf_file.read_u8()? as u64,
+                2 => self.buf_file.read_u16_le()? as u64,
+                //4 => self.buf_file.read_u32_le()? as u64,
+                _ => self.buf_file.read_max_8_bytes(follow_len)?,
+            };
+            match vu64::decode_with_first_and_follow_le(len, byte_1st, max_8_bytes) {
+                Ok(i) => Ok(i),
+                Err(err) => Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", err),
+                )),
+            }
+        }
+        /*
+         */
     }
 }
 
@@ -564,17 +669,25 @@ impl WriteVu64 for VarFile {}
 impl VarFile {
     #[inline]
     pub fn read_vu64_u16(&mut self) -> Result<u16> {
-        self.read_and_decode_vu64().map(|n| {
+        #[cfg(feature = "siamese_debug")]
+        let r = self.read_and_decode_vu64().map(|n| {
             n.try_into()
                 .unwrap_or_else(|err| panic!("n:{} :{}", n, err))
-        })
+        });
+        #[cfg(not(feature = "siamese_debug"))]
+        let r = self.read_and_decode_vu64().map(|n| n as u16);
+        r
     }
     #[inline]
     pub fn read_vu64_u32(&mut self) -> Result<u32> {
-        self.read_and_decode_vu64().map(|n| {
+        #[cfg(feature = "siamese_debug")]
+        let r = self.read_and_decode_vu64().map(|n| {
             n.try_into()
                 .unwrap_or_else(|err| panic!("n:{} :{}", n, err))
-        })
+        });
+        #[cfg(not(feature = "siamese_debug"))]
+        let r = self.read_and_decode_vu64().map(|n| n as u32);
+        r
     }
     #[inline]
     pub fn _read_vu64_u64(&mut self) -> Result<u64> {
@@ -605,18 +718,38 @@ impl VarFile {
         self.write_u64_le(offset.into())
     }
     //
-    #[cfg(not(feature = "htx"))]
+    #[cfg(any(
+        not(any(feature = "htx", feature = "idx_straight")),
+        not(any(feature = "vf_node_u32", feature = "vf_node_u64"))
+    ))]
     #[inline]
     pub fn read_piece_offset<T>(&mut self) -> Result<PieceOffset<T>> {
         self._read_vu64_u64().map(|v| PieceOffset::<T>::new(v * 8))
     }
-    #[cfg(not(feature = "htx"))]
+    #[cfg(any(
+        not(any(feature = "htx", feature = "idx_straight")),
+        not(any(feature = "vf_node_u32", feature = "vf_node_u64"))
+    ))]
     #[inline]
     pub fn write_piece_offset<T>(&mut self, piece_offset: PieceOffset<T>) -> Result<()> {
         let v: u64 = piece_offset.into();
+
         debug_assert!(v % 8 == 0);
         self._write_vu64_u64(v / 8)
     }
+    /*
+    #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
+    #[inline]
+    pub fn read_piece_offset<T>(&mut self) -> Result<PieceOffset<T>> {
+        self._read_vu64_u64().map(PieceOffset::<T>::new)
+    }
+    #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
+    #[inline]
+    pub fn write_piece_offset<T>(&mut self, piece_offset: PieceOffset<T>) -> Result<()> {
+        let v: u64 = piece_offset.into();
+        self._write_vu64_u64(v)
+    }
+    */
     #[inline]
     pub fn read_piece_size<T>(&mut self) -> Result<PieceSize<T>> {
         self.read_vu64_u32().map(|v| PieceSize::<T>::new(v * 8))
@@ -648,14 +781,14 @@ impl VarFile {
     #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
     #[inline]
     pub fn read_node_offset(&mut self) -> Result<NodePieceOffset> {
-        self.read_vu64_u64().map(|a| NodePieceOffset::new(a * 8))
+        self._read_vu64_u64().map(|a| NodePieceOffset::new(a * 8))
     }
     #[cfg(not(any(feature = "vf_node_u32", feature = "vf_node_u64")))]
     #[inline]
     pub fn write_node_offset(&mut self, node_offset: NodePieceOffset) -> Result<()> {
         let v: u64 = node_offset.into();
         debug_assert!(v % 8 == 0);
-        self.write_vu64_u64(v / 8)
+        self._write_vu64_u64(v / 8)
     }
     #[inline]
     pub fn read_node_size(&mut self) -> Result<NodePieceSize> {
@@ -688,7 +821,9 @@ impl VarFile {
         self.seek_from_start(offset)?;
         let byte_1st = self.buf_file.read_u8()?;
         let piece_size_len = vu64::decoded_len(byte_1st);
-        self.seek_skip_length(KeyLength::new((piece_size_len - 1).into()))?;
+        if piece_size_len > 1 {
+            self.seek_skip_length(KeyLength::new((piece_size_len - 1).into()))?;
+        }
         //
         self.seek_position()
     }
@@ -700,7 +835,9 @@ impl VarFile {
         self.seek_from_start(offset)?;
         let byte_1st = self.buf_file.read_u8()?;
         let piece_size_len = vu64::decoded_len(byte_1st);
-        self.seek_skip_length(KeyLength::new((piece_size_len - 1).into()))?;
+        if piece_size_len > 1 {
+            self.seek_skip_length(KeyLength::new((piece_size_len - 1).into()))?;
+        }
         //
         self.seek_position()
     }
@@ -713,9 +850,13 @@ impl VarFile {
         &mut self,
         offset: PieceOffset<T>,
     ) -> Result<PieceOffset<T>> {
+        /*
         self.seek_from_start(offset)?;
         self.seek_skip_length(KeyLength::new(4))?;
         //
+        self.seek_position()
+        */
+        self.seek_from_start(offset + PieceSize::<T>::new(4))?;
         self.seek_position()
     }
     #[inline]
@@ -723,9 +864,13 @@ impl VarFile {
         &mut self,
         offset: PieceOffset<T>,
     ) -> Result<PieceOffset<T>> {
+        /*
         self.seek_from_start(offset)?;
         self.seek_skip_length(KeyLength::new(4))?;
         //
+        self.seek_position()
+        */
+        self.seek_from_start(offset + PieceSize::<T>::new(4))?;
         self.seek_position()
     }
 }
@@ -756,9 +901,9 @@ mod debug {
                 #[cfg(not(feature = "buf_stats"))]
                 {
                     #[cfg(not(feature = "buf_print_hits"))]
-                    assert_eq!(std::mem::size_of::<VarFile>(), 208);
+                    assert_eq!(std::mem::size_of::<VarFile>(), 184);
                     #[cfg(feature = "buf_print_hits")]
-                    assert_eq!(std::mem::size_of::<VarFile>(), 232);
+                    assert_eq!(std::mem::size_of::<VarFile>(), 208);
                 }
                 #[cfg(feature = "buf_stats")]
                 assert_eq!(std::mem::size_of::<VarFile>(), 184);
@@ -814,14 +959,14 @@ mod debug {
                     #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
                     {
                         #[cfg(not(feature = "buf_print_hits"))]
-                        assert_eq!(std::mem::size_of::<VarFile>(), 124);
+                        assert_eq!(std::mem::size_of::<VarFile>(), 112);
                         #[cfg(feature = "buf_print_hits")]
                         assert_eq!(std::mem::size_of::<VarFile>(), 164);
                     }
                     #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                     {
                         #[cfg(not(feature = "buf_print_hits"))]
-                        assert_eq!(std::mem::size_of::<VarFile>(), 136);
+                        assert_eq!(std::mem::size_of::<VarFile>(), 120);
                         #[cfg(feature = "buf_print_hits")]
                         assert_eq!(std::mem::size_of::<VarFile>(), 176);
                     }

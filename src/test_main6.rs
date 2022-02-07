@@ -30,13 +30,14 @@ fn open_db_map(db_name: &str) -> Result<FileDbMapDbBytes, std::io::Error> {
             key_buf_size: FileBufSizeParam::PerMille(1000),
             idx_buf_size: FileBufSizeParam::PerMille(1000),
             htx_buf_size: FileBufSizeParam::PerMille(1000),
+            val_buf_size: FileBufSizeParam::PerMille(1000),
             /*
             key_buf_size: FileBufSizeParam::PerMille(100),
             idx_buf_size: FileBufSizeParam::PerMille(300),
             key_buf_size: FileBufSizeParam::Auto,
             idx_buf_size: FileBufSizeParam::Auto,
             */
-            ..Default::default()
+            //..Default::default()
         },
     )
 }

@@ -13,10 +13,11 @@ use std::rc::Rc;
 type HeaderSignature = [u8; 8];
 
 //const CHUNK_SIZE: u32 = 4 * 1024;
-const CHUNK_SIZE: u32 = 1024 * 1024;
+const CHUNK_SIZE: u32 = 128 * 1024;
+//const CHUNK_SIZE: u32 = 1024 * 1024;
 const HTX_HEADER_SZ: u64 = 128;
 const HTX_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'H', 0u8];
-const DEFAULT_HT_SIZE: u64 = 12 * 1024 * 1024;
+const DEFAULT_HT_SIZE: u64 = 16 * 1024 * 1024;
 
 #[cfg(not(feature = "htx_print_hits"))]
 #[derive(Debug)]
@@ -162,6 +163,18 @@ impl HtxFile {
         let count = locked.0.read_item_count()?;
         Ok((ht_size, count))
     }
+    pub fn htx_filling_rate_per_mill(&self) -> Result<(u64, u32)> {
+        let mut locked = RefCell::borrow_mut(&self.0);
+        let ht_size = locked.1;
+        let mut count = 0;
+        for idx in 0..ht_size {
+            let offset = locked.0.read_key_piece_offset(idx)?;
+            if !offset.is_zero() {
+                count += 1;
+            }
+        }
+        Ok((count, (count * 1000 / ht_size) as u32))
+    }
 }
 
 /**
@@ -238,7 +251,7 @@ impl VarFile {
         self.seek_from_start(NodePieceOffset::new(HTX_ITEM_COUNT_OFFSET))?;
         self.read_u64_le()
     }
-    fn write_item_count(&mut self, val: u64) -> Result<()> {
+    fn _write_item_count(&mut self, val: u64) -> Result<()> {
         self.seek_from_start(NodePieceOffset::new(HTX_ITEM_COUNT_OFFSET))?;
         self.write_u64_le(val)
     }
@@ -247,6 +260,7 @@ impl VarFile {
         self.read_u64_le().map(KeyPieceOffset::new)
     }
     fn write_key_piece_offset(&mut self, idx: u64, offset: KeyPieceOffset) -> Result<()> {
+        /*<CHECK>
         let count = self.read_item_count()?;
         if offset.is_zero() {
             if count > 0 {
@@ -255,6 +269,7 @@ impl VarFile {
         } else {
             self.write_item_count(count + 1)?;
         }
+        */
         self.seek_from_start(NodePieceOffset::new(HTX_HEADER_SZ + 8 * idx))?;
         self.write_u64_le(offset.into())?;
         Ok(())

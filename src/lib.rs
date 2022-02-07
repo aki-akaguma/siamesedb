@@ -191,7 +191,7 @@ pub trait DbXxx<KT: DbMapKeyType>: DbXxxObjectSafe<KT> {
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
-        vec.sort_by(|a, b| b.1.cmp(a.1));
+        vec.sort_unstable_by(|a, b| b.1.cmp(a.1));
         while let Some(ik) = vec.pop() {
             let result_value = self.get(ik.1)?;
             result.push((ik.0, result_value));
@@ -260,7 +260,7 @@ pub trait DbXxx<KT: DbMapKeyType>: DbXxxObjectSafe<KT> {
         Q: Ord + ?Sized,
     {
         let mut vec = bulk.to_vec();
-        vec.sort_by(|a, b| b.0.cmp(a.0));
+        vec.sort_unstable_by(|a, b| b.0.cmp(a.0));
         while let Some(kv) = vec.pop() {
             self.put(kv.0, kv.1.as_bytes())?;
         }
@@ -298,7 +298,7 @@ pub trait DbXxx<KT: DbMapKeyType>: DbXxxObjectSafe<KT> {
         let mut result: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
         let mut vec: Vec<(usize, &Q)> =
             bulk_keys.iter().enumerate().map(|(i, &a)| (i, a)).collect();
-        vec.sort_by(|a, b| b.1.cmp(a.1));
+        vec.sort_unstable_by(|a, b| b.1.cmp(a.1));
         while let Some(ik) = vec.pop() {
             let result_value = self.delete(ik.1)?;
             result.push((ik.0, result_value));
@@ -346,10 +346,20 @@ pub trait DbMapKeyType: Ord + Clone + Default + HashValue {
     fn from_bytes(bytes: &[u8]) -> Self;
     /// Signature in header of database file.
     fn signature() -> [u8; 8];
-    /// Byte slice of data to be saved
+    /// Byte slice of data to be saved.
     fn as_bytes(&self) -> &[u8];
     /// Compare with stored data
     fn cmp_u8(&self, other: &[u8]) -> std::cmp::Ordering;
+    /// Short byte slice of data to be saved node.
+    #[cfg(feature = "tr_has_short_key")]
+    fn as_short_bytes(&self) -> Option<&[u8]> {
+        let b_sl = self.as_bytes();
+        if b_sl.len() <= 32 {
+            Some(b_sl)
+        } else {
+            None
+        }
+    }
 }
 
 /// hash value for htx
@@ -394,6 +404,7 @@ impl std::hash::Hasher for MyHasher {
 
 #[inline]
 fn _xorshift64s(a: u64) -> u64 {
+    //let mut x = a.rotate_right(12);
     let mut x = a;
     x ^= x >> 12;
     x ^= x << 25;

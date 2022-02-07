@@ -4,15 +4,26 @@ use super::tr::IdxNode;
 use super::vfile::VarFile;
 use std::io::Result;
 
-//const CACHE_SIZE: usize = 8;
+#[cfg(not(feature = "nc_large"))]
+#[cfg(not(any(feature = "nc_lru", feature = "nc_lfu")))]
 const CACHE_SIZE: usize = 16;
-//const CACHE_SIZE: usize = 32;
-//const CACHE_SIZE: usize = 64;
 
+#[cfg(not(feature = "nc_large"))]
+#[cfg(any(feature = "nc_lru", feature = "nc_lfu"))]
+const CACHE_SIZE: usize = 512;
+
+//const CACHE_SIZE: usize = 8;
+//const CACHE_SIZE: usize = 16; // +
+//const CACHE_SIZE: usize = 32;
+//const CACHE_SIZE: usize = 48;
+//const CACHE_SIZE: usize = 64;   // +
 //const CACHE_SIZE: usize = 128;
 //const CACHE_SIZE: usize = 256;
+//const CACHE_SIZE: usize = 512;
 //const CACHE_SIZE: usize = 1024;
-//const CACHE_SIZE: usize = 10*1024*1024;
+
+#[cfg(feature = "nc_large")]
+const CACHE_SIZE: usize = 10 * 1024 * 1024;
 
 #[derive(Debug)]
 struct NodeCacheBean {
@@ -20,7 +31,7 @@ struct NodeCacheBean {
     node_offset: NodePieceOffset,
     node_size: NodePieceSize,
     dirty: bool,
-    #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+    #[cfg(any(feature = "nc_lru", feature = "nc_lfu"))]
     uses: u32,
 }
 
@@ -32,7 +43,7 @@ impl NodeCacheBean {
             node_offset,
             node_size,
             dirty,
-            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+            #[cfg(any(feature = "nc_lru", feature = "nc_lfu"))]
             uses: 0,
         }
     }
@@ -79,24 +90,49 @@ impl Default for NodeCache {
 impl NodeCache {
     #[inline]
     fn touch(&mut self, _cache_idx: usize) {
-        #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+        #[cfg(feature = "nc_lfu")]
         {
-            #[cfg(feature = "nc_lfu")]
+            #[cfg(feature = "siamese_debug")]
             {
-                self.cache[_cache_idx].uses += 1;
+                self.vec[_cache_idx].uses += 1;
             }
-            #[cfg(feature = "nc_lru")]
-            {
-                self.uses_cnt += 1;
-                self.cache[_cache_idx].uses = self.uses_cnt;
+            #[cfg(not(feature = "siamese_debug"))]
+            unsafe {
+                let u_ptr = self.vec.as_mut_ptr().add(_cache_idx);
+                (*u_ptr).uses += 1;
             }
+        }
+        #[cfg(feature = "nc_lru")]
+        {
+            self.uses_cnt += 1;
+            self.vec[_cache_idx].uses = self.uses_cnt;
         }
     }
     #[inline]
     pub fn flush(&mut self, file: &mut VarFile) -> Result<()> {
-        for &(_, idx) in self.map.vec.iter() {
-            let ncb = self.vec.get_mut(idx).unwrap();
-            write_node(file, ncb)?;
+        #[cfg(feature = "oi_hash_turbo")]
+        /*
+        {
+            let mut off_vec: Vec<u64> = self.map.map.keys().map(|&a| a).collect();
+            off_vec.sort_unstable();
+            for off in off_vec.iter() {
+                let idx = self.map.get(off).unwrap();
+                let ncb = self.vec.get_mut(idx).unwrap();
+                write_node(file, ncb)?;
+            }
+        }
+        */
+        {
+            for ncb in self.vec.iter_mut() {
+                write_node(file, ncb)?;
+            }
+        }
+        #[cfg(not(feature = "oi_hash_turbo"))]
+        {
+            for &(_, idx) in self.map.vec.iter() {
+                let ncb = self.vec.get_mut(idx).unwrap();
+                write_node(file, ncb)?;
+            }
         }
         Ok(())
     }
@@ -193,11 +229,22 @@ impl NodeCache {
             }
             None => {
                 if self.vec.len() > self.cache_size {
-                    // all clear cache algorithm
-                    self.clear(file)?;
-                    /*
-                     */
-                    //self.detach_cache(k, file)?
+                    #[cfg(not(any(feature = "nc_lfu", feature = "nc_lru")))]
+                    {
+                        // all clear cache algorithm
+                        self.clear(file)?;
+                    }
+                    #[cfg(any(feature = "nc_lfu", feature = "nc_lru"))]
+                    {
+                        let k = self.detach_cache()?;
+                        //
+                        let mut ncb = self.vec.swap_remove(k);
+                        write_node(file, &mut ncb)?;
+                        self.map.remove(&ncb.node_offset.as_value());
+                        //
+                        let off = self.vec[k].node_offset;
+                        self.map.insert(&off.as_value(), k);
+                    }
                 }
                 let k = self.vec.len();
                 self.vec.push(NodeCacheBean::new(node, node_size, dirty));
@@ -210,13 +257,8 @@ impl NodeCache {
             }
         }
     }
-    fn _detach_cache(&mut self, _k: usize, file: &mut VarFile) -> Result<usize> {
-        eprintln!("detach_cache!!");
-        // all clear cache algorithm
-        self.clear(file)?;
-        Ok(0)
-        /*
-         */
+    #[cfg(any(feature = "nc_lfu", feature = "nc_lru"))]
+    fn detach_cache(&mut self) -> Result<usize> {
         /*
         let half = self.cache.len() / 2;
         if _k < half {
@@ -235,25 +277,46 @@ impl NodeCache {
             Ok(k)
         }
         */
-        /*
         // LFU: Least Frequently Used
         let min_idx = {
             // find the minimum uses counter.
-            let mut min_idx = 0;
-            let mut min_uses = self.cache[min_idx].uses;
-            if min_uses != 0 {
-                for i in 1..self.cache_size {
-                    if self.cache[i].uses < min_uses {
-                        min_idx = i;
-                        min_uses = self.cache[min_idx].uses;
-                        if min_uses == 0 {
-                            break;
+            #[cfg(feature = "siamese_debug")]
+            let min_idx = {
+                let mut min_idx = 0;
+                let mut min_uses = self.vec[min_idx].uses;
+                if min_uses != 0 {
+                    for i in 1..self.cache_size {
+                        if self.vec[i].uses < min_uses {
+                            min_idx = i;
+                            min_uses = self.vec[min_idx].uses;
+                            if min_uses == 0 {
+                                break;
+                            }
                         }
                     }
                 }
-            }
+                min_idx
+            };
+            #[cfg(not(feature = "siamese_debug"))]
+            let min_idx = unsafe {
+                let u_ptr = self.vec.as_mut_ptr();
+                let mut min_idx = 0;
+                let mut min_uses = (*u_ptr.add(min_idx)).uses;
+                if min_uses != 0 {
+                    for i in 1..self.cache_size {
+                        if (*u_ptr.add(i)).uses < min_uses {
+                            min_idx = i;
+                            min_uses = (*u_ptr.add(min_idx)).uses;
+                            if min_uses == 0 {
+                                break;
+                            }
+                        }
+                    }
+                }
+                min_idx
+            };
             // clear all uses counter
-            self.cache.iter_mut().for_each(|ncb| {
+            self.vec.iter_mut().for_each(|ncb| {
                 ncb.uses = 0;
             });
             #[cfg(feature = "nc_lru")]
@@ -263,15 +326,8 @@ impl NodeCache {
             }
             min_idx
         };
-        // Make a new chunk, write the old cache to disk, replace old cache
-        let mut ncb = self.cache.remove(min_idx);
-        write_node(file, &mut ncb)?;
-        if _k <= min_idx {
-            Ok(_k)
-        } else {
-            Ok(_k - 1)
-        }
-        */
+        //
+        Ok(min_idx)
     }
     pub fn delete(&mut self, node_offset: &NodePieceOffset) -> Option<NodePieceSize> {
         match self.map.remove(&node_offset.as_value()) {
@@ -288,7 +344,6 @@ impl NodeCache {
 #[inline]
 fn write_node(file: &mut VarFile, ncb: &mut NodeCacheBean) -> Result<()> {
     if ncb.dirty {
-        //file.write_node_clear(ncb.node_offset, ncb.node_size)?;
         if ncb.node.is_some() {
             debug_assert!(ncb.node_offset == ncb.node.as_ref().unwrap().get_ref().offset());
             debug_assert!(ncb.node_size == ncb.node.as_ref().unwrap().get_ref().size());

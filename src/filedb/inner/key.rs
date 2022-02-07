@@ -15,7 +15,8 @@ type HeaderSignature = [u8; 8];
 
 //const CHUNK_SIZE: u32 = 4 * 1024;
 //const CHUNK_SIZE: u32 = 4 * 4 * 1024;
-const CHUNK_SIZE: u32 = 4 * 4 * 4 * 1024;
+//const CHUNK_SIZE: u32 = 4 * 4 * 4 * 1024;
+const CHUNK_SIZE: u32 = 128 * 1024;
 const _DAT_HEADER_SZ: u64 = 192;
 const DAT_HEADER_SIGNATURE: HeaderSignature = [b's', b'i', b'a', b'm', b'd', b'b', b'K', 0u8];
 
@@ -322,7 +323,10 @@ impl<KT: DbMapKeyType> KeyPiece<KT> {
     //
     fn encoded_piece_size(&self) -> (u32, u32, KeyLength) {
         let key = self.key.as_bytes();
+        #[cfg(feature = "siamese_debug")]
         let key_len = KeyLength::new(key.len().try_into().unwrap());
+        #[cfg(not(feature = "siamese_debug"))]
+        let key_len = KeyLength::new(key.len() as u32);
         //
         #[cfg(any(feature = "vf_u32u32", feature = "vf_u64u64"))]
         let (encorded_piece_len, piece_len) = {
@@ -331,18 +335,23 @@ impl<KT: DbMapKeyType> KeyPiece<KT> {
             let enc_val_off = 4;
             #[cfg(feature = "vf_u64u64")]
             let enc_val_off = 8;
+            //
             let piece_len: u32 = enc_key_len + key_len.as_value() + enc_val_off;
+            //
             let encorded_piece_len = 4;
             (encorded_piece_len, piece_len)
         };
         #[cfg(feature = "vf_vu64")]
         let (encorded_piece_len, piece_len) = {
             let enc_key_len = vu64::encoded_len(key_len.as_value() as u64) as u32;
-            #[cfg(feature = "htx")]
+            //
+            #[cfg(any(feature = "htx", feature = "idx_straight"))]
             let enc_val_off = 8;
-            #[cfg(not(feature = "htx"))]
+            #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
             let enc_val_off = vu64::encoded_len(self.value_offset.as_value() as u64) as u32;
+            //
             let piece_len: u32 = enc_key_len + key_len.as_value() + enc_val_off;
+            //
             let encorded_piece_len = vu64::encoded_len((piece_len as u64 + 7) / 8) as u32;
             (encorded_piece_len, piece_len)
         };
@@ -354,16 +363,21 @@ impl<KT: DbMapKeyType> KeyPiece<KT> {
         assert!(!self.size.is_zero());
         //
         let key = self.key.as_bytes();
+        #[cfg(feature = "siamese_debug")]
         let key_len = KeyLength::new(key.len().try_into().unwrap());
+        #[cfg(not(feature = "siamese_debug"))]
+        let key_len = KeyLength::new(key.len() as u32);
         //
         file.seek_from_start(self.offset)?;
         file.write_piece_size(self.size)?;
         file.write_key_len(key_len)?;
-        file.write_all(key)?;
-        #[cfg(feature = "htx")]
+        file.write_all_small(key)?;
+        //
+        #[cfg(any(feature = "htx", feature = "idx_straight"))]
         file.write_value_piece_offset(self.value_offset)?;
-        #[cfg(not(feature = "htx"))]
+        #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
         file.write_piece_offset(self.value_offset)?;
+        //
         file.write_zero_to_offset(self.offset + self.size)?;
         //
         Ok(())
@@ -385,6 +399,7 @@ impl<KT: DbMapKeyType> VarFileKeyCache<KT> {
     fn add_key_piece(&mut self, key: &KT, value_offset: ValuePieceOffset) -> Result<KeyPiece<KT>> {
         self.write_piece(KeyPiece::with_key_value(key.clone(), value_offset), true)
     }
+
     fn write_piece(&mut self, mut piece: KeyPiece<KT>, is_new: bool) -> Result<KeyPiece<KT>> {
         debug_assert!(is_new || !piece.offset.is_zero());
         //
@@ -438,6 +453,7 @@ impl<KT: DbMapKeyType> VarFileKeyCache<KT> {
         Ok(piece)
     }
 
+    #[inline]
     fn read_piece(&mut self, offset: KeyPieceOffset) -> Result<KeyPiece<KT>> {
         debug_assert!(!offset.is_zero());
         //
@@ -445,12 +461,12 @@ impl<KT: DbMapKeyType> VarFileKeyCache<KT> {
         let piece_size = self.0.read_piece_size()?;
         debug_assert!(piece_size.is_valid_key());
         let key_len = self.0.read_key_len()?;
-        let maybe = self.0.read_exact_maybeslice(key_len.into())?;
-        let key = KT::from_bytes(&maybe);
+        let maybe_slice = self.0.read_exact_maybeslice(key_len.into())?;
+        let key = KT::from_bytes(&maybe_slice);
         //
-        #[cfg(feature = "htx")]
+        #[cfg(any(feature = "htx", feature = "idx_straight"))]
         let val_offset = self.0.read_value_piece_offset()?;
-        #[cfg(not(feature = "htx"))]
+        #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
         let val_offset = self.0.read_piece_offset()?;
         //
         let piece = KeyPiece::with(offset, piece_size, key, val_offset);
@@ -507,10 +523,11 @@ impl<KT: DbMapKeyType> VarFileKeyCache<KT> {
         let key_len = self.0.read_key_len()?;
         self.0.seek_skip_length(key_len)?;
         //
-        #[cfg(feature = "htx")]
+        #[cfg(any(feature = "htx", feature = "idx_straight"))]
         let value_offset = self.0.read_value_piece_offset()?;
-        #[cfg(not(feature = "htx"))]
+        #[cfg(not(any(feature = "htx", feature = "idx_straight")))]
         let value_offset = self.0.read_piece_offset()?;
+        //
         Ok(value_offset)
     }
 }
@@ -524,7 +541,7 @@ used piece:
 | 0      | 1..5  | piece size  | size in bytes of this piece: u32  |
 | --     | 1..5  | key len     | a byte length of key              |
 | --     | --    | key data    | raw key data                      |
-| --     | 8     | val offset  | value piece offset: u64          |
+| --     | 8     | val offset  | value piece offset: u64           |
 | --     | --    | reserve     | reserved free space               |
 +--------+-------+-------------+-----------------------------------+
 ```
@@ -537,7 +554,7 @@ free piece:
 +--------+-------+-------------+-----------------------------------+
 | 0      | 1..5  | piece size  | size in bytes of this piece: u32  |
 | --     | 1     | key len     | always zero                       |
-| --     | 8     | next        | next free piece offset           |
+| --     | 8     | next        | next free piece offset            |
 | --     | --    | reserve     | reserved free space               |
 +--------+-------+-------------+-----------------------------------+
 ```

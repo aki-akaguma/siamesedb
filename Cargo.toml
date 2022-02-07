@@ -1,6 +1,6 @@
 [package]
 name = "siamesedb"
-version = "0.1.16"
+version = "0.1.17"
 authors = ["aki <aki.akaguma@hotmail.com>"]
 edition = "2018"
 description = "The simple local key-value store."
@@ -39,16 +39,18 @@ name = "check_main"
 path = "src/check_main.rs"
 
 [features]
-default = ["vf_vu64", "node_cache", "buf_default", "htx"]
-#default = ["vf_vu64", "node_cache", "buf_default", "htx", "print_hits", "tr_dirty"]
-#default = ["vf_u64u64", "node_cache", "buf_default", "htx", "print_hits", "tr_dirty"]
-#default = ["vf_u32u32", "node_cache", "buf_default", "htx", "print_hits", "tr_dirty"]
+default = ["vf_u64u64", "node_cache", "buf_default", "vf_node_u64", "idx_straight", "idx_find_uu", "htx"]
+#default = ["vf_u64u64", "node_cache", "buf_default", "vf_node_u64", "idx_straight", "idx_find_uu", "htx", "print_hits"]
+
+#default = ["vf_vu64", "node_cache", "buf_default", "htx", "print_hits"]
+#default = ["vf_u64u64", "node_cache", "buf_default", "htx", "print_hits"]
+#default = ["vf_u32u32", "node_cache", "buf_default", "htx", "print_hits"]
 #default = ["vf_u64u64", "node_cache", "buf_default", "htx"]
 
 # for developping
-vf_u32u32 = ["vf_node_u32"]
-vf_u64u64 = ["vf_node_u64"]
-vf_vu64 = ["vf_node_u64"]
+vf_u32u32 = []
+vf_u64u64 = []
+vf_vu64 = []
 
 vf_node_u32 = []
 vf_node_u64 = []
@@ -67,6 +69,7 @@ buf_stats = ["rabuf/buf_stats"]
 
 node_cache = ["oi_hash_turbo"]
 
+#htx = []
 htx = ["myhasher"]
 myhasher = []
 
@@ -75,24 +78,30 @@ print_hits = ["nc_print_hits", "htx_print_hits", "buf_print_hits"]
 
 oi_hash_turbo = ["oi_myhash"]
 oi_myhash = []
-tr_dirty = []
 
+nc_large = []
 nc_lfu = []
 nc_lru = []
 nc_print_hits = []
 
 htx_print_hits = []
+idx_straight = []
+idx_find_uu = []
+
+tr_has_short_key = []
 
 # for test
 test_large_data = []
 small_node_slots = []
+buf_debug = ["rabuf/buf_debug"]
+siamese_debug = []
 
 [dependencies]
-rabuf = { version = "0.1", default-features=false }
+#rabuf = { version = "0.1", default-features=false }
 vu64 = "0.1"
 #rabuf = { git = "https://github.com/aki-akaguma/rabuf" }
 #vu64 = { git = "https://github.com/aki-akaguma/vu64" }
-#rabuf = { path = "../rabuf", default-features=false }
+rabuf = { path = "../rabuf", default-features=false }
 #vu64 = { path = "../vu64" }
 
 [dev-dependencies]
