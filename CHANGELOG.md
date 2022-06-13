@@ -2,6 +2,9 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+0.1.18 (2022-06-13)
+=====
+
 * changes to edition 2021
 
 0.1.17 (2022-02-07)
