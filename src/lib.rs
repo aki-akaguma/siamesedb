@@ -15,7 +15,7 @@ The simple local key-value store.
 - Separated files. (key file, value file, index file and htx file)
 - One database has some db-map-string and some db-map-int and some db-map-bytes.
 - Swiss army knife with easy-to-use and good performance
-- minimum support rustc rustc 1.53.0 (53cb7b09b 2021-06-17)
+- minimum support rustc 1.56.1 (59eed8a2a 2021-11-01)
 
 # Compatibility
 
