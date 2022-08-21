@@ -2,6 +2,10 @@ TBD: siamesedb
 ===
 Unreleased changes. Release notes have not yet been written.
 
+* fix clippy: this let-binding has unit value
+* fix clippy: this block may be rewritten with the `?` operator
+* fix clippy: format_push_string
+
 0.1.18 (2022-06-13)
 =====
 

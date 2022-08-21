@@ -160,7 +160,7 @@ fn _print_check_db_map(db_map: &dyn CheckFileDbMap, check_cnf: CheckC) {
             let (count, per_mill) = db_map.htx_filling_rate_per_mill().unwrap();
             println!(
                 "htx_filling_rate(): {:.2}%, count: {}",
-                per_mill as f64/10.0,
+                per_mill as f64 / 10.0,
                 count
             );
         }

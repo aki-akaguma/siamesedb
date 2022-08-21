@@ -221,11 +221,11 @@ fn check_htxf_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<
     file.seek_from_start(NodePieceOffset::new(0))?;
     // signature1
     let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
-    let _sz = file.read_exact(&mut sig1)?;
+    file.read_exact(&mut sig1)?;
     assert!(sig1 == HTX_HEADER_SIGNATURE, "invalid header signature1");
     // signature2
     let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
-    let _sz = file.read_exact(&mut sig2)?;
+    file.read_exact(&mut sig2)?;
     assert!(
         sig2 == signature2,
         "invalid header signature2, type signature: {:?}",

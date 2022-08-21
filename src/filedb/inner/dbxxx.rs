@@ -304,17 +304,9 @@ impl<KT: DbMapKeyType + std::fmt::Display> CheckFileDbMap for FileDbXxxInner<KT>
     /// count of the used piece and the used node
     fn count_of_used_node(&self) -> Result<(CountOfPerSize, CountOfPerSize, CountOfPerSize)> {
         self.idx_file.count_of_used_node(|off| {
-            let ks = self.load_key_piece_size(off);
-            if let Err(err) = ks {
-                Err(err)
-            } else {
-                let vs = self.load_value_piece_size(off);
-                if let Err(err) = vs {
-                    Err(err)
-                } else {
-                    Ok((ks.unwrap(), vs.unwrap()))
-                }
-            }
+            let ks = self.load_key_piece_size(off)?;
+            let vs = self.load_value_piece_size(off)?;
+            Ok((ks, vs))
         })
     }
     /// buffer statistics

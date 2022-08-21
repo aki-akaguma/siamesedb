@@ -678,11 +678,11 @@ fn check_idxf_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<
     file.seek_from_start(NodePieceOffset::new(0))?;
     // signature1
     let mut sig1 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
-    let _sz = file.read_exact(&mut sig1)?;
+    file.read_exact(&mut sig1)?;
     assert!(sig1 == IDX_HEADER_SIGNATURE, "invalid header signature1");
     // signature2
     let mut sig2 = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8];
-    let _sz = file.read_exact(&mut sig2)?;
+    file.read_exact(&mut sig2)?;
     assert!(
         sig2 == signature2,
         "invalid header signature2, type signature: {:?}",
@@ -1324,6 +1324,8 @@ const GRAPH_NODE_ED: &str = "v";
 // for debug
 impl VarFileNodeCache {
     fn graph_string(&mut self, head: &str, node_: &IdxNode) -> Result<String> {
+        use std::fmt::Write;
+        //
         let node = node_.get_ref();
         let mut gs = format!(
             "{}{}:{:04x}\n",
@@ -1347,7 +1349,7 @@ impl VarFileNodeCache {
             #[cfg(feature = "tr_has_short_key")]
             let (key_offset, _short_key) = node.keys_get(i);
             //
-            gs += &format!("{}{:04x}\n", head, key_offset.as_value());
+            let _ = writeln!(gs, "{}{:04x}", head, key_offset.as_value());
             let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
                 let node = self
@@ -1357,7 +1359,7 @@ impl VarFileNodeCache {
                 gs += &gs0;
             }
         }
-        gs += &format!("{}{}\n", head, GRAPH_NODE_ED);
+        let _ = writeln!(gs, "{}{}", head, GRAPH_NODE_ED);
         //
         Ok(gs)
     }
@@ -1371,6 +1373,8 @@ impl VarFileNodeCache {
     where
         KT: DbMapKeyType + std::fmt::Display,
     {
+        use std::fmt::Write;
+        //
         let node = node_.get_ref();
         let mut gs = format!(
             "{}{}:0x{:04x},{03}\n",
@@ -1397,7 +1401,7 @@ impl VarFileNodeCache {
             //
             if !key_offset.is_zero() {
                 let key_string = dbxxx.load_key_data(key_offset)?;
-                gs += &format!("{}{:04x}:'{}'\n", head, key_offset.as_value(), key_string);
+                let _ = writeln!(gs, "{}{:04x}:'{}'", head, key_offset.as_value(), key_string);
             }
             let node_offset = node.downs_get(i);
             if !node_offset.is_zero() {
@@ -1409,7 +1413,7 @@ impl VarFileNodeCache {
                 gs += &gs0;
             }
         }
-        gs += &format!("{}{}\n", head, GRAPH_NODE_ED);
+        let _ = writeln!(gs, "{}{}", head, GRAPH_NODE_ED);
         //
         Ok(gs)
     }
