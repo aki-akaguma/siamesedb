@@ -15,7 +15,9 @@ $(foreach target,$(TARGETS_64),$(eval TEST_TARGETS_64=$(TEST_TARGETS_64) test-$(
 $(foreach target,$(TARGETS_32),$(eval TEST_TARGETS_32=$(TEST_TARGETS_32) test-$(target)))
 TEST_TARGETS = $(TEST_TARGETS_64) $(TEST_TARGETS_32)
 
-all: README.md
+all: readme
+
+readme: README.md
 
 README.md: README.tpl src/lib.rs
 	cargo readme > $@
