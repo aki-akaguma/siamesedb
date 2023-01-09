@@ -37,7 +37,7 @@ impl FileDbInner {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<FileDbInner> {
         let path = path.as_ref();
         if !path.is_dir() {
-            std::fs::create_dir_all(&path)?;
+            std::fs::create_dir_all(path)?;
         }
         Ok(FileDbInner {
             db_bytes_map: BTreeMap::new(),

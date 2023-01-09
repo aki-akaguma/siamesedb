@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * clippy: this let-binding has unit value
 * clippy: this block may be rewritten with the `?` operator
 * clippy: format_push_string
+* clippy: bool_to_int_with_if, needless_borrow
 
 
 ## [0.1.18] (2022-06-13)

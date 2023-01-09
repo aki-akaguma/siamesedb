@@ -811,7 +811,7 @@ impl TreeNode {
         let _start_pos = file.seek_from_start(self.offset)?;
         file.write_node_size(self.size)?;
         //
-        let is_leaf = if self.is_leaf() { 1u8 } else { 0u8 };
+        let is_leaf = u8::from(self.is_leaf());
         file.write_u16_le(is_leaf as u16)?;
         //
         let keys_count = self.keys.len();
