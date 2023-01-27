@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] *
 ### Added
+* `.github/workflows/test-ubuntu.yml`
+* `.github/workflows/test-macos.yml`
+* `.github/workflows/test-windows.yml`
+* test status badges into `README.tpl`
 * `rust-version = "1.56.0"` into `Cargo.toml`
 
 ### Fixed
