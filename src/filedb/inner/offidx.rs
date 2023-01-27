@@ -136,6 +136,7 @@ impl OffsetIndex {
 }
 
 //--
+#[cfg(not(windows))]
 #[cfg(test)]
 mod debug {
     use super::OffsetIndex;

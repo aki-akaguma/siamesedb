@@ -876,6 +876,7 @@ impl VarFile {
 }
 
 //--
+#[cfg(not(windows))]
 #[cfg(test)]
 mod debug {
     use super::VarFile;

@@ -368,6 +368,7 @@ impl Drop for NodeCache {
 }
 
 //--
+#[cfg(not(windows))]
 #[cfg(test)]
 mod debug {
     use super::NodeCacheBean;

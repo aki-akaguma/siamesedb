@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 * clippy: `seek\_from\_current`, `explicit\_counter\_loop`
+* bypass test `test_size_of()` on windows
 
 
 ## [0.1.19] (2023-01-10)

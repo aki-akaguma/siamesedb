@@ -291,6 +291,7 @@ impl<T> From<Count<T>> for u16 {
 }
 
 //--
+#[cfg(not(windows))]
 #[cfg(test)]
 mod debug {
     use super::{

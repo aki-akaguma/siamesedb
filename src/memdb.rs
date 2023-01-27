@@ -424,6 +424,7 @@ impl<'a> DbXxx<DbBytes> for MemoryDbMapDbBytesInner<'a> {}
 impl<'a> DbMapDbBytes for MemoryDbMapDbBytesInner<'a> {}
 
 //--
+#[cfg(not(windows))]
 #[cfg(test)]
 mod debug {
     #[test]
