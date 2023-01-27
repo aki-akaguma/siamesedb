@@ -118,7 +118,7 @@ impl VarFile {
     }
     #[inline]
     pub fn seek_position<T>(&mut self) -> Result<Offset<T>> {
-        self.seek(SeekFrom::Current(0)).map(Offset::<T>::new)
+        self.stream_position().map(Offset::<T>::new)
     }
     ///
     #[inline]

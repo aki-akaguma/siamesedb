@@ -89,13 +89,11 @@ mod test_iter {
         assert_eq!(iter.next(), None);
         //
         // iter on loop
-        let mut i: i32 = 0;
-        for (k, v) in db_map.iter() {
+        for (i, (k, v)) in (0_i32..).zip(db_map.iter()) {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
             assert_eq!(k, key.into());
             assert_eq!(v, value.as_bytes().to_vec());
-            i += 1;
         }
         //
         // into iter on loop
@@ -201,13 +199,11 @@ mod test_iter {
         assert_eq!(iter.next(), None);
         //
         // iter on loop
-        let mut i: i32 = 0;
-        for (k, v) in db_map.iter() {
+        for (i, (k, v)) in (0_i32..).zip(db_map.iter()) {
             let key = 12300u64 + i as u64;
             let value = format!("value{}", i);
             assert_eq!(k, key.into());
             assert_eq!(v, value.as_bytes().to_vec());
-            i += 1;
         }
         //
         // into iter on loop
@@ -227,11 +223,11 @@ mod test_iter {
     }
     fn basic_test_map_bytes<T: DbMap<DbBytes>>(db_map: &mut T) {
         // insert
-        db_map.put_string(b"key01".into(), "value1").unwrap();
-        db_map.put_string(b"key02".into(), "value2").unwrap();
-        db_map.put_string(b"key03".into(), "value3").unwrap();
-        db_map.put_string(b"key04".into(), "value4").unwrap();
-        db_map.put_string(b"key05".into(), "value5").unwrap();
+        db_map.put_string(b"key01", "value1").unwrap();
+        db_map.put_string(b"key02", "value2").unwrap();
+        db_map.put_string(b"key03", "value3").unwrap();
+        db_map.put_string(b"key04", "value4").unwrap();
+        db_map.put_string(b"key05", "value5").unwrap();
         // iterator
         let mut iter = db_map.iter_mut();
         assert_eq!(iter.next(), Some((b"key01".into(), b"value1".to_vec())));
@@ -313,13 +309,11 @@ mod test_iter {
         assert_eq!(iter.next(), None);
         //
         // iter on loop
-        let mut i: i32 = 0;
-        for (k, v) in db_map.iter() {
+        for (i, (k, v)) in (0_i32..).zip(db_map.iter()) {
             let key = format!("key{:02}", i);
             let value = format!("value{}", i);
             assert_eq!(k, key.into());
             assert_eq!(v, value.as_bytes().to_vec());
-            i += 1;
         }
         //
         // into iter on loop
