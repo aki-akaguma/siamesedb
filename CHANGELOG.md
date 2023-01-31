@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] *
+## [Unreleased]
+
+
+## [0.1.20] (2023-01-31)
 ### Added
 * `.github/workflows/test-ubuntu.yml`
 * `.github/workflows/test-macos.yml`
@@ -16,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 * clippy: `seek\_from\_current`, `explicit\_counter\_loop`
 * bypass test `test_size_of()` on windows
-
 
 ## [0.1.19] (2023-01-10)
 ### Added
@@ -195,7 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] (2021-09-23)
 * first commit
 
-[Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.19..HEAD
+[Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.20..HEAD
+[0.1.20]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.19..v0.1.20
 [0.1.19]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.18..v0.1.19
 [0.1.18]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.17..v0.1.18
 [0.1.17]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.16..v0.1.17
