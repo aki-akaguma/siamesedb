@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 * `LICENSE-APACHE`, `LICENSE-MIT`
+* clippy: `redundant_field_names`, `unnecessary_unwrap`, `needless_bool`
 
 
 ## [0.1.20] (2023-01-31)
