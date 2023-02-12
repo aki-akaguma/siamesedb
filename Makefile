@@ -13,7 +13,7 @@ test-no-default-features:
 	cargo test --offline --no-default-features
 
 miri:
-	cargo +nightly miri test --offline
+	MIRIFLAGS=-Zmiri-disable-isolation cargo +nightly miri test --offline
 
 clean:
 	@cargo clean

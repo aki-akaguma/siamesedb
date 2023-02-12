@@ -72,7 +72,8 @@ mod test_iter {
         db_map.sync_data().unwrap();
     }
     fn medium_test_map_string<T: DbMap<DbString>>(db_map: &mut T) {
-        const LOOP_MAX: i32 = 100;
+        #[rustfmt::skip]
+        const LOOP_MAX: i32 = if cfg!(miri) { 10 } else { 100 };
         // insert
         for i in 0..LOOP_MAX {
             let key = format!("key{:02}", i);
@@ -182,7 +183,8 @@ mod test_iter {
         db_map.sync_data().unwrap();
     }
     fn medium_test_map_dbint<T: DbMap<DbInt>>(db_map: &mut T) {
-        const LOOP_MAX: i32 = 100;
+        #[rustfmt::skip]
+        const LOOP_MAX: i32 = if cfg!(miri) { 10 } else { 100 };
         // insert
         for i in 0..LOOP_MAX {
             let key = 12300u64 + i as u64;
@@ -292,7 +294,8 @@ mod test_iter {
         db_map.sync_data().unwrap();
     }
     fn medium_test_map_bytes<T: DbMap<DbBytes>>(db_map: &mut T) {
-        const LOOP_MAX: i32 = 100;
+        #[rustfmt::skip]
+        const LOOP_MAX: i32 = if cfg!(miri) { 10 } else { 100 };
         // insert
         for i in 0..LOOP_MAX {
             let key = format!("key{:02}", i);
