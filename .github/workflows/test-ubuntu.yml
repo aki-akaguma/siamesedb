@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: [beta, stable, 1.56.1]
+        rust: [beta, stable, 1.58.1]
         os: [ubuntu-latest]
     timeout-minutes: 45
     steps:

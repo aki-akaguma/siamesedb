@@ -20,7 +20,7 @@ mod test2 {
         let mut buf_reader = BufReader::new(file);
         let mut line = String::new();
         #[rustfmt::skip]
-        let mut counter = if count.is_some() { count.unwrap() } else { usize::MAX };
+        let mut counter = if let Some(a) = count { a } else { usize::MAX };
         while let Ok(size) = buf_reader.read_line(&mut line) {
             if size == 0 || counter == 0 {
                 break;

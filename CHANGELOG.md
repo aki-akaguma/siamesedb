@@ -5,12 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] *
+## [Unreleased]
+
+
+## [0.1.21] (2023-02-13)
 ### Added
 * `MIRIFLAGS=-Zmiri-disable-isolation` on `cargo miri`
 * miri supports on tests
 
 ### Changed
+* rust-version: "1.56.0" to "1.58.0"
 * refactored `Makefile`
 
 ### Removed
@@ -19,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 * `LICENSE-APACHE`, `LICENSE-MIT`
 * clippy: `redundant_field_names`, `unnecessary_unwrap`, `needless_bool`
-
+* clippy: `unnecessary_unwrap`
 
 ## [0.1.20] (2023-01-31)
 ### Added
@@ -210,7 +214,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] (2021-09-23)
 * first commit
 
-[Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.20..HEAD
+[Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.21..HEAD
+[0.1.21]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.20..v0.1.21
 [0.1.20]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.19..v0.1.20
 [0.1.19]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.18..v0.1.19
 [0.1.18]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.17..v0.1.18
