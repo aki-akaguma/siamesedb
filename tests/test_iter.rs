@@ -334,7 +334,7 @@ mod test_iter {
         //
         //db_map.sync_data().unwrap();
     }
-    ////
+    //
     #[test]
     fn test_file_map_string() {
         let db_name = "target/tmp/test_iter-s.siamesedb";

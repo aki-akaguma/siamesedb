@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 * clippy: dead_code, suspicious_open_options, empty_docs
+* clippy: four_forward_slashes
 
 
 ## [0.1.21] (2023-02-13)

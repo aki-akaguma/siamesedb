@@ -219,7 +219,7 @@ mod test {
         let r = db_map.get_string(key).unwrap();
         assert_eq!(r, None);
     }
-    ////
+    //
     #[test]
     fn test_memory_map_string() {
         let db = siamesedb::open_memory();
@@ -241,7 +241,7 @@ mod test {
         basic_test_map_bytes(&mut db_map);
         medium_test_map_bytes(&mut db_map);
     }
-    ////
+    //
     #[test]
     fn test_file_map_string() {
         let db_name = "target/tmp/test1-s.siamesedb";

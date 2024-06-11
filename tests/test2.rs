@@ -2,7 +2,7 @@ mod test2 {
     use siamesedb::filedb::CheckFileDbMap;
     use siamesedb::filedb::FileDbMapDbString;
     use siamesedb::{DbXxx, DbXxxBase};
-    ////
+    //
     fn do_file_map_string<F>(db_name: &str, mut fun: F)
     where
         F: FnMut(FileDbMapDbString),
@@ -33,7 +33,7 @@ mod test2 {
         }
         vec
     }
-    ////
+    //
     #[test]
     fn test_fixtures_procs() {
         #[rustfmt::skip]
@@ -50,7 +50,7 @@ mod test2 {
             db_map.sync_data().unwrap();
         });
     }
-    ////
+    //
     #[test]
     fn test_fixtures_fruits() {
         #[rustfmt::skip]
