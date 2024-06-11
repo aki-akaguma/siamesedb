@@ -70,6 +70,7 @@ impl PieceMgr {
     }
 }
 
+#[allow(dead_code)]
 trait PieceSizeHelper<T> {
     fn is_large_piece_size(&self, pi_mgr: &PieceMgr) -> bool;
     fn roundup(&self, pi_mgr: &PieceMgr) -> PieceSize<T>;

@@ -42,6 +42,7 @@ impl<KT: DbMapKeyType> KeyFile<KT> {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(pb)?;
         let mut file = match params.key_buf_size {
             FileBufSizeParam::Size(val) => {

@@ -56,6 +56,7 @@ impl IdxFile {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(pb)?;
         let mut file = match params.idx_buf_size {
             FileBufSizeParam::Size(val) => {

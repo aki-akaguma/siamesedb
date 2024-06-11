@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 * rename: `config` to `config.toml`
 
+### Fixed
+* clippy: dead_code, suspicious_open_options, empty_docs
+
 
 ## [0.1.21] (2023-02-13)
 ### Added

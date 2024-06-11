@@ -61,32 +61,32 @@ impl VarFile {
             //piece_mgr: PieceMgr::new(free_list_offset, size_ary),
         })
     }
-    ///
+    //
     #[inline]
     pub fn sync_all(&mut self) -> Result<()> {
         self.buf_file.sync_all()
     }
-    ///
+    //
     #[inline]
     pub fn sync_data(&mut self) -> Result<()> {
         self.buf_file.sync_data()
     }
-    ///
+    //
     #[inline]
     pub fn _clear(&mut self) -> Result<()> {
         self.buf_file.clear()
     }
-    ///
+    //
     #[cfg(feature = "buf_stats")]
     pub fn buf_stats(&self) -> Vec<(String, i64)> {
         self.buf_file.buf_stats()
     }
-    ///
+    //
     #[inline]
     pub fn prepare<T>(&mut self, offset: Offset<T>) -> Result<()> {
         self.buf_file.prepare(offset.into())
     }
-    ///
+    //
     #[inline]
     pub fn seek_from_start<T: PartialEq + Copy>(&mut self, offset: Offset<T>) -> Result<Offset<T>> {
         let pos = self
@@ -120,7 +120,7 @@ impl VarFile {
     pub fn seek_position<T>(&mut self) -> Result<Offset<T>> {
         self.stream_position().map(Offset::<T>::new)
     }
-    ///
+    //
     #[inline]
     pub fn set_file_length<T>(&mut self, file_length: Offset<T>) -> Result<()> {
         self.buf_file.set_len(file_length.into())
@@ -129,12 +129,12 @@ impl VarFile {
     pub fn read_fill_buffer(&mut self) -> Result<()> {
         self.buf_file.read_fill_buffer()
     }
-    ///
+    //
     #[inline]
     pub fn _write_all_small(&mut self, buf: &[u8]) -> Result<()> {
         self.buf_file.write_all_small(buf)
     }
-    ///
+    //
     #[inline]
     pub fn _write_zero<T>(&mut self, size: Size<T>) -> Result<()> {
         self.buf_file.write_zero(size.into())
@@ -149,7 +149,7 @@ impl VarFile {
             Ok(())
         }
     }
-    ///
+    //
     #[inline]
     pub fn write_piece_clear<T: Copy + PartialEq + PartialOrd>(
         &mut self,
@@ -174,7 +174,7 @@ impl VarFile {
         self.write_zero_to_offset(offset + size)?;
         Ok(())
     }
-    ///
+    //
     #[inline]
     pub fn write_node_clear(&mut self, offset: NodePieceOffset, size: NodePieceSize) -> Result<()> {
         debug_assert!(!size.is_zero());

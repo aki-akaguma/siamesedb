@@ -41,6 +41,7 @@ impl ValueFile {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(pb)?;
         let mut file = match params.val_buf_size {
             FileBufSizeParam::Size(val) => {
