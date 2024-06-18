@@ -6,9 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+
+## [0.1.23] (2024-06-18)
 ### Fixed
 * clippy: unexpected_cfgs
-
 
 ## [0.1.22] (2024-06-18)
 ### Changed
@@ -224,7 +226,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] (2021-09-23)
 * first commit
 
-[Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.22..HEAD
+[Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.23..HEAD
+[0.1.23]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.22..v0.1.23
 [0.1.22]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.21..v0.1.22
 [0.1.21]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.20..v0.1.21
 [0.1.20]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.19..v0.1.20
