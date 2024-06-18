@@ -377,21 +377,21 @@ mod debug {
     fn test_size_of() {
         #[cfg(target_pointer_width = "64")]
         {
-            #[cfg(not(any(feture = "nc_lru", feature = "nc_lfu")))]
+            #[cfg(not(any(feature = "nc_lru", feature = "nc_lfu")))]
             assert_eq!(std::mem::size_of::<NodeCacheBean>(), 24);
-            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+            #[cfg(any(feature = "nc_lru", feature = "nc_lfu"))]
             assert_eq!(std::mem::size_of::<NodeCacheBean>(), 32);
         }
         #[cfg(target_pointer_width = "32")]
         {
-            #[cfg(not(any(feture = "nc_lru", feature = "nc_lfu")))]
+            #[cfg(not(any(feature = "nc_lru", feature = "nc_lfu")))]
             {
                 #[cfg(not(any(target_arch = "arm", target_arch = "mips")))]
                 assert_eq!(std::mem::size_of::<NodeCacheBean>(), 20);
                 #[cfg(any(target_arch = "arm", target_arch = "mips"))]
                 assert_eq!(std::mem::size_of::<NodeCacheBean>(), 24);
             }
-            #[cfg(any(feture = "nc_lru", feature = "nc_lfu"))]
+            #[cfg(any(feature = "nc_lru", feature = "nc_lfu"))]
             assert_eq!(std::mem::size_of::<NodeCacheBean>(), 32);
         }
     }
