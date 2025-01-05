@@ -660,7 +660,6 @@ The db index header size is 128 bytes.
 - signature2: 8 bytes type signature
 
 */
-
 fn write_idxf_init_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<()> {
     file.seek_from_start(NodePieceOffset::new(0))?;
     // signature1

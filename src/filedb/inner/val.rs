@@ -178,7 +178,6 @@ The db data header size is 192 bytes.
 - signature2: 8 bytes type signature
 
 */
-
 fn write_valrecf_init_header(file: &mut VarFile, signature2: HeaderSignature) -> Result<()> {
     file.seek_from_start(ValuePieceOffset::new(0))?;
     // signature1
