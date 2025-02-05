@@ -391,7 +391,7 @@ impl TreeNode {
     #[cfg(not(feature = "siamese_debug"))]
     #[inline]
     pub unsafe fn keys_get_unchecked(&self, idx: usize) -> KeyPieceOffset {
-        *self.keys.as_ptr().add(idx)
+        unsafe { *self.keys.as_ptr().add(idx) }
     }
     #[cfg(feature = "tr_has_short_key")]
     #[cfg(not(feature = "siamese_debug"))]
@@ -518,7 +518,7 @@ impl TreeNode {
     #[cfg(not(feature = "siamese_debug"))]
     #[inline]
     pub unsafe fn downs_get_unchecked(&self, idx: usize) -> NodePieceOffset {
-        *self.downs.as_ptr().add(idx)
+        unsafe { *self.downs.as_ptr().add(idx) }
         //*self.downs.get_unchecked(idx)
     }
     #[inline]

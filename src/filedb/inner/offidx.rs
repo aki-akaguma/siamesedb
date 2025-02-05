@@ -16,9 +16,9 @@ impl MyHasher {
     fn conv_u64(&self, val: u64) -> u64 {
         let mut a = val;
         a = a.rotate_right(3);
-        a = a ^ a >> 12;
-        a = a ^ a << 25;
-        a = a ^ a >> 27;
+        a = a ^ (a >> 12);
+        a = a ^ (a << 25);
+        a = a ^ (a >> 27);
         a
     }
 }
