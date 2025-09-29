@@ -248,7 +248,7 @@ impl rabuf::SmallRead for VarFile {
         self.buf_file.read_exact_small(buf)
     }
     #[inline]
-    fn read_exact_maybeslice(&mut self, size: usize) -> Result<MaybeSlice> {
+    fn read_exact_maybeslice(&mut self, size: usize) -> Result<MaybeSlice<'_>> {
         self.buf_file.read_exact_maybeslice(size)
     }
 }

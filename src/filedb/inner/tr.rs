@@ -81,11 +81,11 @@ impl IdxNode {
     }
     //
     #[inline]
-    pub fn get_mut(&mut self) -> RefMut<TreeNode> {
+    pub fn get_mut(&mut self) -> RefMut<'_, TreeNode> {
         RefCell::borrow_mut(&self.0)
     }
     #[inline]
-    pub fn get_ref(&self) -> Ref<TreeNode> {
+    pub fn get_ref(&self) -> Ref<'_, TreeNode> {
         RefCell::borrow(&self.0)
     }
     //

@@ -496,7 +496,7 @@ impl<KT: DbMapKeyType> VarFileKeyCache<KT> {
     pub fn read_piece_only_key_maybeslice(
         &mut self,
         offset: KeyPieceOffset,
-    ) -> Result<rabuf::MaybeSlice> {
+    ) -> Result<rabuf::MaybeSlice<'_>> {
         debug_assert!(!offset.is_zero());
         //
         self.0.seek_skip_to_piece_key(offset)?;
