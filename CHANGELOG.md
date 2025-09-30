@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 * more tests
 
+### Changed
+* rust-version = "1.65.0"
+
 
 ## [0.1.23] (2024-06-18)
 ### Fixed

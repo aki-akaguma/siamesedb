@@ -24,7 +24,6 @@ The simple local key-value store.
 - Separated files. (key file, value file, index file and htx file)
 - One database has some db-map-string and some db-map-int and some db-map-bytes.
 - Swiss army knife with easy-to-use and good performance
-- minimum support rustc 1.56.1 (59eed8a2a 2021-11-01)
 
 ## Compatibility
 
@@ -141,7 +140,7 @@ at your option.
 [crate-link]: https://crates.io/crates/siamesedb
 [docs-image]: https://docs.rs/siamesedb/badge.svg
 [docs-link]: https://docs.rs/siamesedb/
-[rustc-image]: https://img.shields.io/badge/rustc-1.56+-blue.svg
+[rustc-image]: https://img.shields.io/badge/rustc-1.65+-blue.svg
 [license-image]: https://img.shields.io/badge/license-Apache2.0/MIT-blue.svg
 [test-ubuntu-image]: https://github.com/aki-akaguma/siamesedb/actions/workflows/test-ubuntu.yml/badge.svg
 [test-ubuntu-link]: https://github.com/aki-akaguma/siamesedb/actions/workflows/test-ubuntu.yml
