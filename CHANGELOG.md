@@ -1,235 +1,257 @@
 # Changelog: siamesedb
-
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
 ### Added
-* more tests
+- More tests
 
 ### Changed
-* rust-version = "1.65.0"
+- Rust version to "1.65.0"
 
-
-## [0.1.23] (2024-06-18)
-### Fixed
-* clippy: unexpected_cfgs
-
-## [0.1.22] (2024-06-18)
-### Changed
-* rename: `config` to `config.toml`
+## [0.1.23] - 2024-06-18
 
 ### Fixed
-* clippy: dead_code, suspicious_open_options, empty_docs
-* clippy: four_forward_slashes
+- Clippy warning: `unexpected_cfgs`
 
-## [0.1.21] (2023-02-13)
-### Added
-* `MIRIFLAGS=-Zmiri-disable-isolation` on `cargo miri`
-* miri supports on tests
+## [0.1.22] - 2024-06-18
 
 ### Changed
-* rust-version: "1.56.0" to "1.58.0"
-* refactored `Makefile`
+- Rename `config` to `config.toml`
+
+### Fixed
+- Clippy warnings: `dead_code`, `suspicious_open_options`, and `empty_docs`
+- Clippy warning: `four_forward_slashes`
+
+## [0.1.21] - 2023-02-13
+
+### Added
+- `MIRIFLAGS=-Zmiri-disable-isolation` on `cargo miri`
+- Miri support for tests
+
+### Changed
+- Rust version from "1.56.0" to "1.58.0"
+- Refactor `Makefile`
 
 ### Removed
-* `COPYING`
+- `COPYING` file
 
 ### Fixed
-* `LICENSE-APACHE`, `LICENSE-MIT`
-* clippy: `redundant_field_names`, `unnecessary_unwrap`, `needless_bool`
-* clippy: `unnecessary_unwrap`
+- Issues in `LICENSE-APACHE` and `LICENSE-MIT`
+- Clippy warnings: `redundant_field_names`, `unnecessary_unwrap`, and `needless_bool`
+- Clippy warning: `unnecessary_unwrap`
 
-## [0.1.20] (2023-01-31)
+## [0.1.20] - 2023-01-31
+
 ### Added
-* `.github/workflows/test-ubuntu.yml`
-* `.github/workflows/test-macos.yml`
-* `.github/workflows/test-windows.yml`
-* test status badges into `README.tpl`
-* `rust-version = "1.56.0"` into `Cargo.toml`
+- `.github/workflows/test-ubuntu.yml`, `.github/workflows/test-macos.yml`, and `.github/workflows/test-windows.yml`
+- Test status badges to `README.tpl`
+- `rust-version = "1.56.0"` to `Cargo.toml`
 
 ### Fixed
-* clippy: `seek_from_current`, `explicit_counter_loop`
-* bypass test `test_size_of()` on windows
+- Clippy warnings: `seek_from_current` and `explicit_counter_loop`
+- Bypass `test_size_of()` on Windows
 
-## [0.1.19] (2023-01-10)
+## [0.1.19] - 2023-01-10
+
 ### Added
-* badges into `README.tpl`
+- Badges to `README.tpl`
 
 ### Changed
-* reformat `CHANGELOG.md`
+- Reformat `CHANGELOG.md`
 
 ### Fixed
-* clippy: this let-binding has unit value
-* clippy: this block may be rewritten with the `?` operator
-* clippy: format_push_string
-* clippy: bool_to_int_with_if, needless_borrow
+- Clippy warning: let-binding has unit value
+- Clippy warning: block may be rewritten with `?` operator
+- Clippy warning: `format_push_string`
+- Clippy warnings: `bool_to_int_with_if` and `needless_borrow`
 
-## [0.1.18] (2022-06-13)
+## [0.1.18] - 2022-06-13
+
 ### Changed
-* changes to edition 2021
+- Edition to 2021
 
-## [0.1.17] (2022-02-07)
+## [0.1.17] - 2022-02-07
+
 ### Changed
-* many.
+- Various internal updates
 
-## [0.1.16] (2022-01-18)
+## [0.1.16] - 2022-01-18
+
 ### Added
-* `myhasher` to features.
-* `prepare()` to `VarFile`.
-* `buf_hash_turbo` to feature. important for performance.
+- `myhasher` feature
+- `prepare()` method to `VarFile`
+- `buf_hash_turbo` feature for performance
 
 ### Changed
-* organize source code.
-* change `put()` to `put<'a, Q>()`
-* rename `Record` to `Piece`.
+- Organize source code
+- `put()` to `put<'a, Q>()`
+- Rename `Record` to `Piece`
 
-## [0.1.15] (2022-01-07)
+## [0.1.15] - 2022-01-07
+
 ### Added
-* `DbInt` and `DbString` to key types.
-* `get_kt()`, `put_kt()` and `del_kt()`.
-* `htx-file` for supporting hash table index cache.
+- `DbInt` and `DbString` key types
+- `get_kt()`, `put_kt()`, and `del_kt()` methods
+- `htx-file` for supporting hash table index cache
 
 ### Changed
-* change many many codes for performance.
-* separate `DbXxx` to `DbXxx`, `DbXxxObjectSafe` and `DbXxxBase`.
-* rename `DbXxxKeyType` to `DbMapKeyType`.
-* change separates dat-file to key-file and val-file.
+- Improve performance across codebase
+- Split `DbXxx` into `DbXxx`, `DbXxxObjectSafe`, and `DbXxxBase`
+- Rename `DbXxxKeyType` to `DbMapKeyType`
+- Separate `dat-file` into `key-file` and `val-file`
 
 ### Removed
-* `key_cache` and `record_cache` from features.
-* `kc-lfu` and `kc-lru` from features.
+- `key_cache` and `record_cache` features
+- `kc-lfu` and `kc-lru` features
 
-## [0.1.14] (2021-12-23)
-### Added
-* `iter()`, `iter_mut()` into `trait DbMap`.
-* a basic iterator.
-* `piece.rs` source code.
+## [0.1.14] - 2021-12-23
 
-## [0.1.13] (2021-12-20)
 ### Added
-* `kc_print_hits` and `nc_print_hits`  to features.
-* key_length_stats() and value_length_stats() into trait CheckFileDbMap.
-* more REC_SIZE_ARY of dat.
+- `iter()` and `iter_mut()` to `trait DbMap`
+- Basic iterator
+- `piece.rs` source code
+
+## [0.1.13] - 2021-12-20
+
+### Added
+- `kc_print_hits` and `nc_print_hits` features
+- `key_length_stats()` and `value_length_stats()` to `trait CheckFileDbMap`
+- Additional `REC_SIZE_ARY` for dat
 
 ### Changed
-* changes node offset and node size to 8 bytes boundary.
-* changes record size and record offset to 8 bytes boundary.
+- Node offset and size to 8-byte boundary
+- Record size and offset to 8-byte boundary
 
 ### Removed
-* `kc_btree` and `kc_hash` from features.
-* `offidx_btreemap` from features.
-* `buf_idx_btreemap` from features.
-* `node_dm32` from features and source codes.
+- `kc_btree` and `kc_hash` features
+- `offidx_btreemap` feature
+- `buf_idx_btreemap` feature
+- `node_dm32` feature and source code
 
-## [0.1.12] (2021-12-13)
+## [0.1.12] - 2021-12-13
+
 ### Added
-* `read_fill_buffer()`.
-* DbMapBytes with `Vec<u8>` KEY.
-* `node_dm32` to features.
+- `read_fill_buffer()` method
+- `DbMapBytes` with `Vec<u8>` key
+- `node_dm32` feature
 
 ### Changed
-* refactoring key type source codes.
-* rename `trait FileDbXxxInnerKT` to `trait DbXxxKeyType`.
-* many performance tunings.
+- Refactor key type source code
+- Rename `trait FileDbXxxInnerKT` to `trait DbXxxKeyType`
+- Various performance optimizations
 
-## [0.1.11] (2021-12-05)
+## [0.1.11] - 2021-12-05
+
 ### Added
-* `FileBufSizeParam`.
-* `buf_auto_buf_size` to features
+- `FileBufSizeParam`
+- `buf_auto_buf_size` feature
 
 ### Changed
-* refactoring node.
-* changes max node slots for best performance.
+- Refactor node
+- Max node slots for optimal performance
 
-## [0.1.10] (2021-11-26)
+## [0.1.10] - 2021-11-26
+
 ### Added
-* `buf_overf_rem_all` to default features.
-* `nc_lru` to features
-* `kc_lru` to features
-* bulk_put() method that has pre sort function.
+- `buf_overf_rem_all` to default features
+- `nc_lru` feature
+- `kc_lru` feature
+- `bulk_put()` method with pre-sort functionality
 
 ### Fixed
-* bug: a node size is calculated small.
+- Correct node size calculation
 
-## [0.1.9] (2021-11-21)
+## [0.1.9] - 2021-11-21
+
 ### Added
-* record_cache to features.
+- `record_cache` feature
 
 ### Changed
-* source code refatoring.
-* revives feature `"key_cache"`.
-* rewrites key parameter of put() and put_string().
-* rewrites trait DbMapU64 and DbMapString with trait DbXxx<KT>.
+- Refactor source code
+- Restore `"key_cache"` feature
+- Rewrite key parameter of `put()` and `put_string()`
+- Rewrite `trait DbMapU64` and `trait DbMapString` with `trait DbXxx<KT>`
 
-## [0.1.8] (2021-11-17)
+## [0.1.8] - 2021-11-17
+
 ### Added
-* `flush()` method into `pub trait DbXxx<KT>`.
+- `flush()` method to `pub trait DbXxx<KT>`
 
 ### Changed
-* source code refactoring.
+- Refactor source code
 
-## [0.1.7] (2021-11-16)
+## [0.1.7] - 2021-11-16
+
 ### Fixed
-* bugs: node_cache and write_node()
+- Issues in `node_cache` and `write_node()`
 
-## [0.1.6] (2021-11-16)
+## [0.1.6] - 2021-11-16
+
 ### Fixed
-* bugs: writing beyond the size limit in dat_file_pop_free_list()
+- Write beyond size limit in `dat_file_pop_free_list()`
 
-## [0.1.5] (2021-11-12)
+## [0.1.5] - 2021-11-12
+
 ### Added
-* more test
+- More tests
 
 ### Fixed
-* bugs: If the key is empty, it will result in an error.
+- Error when key is empty
 
-## [0.1.4] (2021-11-11)
+## [0.1.4] - 2021-11-11
+
 ### Changed
-* rename FileDbMap to FileDbMapString, FileDbList to FileDbMapU64.
-* separate crates: vu64, rabuf.
+- Rename `FileDbMap` to `FileDbMapString`, and `FileDbList` to `FileDbMapU64`
+- Separate crates `vu64` and `rabuf`
 
-## [0.1.3] (2021-11-09)
+## [0.1.3] - 2021-11-09
+
 ### Added
-* read_inplace() into buf.rs for the fast.
-* minimum support rustc version into README.
+- `read_inplace()` to `buf.rs` for performance
+- Minimum supported Rust version to `README.md`
 
 ### Removed
-* removes VarCursor. so slow.
+- `VarCursor` due to poor performance
 
 ### Fixed
-* some bugs.
+- Various bugs
 
-## [0.1.2] (2021-11-04)
+## [0.1.2] - 2021-11-04
+
 ### Added
-* node cache for read and write
-* RecordSizeStats into src/filedb/mod.rs
-* read_one_byte() and read_exact_small() into BufFile for the fast.
+- Node cache for read and write operations
+- `RecordSizeStats` to `src/filedb/mod.rs`
+- `read_one_byte()` and `read_exact_small()` to `BufFile` for performance
 
 ### Changed
-* change file header signature: `siamdb`
+- File header signature to `siamdb`
 
 ### Removed
-* remove unused enum KeyType from src/filedb/mod.rs
+- Unused `enum KeyType` from `src/filedb/mod.rs`
 
 ### Fixed
-* fix: seek over the end.
+- Seek over the end of file
 
-## [0.1.1] (2021-10-30)
+## [0.1.1] - 2021-10-30
+
 ### Added
-* sementic types.
-* vu64.rs and vu64_io.rs.
-* inner/dbxxx.rs.
+- Semantic types
+- `vu64.rs` and `vu64_io.rs`
+- `inner/dbxxx.rs`
 
 ### Changed
-* change package name: shamdb to siamesedb.
-* change the node size and the record size are variables.
-* writes a lot of code but it's still incomplete.
+- Package name from `shamdb` to `siamesedb`
+- Variable node and record sizes
+- Initial development and incomplete features
 
-## [0.1.0] (2021-09-23)
-* first commit
+## [0.1.0] - 2021-09-23
+
+### Added
+- First commit
 
 [Unreleased]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.23..HEAD
 [0.1.23]: https://github.com/aki-akaguma/siamesedb/compare/v0.1.22..v0.1.23
